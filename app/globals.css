@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: var(--font-display), sans-serif;
+  --font-sans: var(--font-sans), sans-serif;
+  --font-mono: var(--font-mono), monospace;
+}
+
+@layer base {
+  body {
+    background-color: #090A0F;
+    color: #F1F5F9;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display), sans-serif;
+    letter-spacing: -0.025em;
+  }
+
+  table, .font-mono, .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
