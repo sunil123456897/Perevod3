@@ -25,6 +25,10 @@ import {
   autoRepairRussianText,
   surgicalRepairDriftedParagraphs,
   generateChapterMemorySummary,
+  generateBilingualChapterSummary,
+  buildDelTAContextPacket,
+  extractCsiCulturalNotes,
+  evaluateDitingQuality,
   alignChapterParagraphs,
   detectTautologies,
   computeWordDiff,
@@ -86,6 +90,7 @@ export default function ParallelEditorView({
   );
   const [showContextDrawer, setShowContextDrawer] = useState(false);
   const [showMemoryBar, setShowMemoryBar] = useState(false);
+  const [showCsiDitingPanel, setShowCsiDitingPanel] = useState(false);
   const [showVersionHistoryPanel, setShowVersionHistoryPanel] = useState(false);
   const [comparedVersionLabel, setComparedVersionLabel] = useState<string | null>(null);
   const [showIssuesPanel, setShowIssuesPanel] = useState(false);
@@ -122,6 +127,28 @@ export default function ParallelEditorView({
     const idx = sorted.findIndex((c) => c.id === chapter.id);
     return idx > 0 ? sorted[idx - 1] : null;
   }, [allChapters, chapter.id]);
+
+  // 4-Component DelTA Context Packet (R^(i), A_s/A_t, M^(i) 3 paragraphs, N^(i))
+  const deltaContextPacket = useMemo(() => {
+    const sorted = [...allChapters].sort((a, b) => a.number - b.number);
+    const idx = sorted.findIndex((c) => c.id === chapter.id);
+    const earlier = idx > 0 ? sorted.slice(0, idx) : [];
+    return buildDelTAContextPacket(draftEng, previousChapter, earlier, glossary, 3);
+  }, [allChapters, chapter.id, draftEng, previousChapter, glossary]);
+
+  // CHORUS C3 Cultural Footnotes & Rationales
+  const csiCulturalNotes = useMemo(() => {
+    if (chapter.csiNotes && chapter.csiNotes.length > 0 && draftRus === chapter.rusText) {
+      return chapter.csiNotes;
+    }
+    return extractCsiCulturalNotes(draftEng, draftRus, glossary);
+  }, [chapter.csiNotes, chapter.rusText, draftEng, draftRus, glossary]);
+
+  // DITING 6-Dimension Quality Report
+  const ditingReport = useMemo(
+    () => evaluateDitingQuality(draftEng, draftRus, glossary, glossaryMeta, enabledRuleIds),
+    [draftEng, draftRus, glossary, glossaryMeta, enabledRuleIds]
+  );
 
   const lintReport = useMemo(
     () =>
@@ -667,15 +694,30 @@ export default function ParallelEditorView({
 
           <button
             type="button"
+            onClick={() => setShowCsiDitingPanel((prev) => !prev)}
+            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition whitespace-nowrap ${
+              showCsiDitingPanel
+                ? 'bg-white/[0.08] text-[#F1F5F9]'
+                : 'text-[#94A3B8] hover:bg-white/[0.04] hover:text-[#F1F5F9]'
+            }`}
+            title="Культурные сноски CSI (CHORUS C3) и 6-мерная оценка DITING / MQM"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-[#D99B26]" />
+            CSI & DITING ({csiCulturalNotes.length})
+          </button>
+
+          <button
+            type="button"
             onClick={() => setShowMemoryBar((prev) => !prev)}
             className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition whitespace-nowrap ${
               showMemoryBar
                 ? 'bg-white/[0.08] text-[#F1F5F9]'
                 : 'text-[#94A3B8] hover:bg-white/[0.04] hover:text-[#F1F5F9]'
             }`}
+            title="Четырёхкомпонентная память DelTA: 3 абзаца ENG-RUS + двуязычное резюме"
           >
             <History className="h-3.5 w-3.5" />
-            Память
+            Память DelTA ({deltaContextPacket.shortTermWindow.length})
           </button>
 
           <button
@@ -917,47 +959,196 @@ export default function ParallelEditorView({
         </div>
       )}
 
-      {/* Rolling Chapter Memory & Continuity Bar */}
-      {showMemoryBar && (
-        <div className="grid grid-cols-1 gap-4 rounded-xl border border-slate-800 bg-slate-900/70 p-4 lg:grid-cols-2">
-          <div className="space-y-1.5">
-            <div className="text-xs font-semibold text-slate-300">
-              Контекст предыдущей главы{' '}
-              {previousChapter ? `(Глава ${previousChapter.number})` : '(нет предыдущей)'}
-            </div>
-            <div className="rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-400 leading-relaxed">
-              {previousChapter?.summary ||
-                'Для предыдущей главы ещё не сформирована сводка памяти.'}
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
+      {/* CHORUS C3 Cultural Footnotes (CSI) & DITING 6D Quality Judge Panel */}
+      {showCsiDitingPanel && (
+        <div
+          role="region"
+          aria-label="Культурные сноски CSI и оценка DITING"
+          className="rounded-xl border border-slate-800 bg-slate-900/80 p-4 space-y-4"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+            <div>
               <span className="text-xs font-semibold text-amber-300">
-                Память текущей главы (передаётся в следующую главу)
+                3-Ролевой конвейер LCD-MAS · Журнал культурных реалий CSI (CHORUS C3) и судья DITING
+              </span>
+              <p className="text-[11px] text-slate-400">
+                Прозрачное обоснование адаптации идиом, гоноративов и терминов + многомерная оценка нарративной достоверности.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-xs tabular-nums text-emerald-400">
+                {ditingReport.mqmGrade} · {ditingReport.overallScore}/100
               </span>
               <button
                 type="button"
-                onClick={() => {
-                  const auto = generateChapterMemorySummary(
-                    chapter.number,
-                    draftTitleRus || chapter.titleEng,
-                    draftRus
-                  );
-                  setDraftSummary(auto);
-                }}
-                className="text-[11px] text-amber-400 hover:text-amber-300"
+                onClick={() => setShowCsiDitingPanel(false)}
+                className="text-xs text-slate-400 hover:text-white"
               >
-                Сгенерировать автоматически
+                Свернуть
               </button>
             </div>
-            <textarea
-              value={draftSummary}
-              onChange={(e) => setDraftSummary(e.target.value)}
-              rows={2}
-              placeholder="Краткая сводка событий, прорывов и локаций этой главы..."
-              className="w-full rounded-lg border border-slate-800 bg-slate-950 p-2.5 text-xs text-slate-200 focus:border-amber-500 focus:outline-none"
-            />
           </div>
+
+          {/* 6-Dimension DITING Score Strip */}
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+            {[
+              { label: 'Идиоматика', val: ditingReport.idiomAccuracy },
+              { label: 'Связность сцен', val: ditingReport.referentialCohesion },
+              { label: 'Голоса героев', val: ditingReport.characterVoiceFidelity },
+              { label: 'Культурный код', val: ditingReport.culturalAdaptation },
+              { label: 'Ритмика прозы', val: ditingReport.literaryRhythm },
+              { label: 'Точность канона', val: ditingReport.terminologyPrecision },
+            ].map((dim) => (
+              <div
+                key={dim.label}
+                className="rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2 text-xs"
+              >
+                <div className="text-[11px] text-slate-400 truncate">{dim.label}</div>
+                <div
+                  className={`mt-0.5 font-mono text-sm font-semibold tabular-nums ${
+                    dim.val >= 95
+                      ? 'text-emerald-400'
+                      : dim.val >= 85
+                        ? 'text-amber-300'
+                        : 'text-rose-400'
+                  }`}
+                >
+                  {dim.val}%
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* CSI Cultural Notes List */}
+          <div className="space-y-2">
+            <div className="text-xs font-medium text-slate-300">
+              Обоснование решений локализатора CSI ({csiCulturalNotes.length})
+            </div>
+            <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+              {csiCulturalNotes.map((note) => (
+                <div
+                  key={note.id}
+                  className="rounded-lg border border-slate-800 bg-slate-950/85 p-3 text-xs space-y-1.5"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-semibold text-slate-100">{note.sourcePhrase}</span>
+                    <span className="font-mono text-[11px] text-amber-300">
+                      {note.categoryLabel}
+                    </span>
+                  </div>
+                  <div className="text-emerald-400 font-medium">
+                    Адаптация: {note.adaptedRus}
+                  </div>
+                  <p className="text-slate-400 leading-relaxed">{note.rationale}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4-Component DelTA Memory & Continuity Inspector */}
+      {showMemoryBar && (
+        <div
+          role="region"
+          aria-label="Четырёхкомпонентная память DelTA"
+          className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 space-y-4"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+            <div>
+              <span className="text-xs font-semibold text-amber-300">
+                Четырёхуровневая память документа DelTA (Doc2Sent)
+              </span>
+              <p className="text-[11px] text-slate-400 font-mono tabular-nums">
+                Реестр сущностей R^(i): {deltaContextPacket.properNounCount} терм. · Окно M^(i):{' '}
+                {deltaContextPacket.shortTermWindow.length} абз. ENG↔RUS · Долгосрочная память N^(i):{' '}
+                {deltaContextPacket.longTermMemories.length} сцен
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowMemoryBar(false)}
+              className="text-xs text-slate-400 hover:text-white"
+            >
+              Свернуть
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="space-y-1.5">
+              <div className="text-xs font-semibold text-slate-300">
+                Двуязычное макро-резюме предыдущей главы (A_s [ENG] + A_t [RUS]){' '}
+                {previousChapter ? `(Глава ${previousChapter.number})` : '(начало книги)'}
+              </div>
+              <div className="rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs space-y-2 leading-relaxed">
+                <div>
+                  <span className="font-mono text-[11px] text-slate-500">ENG (A_s): </span>
+                  <span className="text-slate-300">{deltaContextPacket.bilingualSummary.eng}</span>
+                </div>
+                <div className="border-t border-slate-800/80 pt-1.5">
+                  <span className="font-mono text-[11px] text-amber-400">RUS (A_t): </span>
+                  <span className="text-slate-200">{deltaContextPacket.bilingualSummary.rus}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-amber-300">
+                  Память текущей главы (передаётся в следующую главу)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const auto = generateBilingualChapterSummary(
+                      chapter.number,
+                      chapter.titleEng,
+                      draftEng,
+                      draftTitleRus || chapter.titleEng,
+                      draftRus
+                    );
+                    setDraftSummary(auto.rus);
+                  }}
+                  className="text-[11px] text-amber-400 hover:text-amber-300"
+                >
+                  Сгенерировать автоматически
+                </button>
+              </div>
+              <textarea
+                value={draftSummary}
+                onChange={(e) => setDraftSummary(e.target.value)}
+                rows={3}
+                placeholder="Краткая сводка событий, прорывов и локаций этой главы..."
+                className="w-full rounded-lg border border-slate-800 bg-slate-950 p-2.5 text-xs text-slate-200 focus:border-amber-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Short-Term Sliding Window M^(i): Last 3 ENG <-> RUS paragraphs */}
+          {deltaContextPacket.shortTermWindow.length > 0 && (
+            <div className="space-y-2 pt-1">
+              <div className="text-xs font-semibold text-slate-300">
+                Краткосрочное скользящее окно M^(i) (3 последних абзаца ENG ↔ RUS из Главы{' '}
+                {previousChapter?.number})
+              </div>
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                {deltaContextPacket.shortTermWindow.map((pair) => (
+                  <div
+                    key={pair.index}
+                    className="rounded-lg border border-slate-800 bg-slate-950/90 p-2.5 text-xs space-y-1.5"
+                  >
+                    <div className="font-mono text-[11px] text-slate-500">
+                      Опорная пара #{pair.index}
+                    </div>
+                    <p className="line-clamp-2 text-slate-400">{pair.engParagraph}</p>
+                    <p className="line-clamp-2 text-emerald-300/90 border-t border-slate-800/80 pt-1">
+                      {pair.rusParagraph}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

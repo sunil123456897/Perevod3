@@ -6,6 +6,10 @@ import {
   surgicalRepairDriftedParagraphs,
   filterGlossaryForChapter,
   generateChapterMemorySummary,
+  generateBilingualChapterSummary,
+  runAdditionBySubtractionScout,
+  extractCsiCulturalNotes,
+  evaluateDitingQuality,
   GENRE_PRESET_LABELS,
   PROSE_TONE_LABELS,
   type CanonicalGlossary,
@@ -16,6 +20,9 @@ import {
   type GlossaryTermMeta,
   type GrammaticalGender,
   type HeroStateLedger,
+  type DelTAShortTermPair,
+  type DelTALongTermMatch,
+  type CsiCulturalNote,
 } from '@/lib/qa-linter';
 
 function getAiClient(): GoogleGenAI | null {
@@ -136,6 +143,9 @@ export async function POST(req: NextRequest) {
       genrePreset = 'xianxia',
       proseTone = 'classic',
       previousChapterSummary = '',
+      previousChapterSummaryEng = '',
+      deltaShortTermWindow = [],
+      deltaLongTermMemories = [],
       enabledRuleIds,
       twoPassCritic = true,
       heroLedger,
@@ -152,6 +162,9 @@ export async function POST(req: NextRequest) {
       genrePreset?: GenrePreset;
       proseTone?: ProseTone;
       previousChapterSummary?: string;
+      previousChapterSummaryEng?: string;
+      deltaShortTermWindow?: DelTAShortTermPair[];
+      deltaLongTermMemories?: DelTALongTermMatch[];
       enabledRuleIds?: LintRuleId[];
       twoPassCritic?: boolean;
       heroLedger?: HeroStateLedger;
@@ -161,8 +174,15 @@ export async function POST(req: NextRequest) {
     const genreInfo = GENRE_PRESET_LABELS[genrePreset] || GENRE_PRESET_LABELS.xianxia;
     const toneInfo = PROSE_TONE_LABELS[proseTone] || PROSE_TONE_LABELS.classic;
 
-    // PHASE 1: Term Scouting via gemini-3.1-flash-lite with gender detection
+    // PHASE 1: Term Scouting via TransAgents Addition-by-Subtraction (Agent A Recall -> Agent S Precision)
     if (action === 'scout') {
+      const localAbs = runAdditionBySubtractionScout(
+        engText,
+        chapterNumber,
+        glossary,
+        scoutedTerms
+      );
+
       if (ai) {
         try {
           const existingTerms = [
@@ -176,9 +196,9 @@ export async function POST(req: NextRequest) {
 
           const response = await ai.models.generateContent({
             model: 'gemini-3.1-flash-lite',
-            contents: `Analyze this ${genreInfo.title} web-novel chapter in English and extract proper nouns, skills/techniques, artifacts, characters, or guilds/sects NOT already in [${existingTerms.join(', ')}].\n\nChapter Text:\n${engText}`,
+            contents: `Run TransAgents "Addition-by-Subtraction" terminology scouting on this ${genreInfo.title} chapter.\nStep 1 (Junior Editor / Addition): Extract all candidate proper nouns, techniques, artifacts, characters, and sects NOT already in [${existingTerms.join(', ')}].\nStep 2 (Senior Editor / Subtraction): Prune common sentence-initial verbs/adverbs, generic nouns, and system labels so ONLY true canon entities remain.\n\nChapter Text:\n${engText}`,
             config: {
-              systemInstruction: `You are a terminology scout for ${genreInfo.promptHint}. Return a JSON array of newly discovered terms with Russian literary translations, grammatical gender (M, F, N, PL), and confidence score (0.80 to 0.99).`,
+              systemInstruction: `You are a Senior Terminology Editor (TransAgents Addition-by-Subtraction protocol) for ${genreInfo.promptHint}. Return a JSON array of high-precision newly discovered terms with Russian literary translations, grammatical gender (M, F, N, PL), and confidence score (0.85 to 0.99).`,
               responseMimeType: 'application/json',
               responseSchema: {
                 type: Type.ARRAY,
@@ -207,79 +227,31 @@ export async function POST(req: NextRequest) {
 
           const parsed = JSON.parse(response.text || '[]');
           return NextResponse.json({
-            engine: 'gemini-3.1-flash-lite',
-            discoveredTerms: Array.isArray(parsed) ? parsed : [],
+            engine: 'gemini-3.1-flash-lite (TransAgents A−S)',
+            discoveredTerms: Array.isArray(parsed) ? parsed : localAbs.discoveredTerms,
+            addedRecallCount: localAbs.addedRecallCount,
+            subtractedNoiseCount: localAbs.subtractedNoiseCount,
+            subtractedSamples: localAbs.subtractedSamples,
           });
         } catch {
-          // Fall through to deterministic regex heuristic scout
+          // Fall through to deterministic Addition-by-Subtraction scout
         }
-      }
-
-      const candidates: Array<{
-        eng: string;
-        rus_suggested: string;
-        category: keyof CanonicalGlossary;
-        gender: GrammaticalGender;
-        context_snippet: string;
-        confidence: number;
-      }> = [];
-
-      const knownAll = new Set([
-        ...Object.keys(glossary.realms || {}),
-        ...Object.keys(glossary.characters || {}),
-        ...Object.keys(glossary.sects_and_places || {}),
-        ...Object.keys(glossary.system_and_terms || {}),
-        ...scoutedTerms.map((t) => t.eng),
-      ]);
-
-      const capitalizedMatches =
-        engText.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}\b/g) || [];
-      for (const phrase of Array.from(new Set(capitalizedMatches))) {
-        if (knownAll.has(phrase) || phrase.startsWith('Chapter')) continue;
-        let rusSuggested = phrase;
-        let category: keyof CanonicalGlossary = 'system_and_terms';
-        let gender: GrammaticalGender = 'M';
-
-        if (/Sister|Lady|Queen|Empress|Goddess/i.test(phrase)) {
-          category = 'characters';
-          gender = 'F';
-        } else if (/Brother|Elder|Deacon|Lord|Master/i.test(phrase)) {
-          category = 'characters';
-          gender = 'M';
-          rusSuggested = phrase
-            .replace(/Senior Brother/i, 'старший брат')
-            .replace(/Elder/i, 'старейшина');
-        } else if (/Sect|Guild|Tower|Mountain|Pavilion|Realm/i.test(phrase)) {
-          category = 'sects_and_places';
-          gender = /Pavilion|Realm/i.test(phrase) ? 'M' : 'F';
-        } else if (/Grass|Pill|Rune/i.test(phrase)) {
-          gender = 'F';
-          if (phrase === 'Nine-Leaf Spirit Grass') {
-            rusSuggested = 'Девятилистная Духовная Трава';
-          }
-        }
-        candidates.push({
-          eng: phrase,
-          rus_suggested: rusSuggested,
-          category,
-          gender,
-          context_snippet: `Глава ${chapterNumber}: «${phrase}»`,
-          confidence: phrase === 'Nine-Leaf Spirit Grass' ? 0.96 : 0.93,
-        });
       }
 
       return NextResponse.json({
-        engine: 'deterministic-scout-v2',
-        discoveredTerms: candidates.slice(0, 4),
+        engine: 'transagents-addition-by-subtraction-v3',
+        discoveredTerms: localAbs.discoveredTerms,
+        addedRecallCount: localAbs.addedRecallCount,
+        subtractedNoiseCount: localAbs.subtractedNoiseCount,
+        subtractedSamples: localAbs.subtractedSamples,
       });
     }
 
-    // PHASE 2 & 3: Chapter-Sliced Glossary + Rolling Memory + Two-Pass Literary Critic via gemini-3.8-flash
+    // PHASE 2 & 3: DelTA 4-Level Memory + 3-Role LCD-MAS + CHORUS CSI Notes + DITING 6D Judge
     if (action === 'translate_and_edit') {
-      // Slice glossary to only terms appearing in this chapter to save tokens and sharpen accuracy
+      // 1. DelTA Component 1 (\hat{R}^{(i)}): Chapter-Sliced Proper Noun Records
       const { filteredGlossary, matchedCount } = filterGlossaryForChapter(engText, glossary);
 
-      // Build character gender, declension & voice/politeness hints for characters present in chapter
       const genderRulesList: string[] = [];
       Object.entries(filteredGlossary.characters || {}).forEach(([eng, rus]) => {
         const meta = glossaryMeta[eng];
@@ -294,17 +266,63 @@ export async function POST(req: NextRequest) {
         ? `Live Hero & World State Ledger (MUST NOT CONTRADICT):\n- Protagonist: ${heroLedger.protagonistName}\n- Current Cultivation Rank: ${heroLedger.cultivationRealm}\n- Active Resources: ${heroLedger.resources.join(', ')}\n- Inventory & Techniques: ${heroLedger.artifactsAndFlames.join(', ')}\n- Current Location: ${heroLedger.activeLocation}`
         : '';
 
+      // 2. DelTA Component 2 (A_s^{(i)}, A_t^{(i)}): Bilingual Summary
+      const bilingualMemoryBlock = `DelTA Bilingual Macro-Summary (A_s / A_t):\n- ENG Summary (A_s): ${previousChapterSummaryEng || 'Opening chapter stream.'}\n- RUS Summary (A_t): ${previousChapterSummary || 'Первая переводимая глава в потоке.'}`;
+
+      // 3. DelTA Component 3 (M^{(i)}): Short-Term Sliding Window (3 aligned ENG↔RUS paragraph pairs)
+      const shortTermBlock =
+        deltaShortTermWindow.length > 0
+          ? `DelTA Short-Term Memory Window M^(i) (Last ${deltaShortTermWindow.length} aligned ENG↔RUS paragraphs from preceding chapter for seamless rhythm & tense continuity):\n` +
+            deltaShortTermWindow
+              .map(
+                (pair, idx) =>
+                  `[Pair #${idx + 1} ENG]: ${pair.engParagraph}\n[Pair #${idx + 1} RUS]: ${pair.rusParagraph}`
+              )
+              .join('\n---\n')
+          : '';
+
+      // 4. DelTA Component 4 (\hat{N}^{(i)}): Long-Term Retrieved Exemplars
+      const longTermBlock =
+        deltaLongTermMemories.length > 0
+          ? `DelTA Long-Term Memory Exemplars N^(i) (Established phrasing for recurring entities):\n` +
+            deltaLongTermMemories
+              .map(
+                (lt) =>
+                  `[Ch.${lt.chapterNumber} · ${lt.matchedEntity}]\nENG: ${lt.engSnippet}\nRUS: ${lt.rusSnippet}`
+              )
+              .join('\n')
+          : '';
+
       if (ai) {
         try {
           const response = await ai.models.generateContent({
             model: 'gemini-3.8-flash',
-            contents: `Translate and literarily polish Chapter ${chapterNumber} ("${titleEng}") from English into Russian.\n\nGenre Profile: ${genreInfo.title} (${genreInfo.promptHint})\nProse Tone: ${toneInfo.title} (${toneInfo.instruction})\nTwo-Pass Literary Critic Mode: ${twoPassCritic ? 'ENABLED (Draft -> Literary Polish -> Gender & Number Check)' : 'STANDARD'}\n\n${ledgerPromptBlock}\n\nPrevious Chapter Memory (Continuity Context):\n${previousChapterSummary || 'Первая переводимая глава в потоке.'}\n\nChapter-Sliced Canonical Glossary (STRICT — ${matchedCount} active terms):\n${JSON.stringify(filteredGlossary, null, 2)}\n\nCharacter Gender & Declension Rules:\n${genderRulesList.join('\n') || 'Standard Russian declension'}\n\nStyle Guide:\n${styleGuideMd}\n\nEnglish Source:\n${engText}`,
+            contents: `[STATIC CACHEABLE PREFIX: ROLE & GUIDELINES]
+Genre Profile: ${genreInfo.title} (${genreInfo.promptHint})
+Prose Tone: ${toneInfo.title} (${toneInfo.instruction})
+Style Guide:
+${styleGuideMd}
+
+[CHAPTER-SLICED GLOSSARY R^(i) (${matchedCount} active terms)]
+${JSON.stringify(filteredGlossary, null, 2)}
+
+Character Gender, Declension & Politeness Rules:
+${genderRulesList.join('\n') || 'Standard Russian declension'}
+
+${ledgerPromptBlock}
+
+[DYNAMIC DELTA MEMORY SUFFIX]
+${bilingualMemoryBlock}
+${shortTermBlock ? `\n${shortTermBlock}\n` : ''}
+${longTermBlock ? `\n${longTermBlock}\n` : ''}
+
+[SOURCE CHAPTER ${chapterNumber}: "${titleEng}"]
+${engText}`,
             config: {
-              systemInstruction: `You are an elite Russian web-novel translator and literary critic (${genreInfo.promptHint}).
-Perform a 2-pass adaptation:
-Pass 1 (Accuracy): Translate 100% of the meaning, preserving every Arabic number (e.g. 21, 50, 80%, 6-м слое, 1-го яруса), system boxes inside --- dividers, and canonical glossary terms.
-Pass 2 (Literary Critic — ${toneInfo.title}): Eliminate machine calques, align verb past-tense gender with character gender metadata (especially female characters!), use em-dashes "— " for dialogue and guillemets «...» for thoughts, and generate a 2-sentence Russian summary of the chapter for continuity.
-Return JSON with titleRus, rusText, and summary.`,
+              systemInstruction: `You are an autonomous 3-Agent Literary Translation Pipeline (LCD-MAS + CHORUS architecture) for ${genreInfo.promptHint}:
+Role 1 (Semantic Translator): Translate 100% of facts, preserving every Arabic number (21, 50, 80%, 6-м слое, 1-го яруса), system boxes inside --- dividers, and canonical glossary terms.
+Role 2 (CSI Localization Specialist): Adapt Daoist idioms, honorifics (старший брат, старейшина), and cultural items (цзинь, ли) into authentic Russian and document each adaptation rationale in csiNotes (CHORUS C3).
+Role 3 (Dedicated Literary Stylist — ${toneInfo.title}): Eliminate machine calques, align verb past-tense gender with character gender metadata, enforce em-dashes "— " for dialogue and guillemets «...» for thoughts, and produce a bilingual summary (summaryRus & summaryEng).`,
               responseMimeType: 'application/json',
               responseSchema: {
                 type: Type.OBJECT,
@@ -312,6 +330,20 @@ Return JSON with titleRus, rusText, and summary.`,
                   titleRus: { type: Type.STRING },
                   rusText: { type: Type.STRING },
                   summary: { type: Type.STRING },
+                  summaryEng: { type: Type.STRING },
+                  csiNotes: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        sourcePhrase: { type: Type.STRING },
+                        categoryLabel: { type: Type.STRING },
+                        adaptedRus: { type: Type.STRING },
+                        rationale: { type: Type.STRING },
+                      },
+                      required: ['sourcePhrase', 'adaptedRus', 'rationale'],
+                    },
+                  },
                 },
                 required: ['titleRus', 'rusText', 'summary'],
               },
@@ -330,16 +362,58 @@ Return JSON with titleRus, rusText, and summary.`,
               glossaryMeta,
             });
             const finalTitle = parsed.titleRus || `Глава ${chapterNumber}`;
-            const summary =
-              parsed.summary ||
-              generateChapterMemorySummary(chapterNumber, finalTitle, repairedText);
+            const biSummary = generateBilingualChapterSummary(
+              chapterNumber,
+              titleEng,
+              engText,
+              finalTitle,
+              repairedText
+            );
+            const summary = parsed.summary || biSummary.rus;
+            const summaryEng = parsed.summaryEng || biSummary.eng;
+
+            const csiNotes: CsiCulturalNote[] =
+              Array.isArray(parsed.csiNotes) && parsed.csiNotes.length > 0
+                ? parsed.csiNotes.map(
+                    (
+                      n: {
+                        sourcePhrase: string;
+                        categoryLabel?: string;
+                        adaptedRus: string;
+                        rationale: string;
+                      },
+                      idx: number
+                    ) => ({
+                      id: `csi-ai-${chapterNumber}-${idx}`,
+                      sourcePhrase: n.sourcePhrase,
+                      category: 'idiom',
+                      categoryLabel: n.categoryLabel || 'Культурная адаптация CSI',
+                      adaptedRus: n.adaptedRus,
+                      rationale: n.rationale,
+                    })
+                  )
+                : extractCsiCulturalNotes(engText, repairedText, glossary);
+
+            const ditingReport = evaluateDitingQuality(
+              engText,
+              repairedText,
+              glossary,
+              glossaryMeta,
+              enabledRuleIds
+            );
 
             return NextResponse.json({
-              engine: twoPassCritic ? 'gemini-3.8-flash (2-Pass Critic)' : 'gemini-3.8-flash',
+              engine: twoPassCritic
+                ? 'gemini-3.8-flash (LCD-MAS 3-Role + DelTA)'
+                : 'gemini-3.8-flash',
               titleRus: finalTitle,
               rusText: repairedText,
               summary,
+              summaryEng,
+              csiNotes,
+              ditingReport,
               slicedGlossaryCount: matchedCount,
+              deltaShortTermCount: deltaShortTermWindow.length,
               appliedFixes,
               lintReport,
             });
@@ -365,24 +439,38 @@ Return JSON with titleRus, rusText, and summary.`,
         enabledRuleIds,
         glossaryMeta,
       });
-      const summary = generateChapterMemorySummary(
+      const biSummary = generateBilingualChapterSummary(
         chapterNumber,
+        titleEng,
+        engText,
         fallback.titleRus,
         repairedText
       );
+      const csiNotes = extractCsiCulturalNotes(engText, repairedText, glossary);
+      const ditingReport = evaluateDitingQuality(
+        engText,
+        repairedText,
+        glossary,
+        glossaryMeta,
+        enabledRuleIds
+      );
 
       return NextResponse.json({
-        engine: twoPassCritic ? 'canon-2pass-critic-engine' : 'xianxia-canon-engine',
+        engine: twoPassCritic ? 'lcd-mas-3role-delta-engine' : 'xianxia-canon-engine',
         titleRus: fallback.titleRus,
         rusText: repairedText,
-        summary,
+        summary: biSummary.rus,
+        summaryEng: biSummary.eng,
+        csiNotes,
+        ditingReport,
         slicedGlossaryCount: matchedCount,
+        deltaShortTermCount: deltaShortTermWindow.length,
         appliedFixes,
         lintReport,
       });
     }
 
-    // PHASE 4: QA Self-Repair Loop (Surgical Paragraph Repair + Deterministic + Gender Repair + Gemini Literary Polish)
+    // PHASE 4: QA Self-Repair Loop (Zero-Token IntrinTrans Compiler Check + DITING AgentEval Feedback)
     if (action === 'self_repair') {
       const surgical = surgicalRepairDriftedParagraphs(
         engText,
@@ -414,7 +502,7 @@ Return JSON with titleRus, rusText, and summary.`,
         try {
           const response = await ai.models.generateContent({
             model: 'gemini-3.8-flash',
-            contents: `Fix the remaining QA Linter violations in this Russian translation (${genreInfo.title}, tone: ${toneInfo.title}) so it achieves 0 errors and 0 warnings.\n\nEnglish Source:\n${engText}\n\nCurrent Russian Translation:\n${finalRusText}\n\nRemaining Linter Issues:\n${JSON.stringify(intermediateReport.issues, null, 2)}\n\nCanonical Glossary:\n${JSON.stringify(glossary, null, 2)}`,
+            contents: `Fix the remaining QA Linter & DITING MQM violations in this Russian translation (${genreInfo.title}, tone: ${toneInfo.title}) so it achieves 0 errors and 0 warnings.\n\nEnglish Source:\n${engText}\n\nCurrent Russian Translation:\n${finalRusText}\n\nRemaining Linter Issues:\n${JSON.stringify(intermediateReport.issues, null, 2)}\n\nCanonical Glossary:\n${JSON.stringify(glossary, null, 2)}`,
             config: {
               systemInstruction:
                 'Return ONLY the corrected Russian chapter text with all numbers preserved in Arabic digits, canonical glossary terms restored, character verb genders aligned, em-dashes "— " for dialogue, and guillemets «...» for thoughts.',
@@ -428,8 +516,8 @@ Return JSON with titleRus, rusText, and summary.`,
                 enabledRuleIds,
               });
             finalRusText = postAiText;
-            appliedFixes.push(...aiFixes, 'Двухпроходная литературная вычитка gemini-3.8-flash');
-            engineUsed = 'gemini-3.8-flash + qa-linter';
+            appliedFixes.push(...aiFixes, 'Трёхролевая литературная вычитка LCD-MAS + DITING');
+            engineUsed = 'gemini-3.8-flash + diting-agenteval';
           }
         } catch {
           // Keep deterministic repair
@@ -440,11 +528,22 @@ Return JSON with titleRus, rusText, and summary.`,
         enabledRuleIds,
         glossaryMeta,
       });
+      const csiNotes = extractCsiCulturalNotes(engText, finalRusText, glossary);
+      const ditingReport = evaluateDitingQuality(
+        engText,
+        finalRusText,
+        glossary,
+        glossaryMeta,
+        enabledRuleIds
+      );
+
       return NextResponse.json({
         engine: engineUsed,
         repairedText: finalRusText,
         appliedFixes,
         lintReport: finalReport,
+        csiNotes,
+        ditingReport,
       });
     }
 
@@ -454,3 +553,4 @@ Return JSON with titleRus, rusText, and summary.`,
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+

@@ -2023,3 +2023,1299 @@ export function computeChapterPipelineProgress(
   };
 }
 
+// ============================================================================
+// MODULE 1: TransAgents "Addition-by-Subtraction" Two-Agent Pre-Scout Filter
+// ============================================================================
+
+const SUBTRACTION_NOISE_WORDS = new Set([
+  'The',
+  'Inside',
+  'Under',
+  'Three',
+  'Returning',
+  'Suddenly',
+  'Whoever',
+  'Remarkable',
+  'Stepping',
+  'Having',
+  'Cold',
+  'At',
+  'For',
+  'Without',
+  'Could',
+  'Each',
+  'Even',
+  'Can',
+  'Hand',
+  'You',
+  'His',
+  'Her',
+  'Their',
+  'This',
+  'That',
+  'When',
+  'While',
+  'After',
+  'Before',
+  'Chapter',
+  'Part',
+  'Host',
+  'Cultivation',
+  'Technique',
+  'Mastery',
+  'Speed',
+  'Bonus',
+  'Skill',
+  'Critical',
+  'Damage',
+]);
+
+export interface AdditionBySubtractionScoutResult {
+  discoveredTerms: Array<{
+    eng: string;
+    rus_suggested: string;
+    category: GlossaryCategory;
+    gender: GrammaticalGender;
+    context_snippet: string;
+    confidence: number;
+  }>;
+  finalTerms: Array<{
+    eng: string;
+    rus_suggested: string;
+    category: GlossaryCategory;
+    gender: GrammaticalGender;
+    context_snippet: string;
+    confidence: number;
+  }>;
+  finalCount: number;
+  addedRecallCount: number;
+  subtractedNoiseCount: number;
+  subtractedSamples: string[];
+}
+
+/**
+ * Implements the TransAgents "Addition-by-Subtraction" (Сложение через вычитание)
+ * pre-translation terminology extraction protocol:
+ * - Agent A (Junior Editor / Addition): Scans with maximum Recall for all capitalized phrases & domain entities.
+ * - Agent S (Senior Editor / Subtraction): Filters out sentence-initial verbs/adverbs, generic system labels, and noise.
+ */
+export function runAdditionBySubtractionScout(
+  engText: string,
+  chapterNumber: number,
+  glossary: CanonicalGlossary,
+  existingScouted: ScoutedTerm[] = []
+): AdditionBySubtractionScoutResult {
+  const knownAll = new Set<string>();
+  (Object.keys(glossary) as GlossaryCategory[]).forEach((cat) => {
+    Object.keys(glossary[cat] || {}).forEach((k) => knownAll.add(k.toLowerCase()));
+  });
+  existingScouted.forEach((t) => knownAll.add(t.eng.toLowerCase()));
+
+  // Agent A (Addition): High-recall extraction of multi-word and single-word capitalized candidates
+  const multiWordMatches = engText.match(/\b[A-Z][a-zA-Z-]*(?:\s+[A-Z][a-zA-Z-]*){0,3}\b/g) || [];
+  const rawPool = Array.from(new Set(multiWordMatches.map((m) => m.trim())));
+
+  const subtractedSamples: string[] = [];
+  const cleanCandidates: string[] = [];
+
+  // Agent S (Subtraction): Precision pruning of common English starters, system labels, and already-known canon
+  for (const candidate of rawPool) {
+    if (knownAll.has(candidate.toLowerCase())) {
+      continue;
+    }
+    const words = candidate.split(/\s+/);
+    const firstWord = words[0];
+
+    if (
+      words.length === 1 &&
+      (SUBTRACTION_NOISE_WORDS.has(firstWord) || candidate.length < 4)
+    ) {
+      subtractedSamples.push(candidate);
+      continue;
+    }
+
+    if (SUBTRACTION_NOISE_WORDS.has(firstWord) && words.length > 1) {
+      const stripped = words.slice(1).join(' ');
+      if (stripped.split(/\s+/).length >= 2 && !knownAll.has(stripped.toLowerCase())) {
+        subtractedSamples.push(firstWord);
+        cleanCandidates.push(stripped);
+      } else {
+        subtractedSamples.push(candidate);
+      }
+      continue;
+    }
+
+    if (/^Chapter\s*\d*/i.test(candidate) || /^Tier\s*\d*/i.test(candidate)) {
+      subtractedSamples.push(candidate);
+      continue;
+    }
+
+    // Single words that are not proper names/terms get pruned by Agent S
+    if (
+      words.length === 1 &&
+      !/^(?:Dantian|Qi|Jin|Liang|Li|Zhang)$/i.test(candidate)
+    ) {
+      subtractedSamples.push(candidate);
+      continue;
+    }
+
+    cleanCandidates.push(candidate);
+  }
+
+  const uniqueClean = Array.from(new Set(cleanCandidates));
+  const discoveredTerms: AdditionBySubtractionScoutResult['discoveredTerms'] = [];
+
+  const canonicalDictionaryHints: Record<
+    string,
+    { rus: string; cat: GlossaryCategory; gender: GrammaticalGender; conf: number }
+  > = {
+    'Nine-Leaf Spirit Grass': {
+      rus: 'Девятилистная Духовная Трава',
+      cat: 'system_and_terms',
+      gender: 'F',
+      conf: 0.97,
+    },
+    'Foundation Establishment Pill': {
+      rus: 'Пилюля Заложения Основ',
+      cat: 'system_and_terms',
+      gender: 'F',
+      conf: 0.97,
+    },
+    'Shadow Step Scripture': {
+      rus: 'Канон Теневого Шага',
+      cat: 'system_and_terms',
+      gender: 'M',
+      conf: 0.96,
+    },
+    'Azure Lotus Fire': {
+      rus: 'Пламя Лазурного Лотоса',
+      cat: 'system_and_terms',
+      gender: 'N',
+      conf: 0.96,
+    },
+    'Black Iron Cauldron': {
+      rus: 'Котёл Чёрного Железа',
+      cat: 'system_and_terms',
+      gender: 'M',
+      conf: 0.95,
+    },
+    'Senior Brother Chen': {
+      rus: 'старший брат Чэнь',
+      cat: 'characters',
+      gender: 'M',
+      conf: 0.94,
+    },
+    'Inner Sect': {
+      rus: 'Внутренняя Секта',
+      cat: 'sects_and_places',
+      gender: 'F',
+      conf: 0.95,
+    },
+    'Secret Realm': {
+      rus: 'Тайное Царство',
+      cat: 'sects_and_places',
+      gender: 'N',
+      conf: 0.95,
+    },
+  };
+
+  for (const phrase of uniqueClean) {
+    if (knownAll.has(phrase.toLowerCase())) continue;
+
+    const dictHit = canonicalDictionaryHints[phrase];
+    let rusSuggested = dictHit?.rus || phrase;
+    let category: GlossaryCategory = dictHit?.cat || 'system_and_terms';
+    let gender: GrammaticalGender = dictHit?.gender || 'M';
+    const confidence = dictHit?.conf || 0.93;
+
+    if (!dictHit) {
+      if (/Sister|Lady|Queen|Empress|Goddess/i.test(phrase)) {
+        category = 'characters';
+        gender = 'F';
+      } else if (/Brother|Elder|Deacon|Lord|Master/i.test(phrase)) {
+        category = 'characters';
+        gender = 'M';
+        rusSuggested = phrase
+          .replace(/Senior Brother/i, 'старший брат')
+          .replace(/Junior Brother/i, 'младший брат')
+          .replace(/Elder/i, 'старейшина')
+          .replace(/Deacon/i, 'дьякон');
+      } else if (/Sect|Guild|Tower|Mountain|Pavilion|Realm|Peak|Valley/i.test(phrase)) {
+        category = 'sects_and_places';
+        gender = /Pavilion|Peak/i.test(phrase)
+          ? 'M'
+          : /Realm/i.test(phrase)
+            ? 'N'
+            : 'F';
+      } else if (/Grass|Pill|Rune|Technique|Scripture/i.test(phrase)) {
+        gender = /Scripture/i.test(phrase) ? 'M' : 'F';
+      }
+    }
+
+    discoveredTerms.push({
+      eng: phrase,
+      rus_suggested: rusSuggested,
+      category,
+      gender,
+      context_snippet: `Глава ${chapterNumber} (TransAgents A−S): «${phrase}»`,
+      confidence,
+    });
+  }
+
+  const finalTerms = discoveredTerms.slice(0, 6);
+  return {
+    discoveredTerms: finalTerms,
+    finalTerms,
+    finalCount: finalTerms.length,
+    addedRecallCount: rawPool.length,
+    subtractedNoiseCount: subtractedSamples.length,
+    subtractedSamples: Array.from(new Set(subtractedSamples)).slice(0, 8),
+  };
+}
+
+// ============================================================================
+// MODULE 2: DelTA 4-Component Document-to-Sentence Context Engine
+// ============================================================================
+
+export interface DelTAShortTermPair {
+  index: number;
+  engParagraph: string;
+  rusParagraph: string;
+}
+
+export interface DelTABilingualSummary {
+  eng: string;
+  rus: string;
+  summaryEng: string;
+  summaryRus: string;
+}
+
+export interface DelTALongTermMatch {
+  chapterNumber: number;
+  engSnippet: string;
+  rusSnippet: string;
+  matchedEntity: string;
+}
+
+export interface DelTAContextPacket {
+  properNounCount: number; // \hat{R}^{(i)}
+  bilingualSummary: DelTABilingualSummary; // A_s^{(i)}, A_t^{(i)}
+  shortTermWindow: DelTAShortTermPair[]; // M^{(i)} — last 3 aligned ENG-RUS paragraphs
+  longTermMemories: DelTALongTermMatch[]; // \hat{N}^{(i)} — relevant past chapter sentences
+}
+
+export function generateBilingualChapterSummary(
+  chapterNumber: number,
+  titleEng: string,
+  engText: string,
+  titleRus: string,
+  rusText: string
+): DelTABilingualSummary {
+  const cleanEngLines = engText
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 15 && !l.startsWith('---') && !l.startsWith('['));
+
+  const firstEng = cleanEngLines[0]?.split(/(?<=[.!?])\s+/)[0] || titleEng;
+  const lastEng =
+    cleanEngLines[cleanEngLines.length - 1]?.split(/(?<=[.!?])\s+/).slice(-1)[0] || '';
+  const engSummary =
+    firstEng && lastEng && firstEng !== lastEng
+      ? `Ch.${chapterNumber} (${titleEng}): ${firstEng} Outcome: ${lastEng}`
+      : `Ch.${chapterNumber} (${titleEng}): ${firstEng}`;
+
+  const rusSummary = generateChapterMemorySummary(
+    chapterNumber,
+    titleRus || `Глава ${chapterNumber}`,
+    rusText
+  );
+
+  return {
+    eng: engSummary,
+    rus: rusSummary,
+    summaryEng: engSummary,
+    summaryRus: rusSummary,
+  };
+}
+
+/**
+ * Builds the 4-component DelTA memory context for a chapter:
+ * 1. \hat{R}^{(i)} — Proper Noun Records count (sliced glossary)
+ * 2. A_s^{(i)}, A_t^{(i)} — Bilingual Summary (ENG + RUS)
+ * 3. M^{(i)} — Short-Term Sliding Window of the last 3 non-divider ENG↔RUS paragraphs from the preceding chapter
+ * 4. \hat{N}^{(i)} — Long-Term Memory retrieval of relevant translated sentences from earlier chapters
+ */
+export function buildDelTAContextPacket(
+  currentChapterEng: string,
+  previousChapter: {
+    number: number;
+    titleEng: string;
+    titleRus: string;
+    engText: string;
+    rusText: string;
+    summary?: string;
+    summaryEng?: string;
+  } | null,
+  earlierChapters: Array<{
+    number: number;
+    engText: string;
+    rusText: string;
+  }>,
+  glossary: CanonicalGlossary,
+  windowSize = 3
+): DelTAContextPacket {
+  const { filteredGlossary, matchedCount } = filterGlossaryForChapter(
+    currentChapterEng,
+    glossary
+  );
+
+  let bilingualSummary: DelTABilingualSummary = {
+    eng: 'Opening chapter of the translation stream.',
+    rus: 'Первая переводимая глава в потоке.',
+    summaryEng: 'Opening chapter of the translation stream.',
+    summaryRus: 'Первая переводимая глава в потоке.',
+  };
+  const shortTermWindow: DelTAShortTermPair[] = [];
+
+  if (previousChapter) {
+    const autoBi = generateBilingualChapterSummary(
+      previousChapter.number,
+      previousChapter.titleEng,
+      previousChapter.engText,
+      previousChapter.titleRus,
+      previousChapter.rusText
+    );
+    const finalEng = previousChapter.summaryEng || autoBi.eng;
+    const finalRus = previousChapter.summary || autoBi.rus;
+    bilingualSummary = {
+      eng: finalEng,
+      rus: finalRus,
+      summaryEng: finalEng,
+      summaryRus: finalRus,
+    };
+
+    if (previousChapter.rusText.trim()) {
+      const aligned = alignChapterParagraphs(
+        previousChapter.engText,
+        previousChapter.rusText
+      );
+      const validPairs = aligned.pairs.filter(
+        (p) =>
+          p.engParagraph.trim().length > 0 &&
+          p.rusParagraph.trim().length > 0 &&
+          !p.isSystemDivider
+      );
+      const tail = validPairs.slice(-Math.max(1, windowSize));
+      tail.forEach((p, idx) => {
+        shortTermWindow.push({
+          index: idx + 1,
+          engParagraph: p.engParagraph,
+          rusParagraph: p.rusParagraph,
+        });
+      });
+    }
+  }
+
+  // Long-Term Memory (\hat{N}^{(i)}): retrieve up to 3 past translated paragraphs that share active proper nouns
+  const activeEntities = [
+    ...Object.entries(filteredGlossary.characters || {}),
+    ...Object.entries(filteredGlossary.sects_and_places || {}),
+    ...Object.entries(filteredGlossary.system_and_terms || {}),
+  ];
+
+  const longTermMemories: DelTALongTermMatch[] = [];
+  for (const pastCh of earlierChapters) {
+    if (!pastCh.rusText.trim()) continue;
+    if (previousChapter && pastCh.number === previousChapter.number) continue;
+
+    const aligned = alignChapterParagraphs(pastCh.engText, pastCh.rusText);
+    for (const pair of aligned.pairs) {
+      if (!pair.engParagraph || !pair.rusParagraph || pair.isSystemDivider) continue;
+      for (const [engTerm, rusTerm] of activeEntities) {
+        if (
+          pair.engParagraph.toLowerCase().includes(engTerm.toLowerCase()) &&
+          longTermMemories.length < 3 &&
+          !longTermMemories.some((m) => m.matchedEntity === `${engTerm} → ${rusTerm}`)
+        ) {
+          longTermMemories.push({
+            chapterNumber: pastCh.number,
+            engSnippet: pair.engParagraph,
+            rusSnippet: pair.rusParagraph,
+            matchedEntity: `${engTerm} → ${rusTerm}`,
+          });
+          break;
+        }
+      }
+      if (longTermMemories.length >= 3) break;
+    }
+    if (longTermMemories.length >= 3) break;
+  }
+
+  return {
+    properNounCount: matchedCount,
+    bilingualSummary,
+    shortTermWindow,
+    longTermMemories,
+  };
+}
+
+// ============================================================================
+// MODULE 3: LCD-MAS + CHORUS CSI Cultural Footnotes & DITING 6D Judge
+// ============================================================================
+
+export type CsiCategory = 'idiom' | 'honorific' | 'daoist_term' | 'system_formula';
+
+export interface CsiCulturalNote {
+  id: string;
+  sourcePhrase: string;
+  category: CsiCategory;
+  categoryLabel: string;
+  adaptedRus: string;
+  rationale: string;
+}
+
+export interface DitingQualityReport {
+  idiomAccuracy: number; // Точность передачи идиоматики
+  referentialCohesion: number; // Временная и референциальная связность
+  characterVoiceFidelity: number; // Сохранение индивидуальных голосов героев
+  culturalAdaptation: number; // Культурная достоверность (CSI)
+  literaryRhythm: number; // Ритмика и отсутствие канцелярита
+  terminologyPrecision: number; // Соблюдение канона и числительных
+  overallScore: number;
+  mqmGrade: 'Эталон (DITING 95+)' | 'Высокий (85–94)' | 'Требует правки (<85)';
+}
+
+/**
+ * Extracts Culture-Specific Items (CSI) and generates structured CHORUS C3 rationales
+ * explaining why specific Daoist idioms, honorifics, units, and cultivation ranks were adapted as they were.
+ */
+export function extractCsiCulturalNotes(
+  engText: string,
+  rusText: string,
+  glossary: CanonicalGlossary
+): CsiCulturalNote[] {
+  const notes: CsiCulturalNote[] = [];
+  const lowerEng = engText.toLowerCase();
+
+  const csiPatterns: Array<{
+    key: string;
+    testEng: RegExp;
+    sourcePhrase: string;
+    category: CsiCategory;
+    categoryLabel: string;
+    adaptedRus: string;
+    rationale: string;
+  }> = [
+    {
+      key: 'senior-brother',
+      testEng: /\bSenior\s+Brother\s+([A-Z][a-z]+)\b/i,
+      sourcePhrase: 'Senior Brother (Шисюн / 师兄)',
+      category: 'honorific',
+      categoryLabel: 'Сектантский гоноратив',
+      adaptedRus: 'старший брат (со строчной буквы при имени)',
+      rationale:
+        'По правилам русской литературной адаптации уся/сянься обращения «старший брат / старейшина / дьякон» перед именем пишутся со строчной буквы, передавая иерархию учеников одной секты.',
+    },
+    {
+      key: 'elder-deacon',
+      testEng: /\b(?:Elder|Deacon)\s+[A-Z][a-z]+\b/i,
+      sourcePhrase: 'Elder / Deacon (Чжанлао / Чжиши)',
+      category: 'honorific',
+      categoryLabel: 'Должностной титул секты',
+      adaptedRus: 'старейшина / дьякон + фамилия',
+      rationale:
+        'Сохраняет даосскую клановую субординацию: ученики обращаются к старейшинам строго на «вы», тогда как старейшины к внешним ученикам — на «ты».',
+    },
+    {
+      key: 'jin-unit',
+      testEng: /\b\d+\s+jin\b/i,
+      sourcePhrase: 'Jin (Цзинь / 斤 ≈ 500 г)',
+      category: 'daoist_term',
+      categoryLabel: 'Традиционная мера веса',
+      adaptedRus: 'цзинь (без перевода в фунты или килограммы)',
+      rationale:
+        'Замена «jin» на западные «фунты» или метрические «килограммы» разрушает атмосферу древнего мира культивации (правило WEIGHT_UNITS).',
+    },
+    {
+      key: 'tier-grade',
+      testEng: /\bTier\s+\d+\s+(?:Low|Mid|High)\s+Grade\b/i,
+      sourcePhrase: 'Tier X Low/Mid/High Grade',
+      category: 'system_formula',
+      categoryLabel: 'Двухуровневая классификация рангов',
+      adaptedRus: 'X-го яруса низшего/среднего/высшего ранга',
+      rationale:
+        'Разводит понятия Tier (ярус) и Grade (ранг), предотвращая тавтологию «1-го ранга низшего ранга» и канцелярит «низшего сорта».',
+    },
+    {
+      key: 'qi-refining-dantian',
+      testEng: /\b(?:Qi\s+Refining|dantian|meridians|Spirit\s+Root)\b/i,
+      sourcePhrase: 'Qi Refining / Dantian / Spirit Root',
+      category: 'daoist_term',
+      categoryLabel: 'Даосская внутренняя алхимия',
+      adaptedRus: 'Очищение Ци / даньтянь / духовный корень',
+      rationale:
+        'Используется устоявшийся в русскоязычном фэндоме сянься канон внутренней алхимии вместо буквальных калек («переработка пневмы»).',
+    },
+    {
+      key: 'cold-air-idiom',
+      testEng: /gasp|cold\s+air|chose\s+the\s+wrong\s+target|crystal\s+clear/i,
+      sourcePhrase: 'Образная идиоматика и боевые клише (Чэнъюй)',
+      category: 'idiom',
+      categoryLabel: 'Идиома / Чэнъюй',
+      adaptedRus: rusText.includes('как на ладони')
+        ? '«видно как на ладони»'
+        : rusText.includes('судорожно перевёл дыхание')
+          ? '«судорожно перевёл дыхание»'
+          : '«растворился тенью / словно призрак»',
+      rationale:
+        'Агент локализации CSI заменил буквальную английскую/китайскую конструкцию на естественный русский фразеологизм с сохранением динамики боевой сцены.',
+    },
+  ];
+
+  for (const item of csiPatterns) {
+    if (item.testEng.test(engText)) {
+      notes.push({
+        id: `csi-${item.key}`,
+        sourcePhrase: item.sourcePhrase,
+        category: item.category,
+        categoryLabel: item.categoryLabel,
+        adaptedRus: item.adaptedRus,
+        rationale: item.rationale,
+      });
+    }
+  }
+
+  if (notes.length === 0 && lowerEng.length > 0) {
+    const firstCanon = Object.entries(glossary.realms || {})[0];
+    if (firstCanon) {
+      notes.push({
+        id: 'csi-canon-realm',
+        sourcePhrase: firstCanon[0],
+        category: 'daoist_term',
+        categoryLabel: 'Канон ступени культивации',
+        adaptedRus: firstCanon[1],
+        rationale:
+          'Применено утверждённое соответствие из реестра имен собственных DelTA для сквозного единства терминологии.',
+      });
+    }
+  }
+
+  return notes;
+}
+
+/**
+ * Evaluates a translated chapter across the 6 narrative & cultural dimensions of the DITING framework.
+ */
+export function evaluateDitingQuality(
+  engText: string,
+  rusText: string,
+  glossary: CanonicalGlossary,
+  glossaryMeta?: Record<string, GlossaryTermMeta>,
+  enabledRuleIds?: LintRuleId[]
+): DitingQualityReport {
+  if (!rusText.trim()) {
+    return {
+      idiomAccuracy: 0,
+      referentialCohesion: 0,
+      characterVoiceFidelity: 0,
+      culturalAdaptation: 0,
+      literaryRhythm: 0,
+      terminologyPrecision: 0,
+      overallScore: 0,
+      mqmGrade: 'Требует правки (<85)',
+    };
+  }
+
+  const lint = runQaLinter(engText, rusText, glossary, {
+    enabledRuleIds,
+    glossaryMeta,
+  });
+
+  const hasCalque = lint.issues.some(
+    (i) => i.ruleId === 'MACHINE_CALQUES' || i.ruleId === 'ALCHEMY_CALQUES'
+  );
+  const hasGenderError = lint.issues.some((i) => i.ruleId === 'CHARACTER_GENDER_MISMATCH');
+  const hasDrift = lint.issues.some((i) => i.ruleId === 'PARAGRAPH_DRIFT');
+  const hasTautology = lint.issues.some((i) => i.ruleId === 'TAUTOLOGY_RADAR');
+  const hasTermViolation = lint.issues.some(
+    (i) =>
+      i.ruleId === 'GLOSSARY_CANON_VIOLATION' ||
+      i.ruleId === 'NUMBER_MISMATCH' ||
+      i.ruleId === 'TIER_VS_GRADE' ||
+      i.ruleId === 'ARTIFACT_RANKING'
+  );
+  const hasUnitOrSectError = lint.issues.some(
+    (i) => i.ruleId === 'WEIGHT_UNITS' || i.ruleId === 'SECT_SINGULAR'
+  );
+
+  const idiomAccuracy = hasCalque ? 76 : 98;
+  const referentialCohesion = hasDrift ? 78 : hasGenderError ? 80 : 99;
+  const characterVoiceFidelity = hasGenderError ? 72 : 97;
+  const culturalAdaptation = hasUnitOrSectError ? 79 : 98;
+  const literaryRhythm = hasTautology ? 82 : hasCalque ? 80 : 97;
+  const terminologyPrecision = hasTermViolation ? 74 : 100;
+
+  const overallScore = Math.round(
+    (idiomAccuracy +
+      referentialCohesion +
+      characterVoiceFidelity +
+      culturalAdaptation +
+      literaryRhythm +
+      terminologyPrecision) /
+      6
+  );
+
+  const mqmGrade: DitingQualityReport['mqmGrade'] =
+    overallScore >= 95
+      ? 'Эталон (DITING 95+)'
+      : overallScore >= 85
+        ? 'Высокий (85–94)'
+        : 'Требует правки (<85)';
+
+  return {
+    idiomAccuracy,
+    referentialCohesion,
+    characterVoiceFidelity,
+    culturalAdaptation,
+    literaryRhythm,
+    terminologyPrecision,
+    overallScore,
+    mqmGrade,
+  };
+}
+
+// ============================================================================
+// MODULE 4: Reactive Sliding Window Priority Queue Scheduler (Anti-HTTP 429)
+// ============================================================================
+
+export interface QueueTelemetrySnapshot {
+  queuedCount: number;
+  activeCount: number;
+  windowUsedSlots: number;
+  requestsInCurrentWindow: number;
+  intervalCap: number;
+  intervalMs: number;
+  isSaturated: boolean;
+  completedCount: number;
+}
+
+export type SlidingWindowQueueTelemetry = QueueTelemetrySnapshot;
+
+interface QueuedTaskItem<T> {
+  id: string;
+  label: string;
+  priority: number; // 3 = Self-Repair / QA, 2 = DelTA Memory / Scout, 1 = Translation
+  fn: () => Promise<T>;
+  resolve: (val: T) => void;
+  reject: (err: Error) => void;
+  signal?: AbortSignal;
+}
+
+/**
+ * Pure TypeScript Sliding Window Priority Queue modeled on p-queue with
+ * strict sliding-window timestamp tracking (`carryoverIntervalCount: true`)
+ * to prevent Fixed-Window boundary bursts and HTTP 429 errors.
+ */
+export class SlidingWindowTaskQueue {
+  private readonly concurrency: number;
+  private readonly intervalCap: number;
+  private readonly intervalMs: number;
+  private readonly queue: Array<QueuedTaskItem<unknown>> = [];
+  private readonly windowStartTimestamps: number[] = [];
+  private activeCount = 0;
+  private completedCount = 0;
+  private onUpdate?: (snapshot: QueueTelemetrySnapshot) => void;
+
+  constructor(options?: {
+    concurrency?: number;
+    intervalCap?: number;
+    maxRequestsPerWindow?: number;
+    intervalMs?: number;
+    windowDurationMs?: number;
+    onUpdate?: (snapshot: QueueTelemetrySnapshot) => void;
+  }) {
+    this.concurrency = options?.concurrency ?? 2;
+    this.intervalCap = options?.intervalCap ?? options?.maxRequestsPerWindow ?? 6;
+    this.intervalMs = options?.intervalMs ?? options?.windowDurationMs ?? 10000;
+    this.onUpdate = options?.onUpdate;
+  }
+
+  private pruneSlidingWindow(now: number): void {
+    const cutoff = now - this.intervalMs;
+    while (
+      this.windowStartTimestamps.length > 0 &&
+      this.windowStartTimestamps[0] <= cutoff
+    ) {
+      this.windowStartTimestamps.shift();
+    }
+  }
+
+  public getSnapshot(): QueueTelemetrySnapshot {
+    this.pruneSlidingWindow(Date.now());
+    const used = this.windowStartTimestamps.length;
+    const clampedUsed = Math.min(this.intervalCap, used);
+    return {
+      queuedCount: this.queue.length,
+      activeCount: this.activeCount,
+      windowUsedSlots: clampedUsed,
+      requestsInCurrentWindow: clampedUsed,
+      intervalCap: this.intervalCap,
+      intervalMs: this.intervalMs,
+      isSaturated:
+        this.activeCount >= this.concurrency || used >= this.intervalCap,
+      completedCount: this.completedCount,
+    };
+  }
+
+  public getTelemetry(): QueueTelemetrySnapshot {
+    return this.getSnapshot();
+  }
+
+  private emitUpdate(): void {
+    if (this.onUpdate) {
+      this.onUpdate(this.getSnapshot());
+    }
+  }
+
+  public add<T>(
+    fn: () => Promise<T>,
+    options?: { priority?: number; label?: string; signal?: AbortSignal }
+  ): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      if (options?.signal?.aborted) {
+        reject(new Error('Task aborted before enqueue'));
+        return;
+      }
+
+      const item: QueuedTaskItem<unknown> = {
+        id: `q-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        label: options?.label || 'pipeline-task',
+        priority: options?.priority ?? 1,
+        fn: fn as () => Promise<unknown>,
+        resolve: resolve as (val: unknown) => void,
+        reject,
+        signal: options?.signal,
+      };
+
+      // Insert in descending priority order (FIFO within same priority)
+      const insertIdx = this.queue.findIndex((q) => q.priority < item.priority);
+      if (insertIdx === -1) {
+        this.queue.push(item);
+      } else {
+        this.queue.splice(insertIdx, 0, item);
+      }
+
+      this.emitUpdate();
+      this.processNext();
+    });
+  }
+
+  private processNext(): void {
+    if (this.queue.length === 0) return;
+    if (this.activeCount >= this.concurrency) return;
+
+    const now = Date.now();
+    this.pruneSlidingWindow(now);
+
+    if (this.windowStartTimestamps.length >= this.intervalCap) {
+      const oldest = this.windowStartTimestamps[0];
+      const waitMs = Math.max(25, oldest + this.intervalMs - now + 10);
+      setTimeout(() => this.processNext(), waitMs);
+      return;
+    }
+
+    const nextItem = this.queue.shift();
+    if (!nextItem) return;
+
+    if (nextItem.signal?.aborted) {
+      nextItem.reject(new Error('Task aborted'));
+      this.emitUpdate();
+      this.processNext();
+      return;
+    }
+
+    this.activeCount++;
+    this.windowStartTimestamps.push(Date.now());
+    this.emitUpdate();
+
+    nextItem
+      .fn()
+      .then((res) => {
+        this.completedCount++;
+        nextItem.resolve(res);
+      })
+      .catch((err) => {
+        nextItem.reject(err instanceof Error ? err : new Error(String(err)));
+      })
+      .finally(() => {
+        this.activeCount--;
+        this.emitUpdate();
+        this.processNext();
+      });
+  }
+}
+
+export const SlidingWindowPriorityQueue = SlidingWindowTaskQueue;
+
+// ============================================================================
+// MODULE 5: Pure TypeScript EPUB 3 Book Compiler (Zero External Dependencies)
+// ============================================================================
+
+export interface Epub3ChapterInput {
+  number: number;
+  titleRus: string;
+  titleEng?: string;
+  contentRus: string;
+  summary?: string;
+  summaryRus?: string;
+  csiNotes?: CsiCulturalNote[];
+}
+
+export interface Epub3BuildOptions {
+  bookId?: string;
+  titleRus?: string;
+  titleEng?: string;
+  novelTitle?: string;
+  author: string;
+  translator?: string;
+  genreTitle?: string;
+  genreLabel?: string;
+  heroLedger?: HeroStateLedger;
+  synopsisRus?: string;
+  includeCsiFootnotes?: boolean;
+  chapters: Epub3ChapterInput[];
+}
+
+export interface Epub3ArchivePackage {
+  filename: string;
+  bytes: Uint8Array;
+  byteSize: number;
+  chapterCount: number;
+  totalWords: number;
+  tocPreview: Array<{ number: number; titleRus: string; words: number; csiCount: number }>;
+}
+
+function escapeXml(unsafe: string): string {
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderChapterBodyToXhtml(
+  rusText: string,
+  csiNotes: CsiCulturalNote[] = [],
+  includeCsiFootnotes = true
+): string {
+  const lines = rusText.replace(/\r\n/g, '\n').split('\n');
+  const htmlBlocks: string[] = [];
+  let inSystemBox = false;
+  let systemLines: string[] = [];
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) continue;
+
+    if (trimmed === '---') {
+      if (inSystemBox) {
+        if (systemLines.length > 0) {
+          htmlBlocks.push(
+            `<div class="system-box">\n${systemLines
+              .map((sl) => `  <p class="system-line">${escapeXml(sl)}</p>`)
+              .join('\n')}\n</div>`
+          );
+          systemLines = [];
+        }
+        inSystemBox = false;
+      } else {
+        inSystemBox = true;
+      }
+      continue;
+    }
+
+    if (inSystemBox) {
+      systemLines.push(trimmed);
+    } else if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      htmlBlocks.push(
+        `<div class="system-box"><p class="system-line">${escapeXml(trimmed)}</p></div>`
+      );
+    } else {
+      htmlBlocks.push(`<p>${escapeXml(trimmed)}</p>`);
+    }
+  }
+
+  if (systemLines.length > 0) {
+    htmlBlocks.push(
+      `<div class="system-box">\n${systemLines
+        .map((sl) => `  <p class="system-line">${escapeXml(sl)}</p>`)
+        .join('\n')}\n</div>`
+    );
+  }
+
+  if (includeCsiFootnotes && csiNotes.length > 0) {
+    const noteItems = csiNotes
+      .map(
+        (n) =>
+          `<div class="csi-item"><p><strong>${escapeXml(n.sourcePhrase)}</strong> → <em>${escapeXml(n.adaptedRus)}</em> (${escapeXml(n.categoryLabel)})</p><p class="csi-rationale">${escapeXml(n.rationale)}</p></div>`
+      )
+      .join('\n');
+    htmlBlocks.push(
+      `<aside class="csi-notes"><h3>Примечания переводчика и локализатора (CSI)</h3>\n${noteItems}\n</aside>`
+    );
+  }
+
+  return htmlBlocks.join('\n');
+}
+
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) {
+      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    }
+    table[i] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(data: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (let i = 0; i < data.length; i++) {
+    crc = CRC32_TABLE[(crc ^ data[i]) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+/**
+ * Packs an array of `{ path, content }` into an uncompressed ZIP archive (`Uint8Array`)
+ * compliant with EPUB 3 Open Container Format (OCF), where `mimetype` is the first entry at offset 0.
+ */
+function createStoredZipArchive(
+  files: Array<{ path: string; data: Uint8Array }>
+): Uint8Array {
+  const encoder = new TextEncoder();
+  const localParts: Uint8Array[] = [];
+  const centralParts: Uint8Array[] = [];
+  let offset = 0;
+
+  for (const file of files) {
+    const nameBytes = encoder.encode(file.path);
+    const dataBytes = file.data;
+    const crc = crc32(dataBytes);
+    const size = dataBytes.length;
+
+    // Local file header (30 bytes + filename)
+    const localHeader = new Uint8Array(30 + nameBytes.length);
+    const lv = new DataView(localHeader.buffer);
+    lv.setUint32(0, 0x04034b50, true); // signature
+    lv.setUint16(4, 20, true); // version needed (2.0)
+    lv.setUint16(6, 0x0800, true); // UTF-8 filename flag
+    lv.setUint16(8, 0, true); // compression method: 0 (STORE)
+    lv.setUint16(10, 0, true); // mod time
+    lv.setUint16(12, 0x5421, true); // mod date
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, size, true);
+    lv.setUint32(22, size, true);
+    lv.setUint16(26, nameBytes.length, true);
+    lv.setUint16(28, 0, true); // extra length 0 (critical for EPUB `mimetype`)
+    localHeader.set(nameBytes, 30);
+
+    localParts.push(localHeader, dataBytes);
+
+    // Central directory header (46 bytes + filename)
+    const centralHeader = new Uint8Array(46 + nameBytes.length);
+    const cv = new DataView(centralHeader.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0x0800, true);
+    cv.setUint16(10, 0, true);
+    cv.setUint16(12, 0, true);
+    cv.setUint16(14, 0x5421, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, size, true);
+    cv.setUint32(24, size, true);
+    cv.setUint16(28, nameBytes.length, true);
+    cv.setUint16(30, 0, true);
+    cv.setUint16(32, 0, true);
+    cv.setUint16(34, 0, true);
+    cv.setUint16(36, 0, true);
+    cv.setUint32(38, 0, true);
+    cv.setUint32(42, offset, true);
+    centralHeader.set(nameBytes, 46);
+
+    centralParts.push(centralHeader);
+    offset += localHeader.length + dataBytes.length;
+  }
+
+  const centralSize = centralParts.reduce((acc, p) => acc + p.length, 0);
+  const eocd = new Uint8Array(22);
+  const ev = new DataView(eocd.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(4, 0, true);
+  ev.setUint16(6, 0, true);
+  ev.setUint16(8, files.length, true);
+  ev.setUint16(10, files.length, true);
+  ev.setUint32(12, centralSize, true);
+  ev.setUint32(16, offset, true);
+  ev.setUint16(20, 0, true);
+
+  const totalSize = offset + centralSize + eocd.length;
+  const out = new Uint8Array(totalSize);
+  let cursor = 0;
+  for (const part of localParts) {
+    out.set(part, cursor);
+    cursor += part.length;
+  }
+  for (const part of centralParts) {
+    out.set(part, cursor);
+    cursor += part.length;
+  }
+  out.set(eocd, cursor);
+  return out;
+}
+
+/**
+ * Compiles translated chapters into a complete, standards-compliant EPUB 3 archive (`.epub`).
+ */
+export function buildEpub3Archive(options: Epub3BuildOptions): Epub3ArchivePackage {
+  const encoder = new TextEncoder();
+  const sorted = [...options.chapters].sort((a, b) => a.number - b.number);
+  const includeCsi = options.includeCsiFootnotes ?? true;
+  const titleRus = options.titleRus || options.novelTitle || 'Веб-новелла';
+  const titleEng = options.titleEng || options.novelTitle || 'Web Novel';
+  const bookId = options.bookId || `kanon-epub-${Date.now()}`;
+  const genreTitle = options.genreTitle || options.genreLabel || 'Сянься / ЛитРПГ';
+
+  const containerXml = `<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`;
+
+  const stylesCss = `body {
+  font-family: Georgia, "Times New Roman", serif;
+  line-height: 1.7;
+  margin: 5%;
+  color: #111827;
+}
+h1, h2, h3 {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.3;
+  margin-top: 1.5em;
+  margin-bottom: 0.6em;
+}
+p {
+  margin: 0 0 0.9em 0;
+  text-indent: 1.2em;
+  text-align: justify;
+}
+.system-box {
+  margin: 1.25em 0;
+  padding: 0.9em 1.2em;
+  border: 1px solid #d97706;
+  background-color: #fffbeb;
+  border-radius: 6px;
+  font-family: "Courier New", monospace;
+}
+.system-line {
+  text-indent: 0;
+  margin: 0.25em 0;
+  font-size: 0.92em;
+  color: #92400e;
+}
+.csi-notes {
+  margin-top: 2em;
+  padding-top: 1em;
+  border-top: 1px solid #e5e7eb;
+  font-size: 0.88em;
+}
+.csi-item {
+  margin-bottom: 0.75em;
+}
+.csi-rationale {
+  text-indent: 0;
+  color: #4b5563;
+}`;
+
+  const heroPassportHtml = options.heroLedger
+    ? `<div class="system-box">
+      <p class="system-line"><strong>[Паспорт состояния героя — Гл. ${options.heroLedger.lastUpdatedChapter}]</strong></p>
+      <p class="system-line">Протагонист: ${escapeXml(options.heroLedger.protagonistName)}</p>
+      <p class="system-line">Ступень культивации: ${escapeXml(options.heroLedger.cultivationRealm)}</p>
+      <p class="system-line">Ресурсы: ${escapeXml(options.heroLedger.resources.join(' · '))}</p>
+      <p class="system-line">Локация: ${escapeXml(options.heroLedger.activeLocation)}</p>
+    </div>`
+    : '';
+
+  const titlePageXhtml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ru" lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <title>${escapeXml(titleRus)}</title>
+  <link rel="stylesheet" type="text/css" href="styles.css"/>
+</head>
+<body>
+  <section>
+    <h1>${escapeXml(titleRus)}</h1>
+    <p style="text-indent:0;"><strong>Оригинальное название:</strong> ${escapeXml(titleEng)}</p>
+    <p style="text-indent:0;"><strong>Автор:</strong> ${escapeXml(options.author)}</p>
+    ${options.translator ? `<p style="text-indent:0;"><strong>Перевод:</strong> ${escapeXml(options.translator)}</p>` : ''}
+    <p style="text-indent:0;"><strong>Жанровый канон:</strong> ${escapeXml(genreTitle)}</p>
+    ${heroPassportHtml}
+    ${
+      options.synopsisRus
+        ? `<div class="system-box"><p class="system-line">${escapeXml(options.synopsisRus)}</p></div>`
+        : ''
+    }
+  </section>
+</body>
+</html>`;
+
+  const chapterFiles: Array<{
+    id: string;
+    href: string;
+    number: number;
+    titleRus: string;
+    words: number;
+    csiCount: number;
+    xhtml: string;
+  }> = [];
+
+  let totalWords = 0;
+
+  sorted.forEach((ch, idx) => {
+    const fileId = `chap-${idx + 1}`;
+    const href = `chapter-${idx + 1}.xhtml`;
+    const heading = ch.titleRus.trim() || `Глава ${ch.number}`;
+    const words = ch.contentRus.trim() ? ch.contentRus.trim().split(/\s+/).length : 0;
+    totalWords += words;
+    const csiList = ch.csiNotes || [];
+
+    const bodyHtml = renderChapterBodyToXhtml(ch.contentRus, csiList, includeCsi);
+    const xhtml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ru" lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <title>${escapeXml(heading)}</title>
+  <link rel="stylesheet" type="text/css" href="styles.css"/>
+</head>
+<body>
+  <section>
+    <h2>${escapeXml(heading)}</h2>
+    ${bodyHtml}
+  </section>
+</body>
+</html>`;
+
+    chapterFiles.push({
+      id: fileId,
+      href,
+      number: ch.number,
+      titleRus: heading,
+      words,
+      csiCount: csiList.length,
+      xhtml,
+    });
+  });
+
+  const navItems = [
+    `<li><a href="titlepage.xhtml">Титульный лист</a></li>`,
+    ...chapterFiles.map(
+      (cf) => `<li><a href="${cf.href}">${escapeXml(cf.titleRus)}</a></li>`
+    ),
+  ].join('\n        ');
+
+  const navXhtml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="ru" lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Оглавление — ${escapeXml(titleRus)}</title>
+  <link rel="stylesheet" type="text/css" href="styles.css"/>
+</head>
+<body>
+  <nav epub:type="toc" id="toc">
+    <h1>Оглавление</h1>
+    <ol>
+        ${navItems}
+    </ol>
+  </nav>
+</body>
+</html>`;
+
+  const manifestItems = [
+    `<item id="css" href="styles.css" media-type="text/css"/>`,
+    `<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`,
+    `<item id="titlepage" href="titlepage.xhtml" media-type="application/xhtml+xml"/>`,
+    ...chapterFiles.map(
+      (cf) =>
+        `<item id="${cf.id}" href="${cf.href}" media-type="application/xhtml+xml"/>`
+    ),
+  ].join('\n    ');
+
+  const spineItems = [
+    `<itemref idref="titlepage"/>`,
+    ...chapterFiles.map((cf) => `<itemref idref="${cf.id}"/>`),
+  ].join('\n    ');
+
+  const modifiedIso = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+  const contentOpf = `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid" xml:lang="ru">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="bookid">urn:uuid:${escapeXml(bookId)}</dc:identifier>
+    <dc:title>${escapeXml(titleRus)}</dc:title>
+    <dc:creator>${escapeXml(options.author)}</dc:creator>
+    <dc:language>ru</dc:language>
+    <meta property="dcterms:modified">${modifiedIso}</meta>
+  </metadata>
+  <manifest>
+    ${manifestItems}
+  </manifest>
+  <spine>
+    ${spineItems}
+  </spine>
+</package>`;
+
+  const archiveEntries: Array<{ path: string; data: Uint8Array }> = [
+    { path: 'mimetype', data: encoder.encode('application/epub+zip') },
+    { path: 'META-INF/container.xml', data: encoder.encode(containerXml) },
+    { path: 'OEBPS/styles.css', data: encoder.encode(stylesCss) },
+    { path: 'OEBPS/nav.xhtml', data: encoder.encode(navXhtml) },
+    { path: 'OEBPS/titlepage.xhtml', data: encoder.encode(titlePageXhtml) },
+    ...chapterFiles.map((cf) => ({
+      path: `OEBPS/${cf.href}`,
+      data: encoder.encode(cf.xhtml),
+    })),
+    { path: 'OEBPS/content.opf', data: encoder.encode(contentOpf) },
+  ];
+
+  const bytes = createStoredZipArchive(archiveEntries);
+  const firstNum = sorted[0]?.number ?? 1;
+  const lastNum = sorted[sorted.length - 1]?.number ?? 1;
+  const slug = titleEng
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_|_$/g, '');
+
+  return {
+    filename: `${slug || 'Novel'}_Ch_${firstNum}_${lastNum}_EPUB3.epub`,
+    bytes,
+    byteSize: bytes.byteLength,
+    chapterCount: sorted.length,
+    totalWords,
+    tocPreview: chapterFiles.map((cf) => ({
+      number: cf.number,
+      titleRus: cf.titleRus,
+      words: cf.words,
+      csiCount: cf.csiCount,
+    })),
+  };
+}
+
+

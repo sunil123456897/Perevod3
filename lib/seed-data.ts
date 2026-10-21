@@ -7,6 +7,8 @@ import {
   type LintRuleId,
   type GlossaryTermMeta,
   type HeroStateLedger,
+  type CsiCulturalNote,
+  type DitingQualityReport,
 } from './qa-linter';
 
 export interface ChapterVersionSnapshot {
@@ -28,7 +30,10 @@ export interface ChapterRecord {
   titleRus: string;
   engText: string;
   rusText: string;
-  summary?: string; // Rolling Chapter Memory snapshot for cross-chapter context
+  summary?: string; // Rolling Chapter Memory snapshot (RUS — A_t^{(i)})
+  summaryEng?: string; // Bilingual Summary (ENG — A_s^{(i)})
+  csiNotes?: CsiCulturalNote[]; // CHORUS C3 cultural footnotes & rationales
+  ditingReport?: DitingQualityReport; // DITING 6-dimension narrative & cultural evaluation
   versionHistory?: ChapterVersionSnapshot[];
   scouted: boolean;
   translated: boolean;

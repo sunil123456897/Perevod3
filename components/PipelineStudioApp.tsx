@@ -36,6 +36,11 @@ import {
   getDefaultRulesForGenre,
   parseBulkChaptersInput,
   generateChapterMemorySummary,
+  generateBilingualChapterSummary,
+  buildDelTAContextPacket,
+  extractCsiCulturalNotes,
+  evaluateDitingQuality,
+  SlidingWindowTaskQueue,
   previewAndApplyCanonRipple,
   computeChapterPipelineProgress,
   type GlossaryCategory,
@@ -44,6 +49,9 @@ import {
   type GenrePreset,
   type ProseTone,
   type LintRuleId,
+  type CsiCulturalNote,
+  type DitingQualityReport,
+  type SlidingWindowQueueTelemetry,
 } from '@/lib/qa-linter';
 import {
   INITIAL_NOVELS,
@@ -135,6 +143,15 @@ export default function PipelineStudioApp() {
 
   const abortRef = useRef<boolean>(false);
   const backupInputRef = useRef<HTMLInputElement | null>(null);
+  const schedulerRef = useRef<SlidingWindowTaskQueue>(
+    new SlidingWindowTaskQueue({
+      concurrency: 3,
+      maxRequestsPerWindow: 15,
+      windowDurationMs: 60000,
+    })
+  );
+  const [queueTelemetry, setQueueTelemetry] =
+    useState<SlidingWindowQueueTelemetry | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -401,22 +418,28 @@ export default function PipelineStudioApp() {
       setRunningChapterId(ch.id);
       const label = `Глава ${ch.subPart || ch.number}`;
 
-      // Phase 1: Scouting + Auto-Canon >= 92%
+      // Phase 1: Scouting (TransAgents Addition-by-Subtraction Agent A + Agent S) + Auto-Canon >= 92%
       if (mode === 'full_5_phase' || mode === 'scout_only') {
         setActivePhaseStep(1);
         try {
-          const res = await fetch('/api/pipeline', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'scout',
-              engText: ch.engText,
-              chapterNumber: ch.number,
-              glossary: workingGlossary,
-              scoutedTerms: workingScouted,
-              genrePreset: activeNovel.genrePreset,
-            }),
-          });
+          setQueueTelemetry(schedulerRef.current.getTelemetry());
+          const res = await schedulerRef.current.add(
+            () =>
+              fetch('/api/pipeline', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  action: 'scout',
+                  engText: ch.engText,
+                  chapterNumber: ch.number,
+                  glossary: workingGlossary,
+                  scoutedTerms: workingScouted,
+                  genrePreset: activeNovel.genrePreset,
+                }),
+              }),
+            { priority: 2, label: `scout-ch-${ch.number}` }
+          );
+          setQueueTelemetry(schedulerRef.current.getTelemetry());
           const data = await res.json();
           const newTerms: ScoutedTerm[] = (data.discoveredTerms || []).map(
             (
@@ -504,8 +527,8 @@ export default function PipelineStudioApp() {
           }));
 
           appendLog(
-            'СКАУТ',
-            `${label}: найдено терминов: ${newTerms.length}${autoPromotedCount > 0 ? ` (авто-канон ≥92%: +${autoPromotedCount})` : ''}.`,
+            'СКАУТ A−S',
+            `${label}: Сложение через вычитание (Агент A: ${data.addedRecallCount ?? newTerms.length}, Агент S отсеял шума: ${data.subtractedNoiseCount ?? 0}, чисто: ${newTerms.length}${autoPromotedCount > 0 ? `, авто-канон: +${autoPromotedCount}` : ''}).`,
             'success'
           );
         } catch {
@@ -543,36 +566,72 @@ export default function PipelineStudioApp() {
         });
       }
 
-      // Phase 2 & 3: Chapter-Sliced Glossary + Rolling Memory + Two-Pass Critic
+      let workingSummaryEng = ch.summaryEng || '';
+      let workingCsiNotes: CsiCulturalNote[] | undefined = ch.csiNotes;
+      let workingDitingReport: DitingQualityReport | undefined = ch.ditingReport;
+
+      // Phase 2 & 3: Chapter-Sliced Glossary + DelTA 4-Level Memory + 3-Role LCD-MAS (Translator + Critic + CHORUS CSI)
       if (mode === 'full_5_phase' && !ch.translated) {
         setActivePhaseStep(2);
-        const res = await fetch('/api/pipeline', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'translate_and_edit',
-            engText: ch.engText,
-            titleEng: ch.titleEng,
-            chapterNumber: ch.number,
-            glossary: workingGlossary,
-            glossaryMeta: workingGlossaryMeta,
-            scoutedTerms: workingScouted,
-            styleGuideMd: activeNovel.styleGuideMd,
-            genrePreset: activeNovel.genrePreset,
-            proseTone: activeNovel.proseTone,
-            previousChapterSummary: rollingMemory,
-            enabledRuleIds: activeNovel.enabledRuleIds,
-            twoPassCritic: twoPassCriticEnabled,
-            heroLedger: workingLedger,
-          }),
-        });
+        const curIdx = sortedAll.findIndex((c) => c.id === ch.id);
+        const prevCh = curIdx > 0 ? sortedAll[curIdx - 1] : null;
+        const earlierChs = curIdx > 0 ? sortedAll.slice(0, curIdx) : [];
+        const deltaPacket = buildDelTAContextPacket(
+          ch.engText,
+          prevCh,
+          earlierChs,
+          workingGlossary,
+          3
+        );
+        setQueueTelemetry(schedulerRef.current.getTelemetry());
+        const res = await schedulerRef.current.add(
+          () =>
+            fetch('/api/pipeline', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'translate_and_edit',
+                engText: ch.engText,
+                titleEng: ch.titleEng,
+                chapterNumber: ch.number,
+                glossary: workingGlossary,
+                glossaryMeta: workingGlossaryMeta,
+                scoutedTerms: workingScouted,
+                styleGuideMd: activeNovel.styleGuideMd,
+                genrePreset: activeNovel.genrePreset,
+                proseTone: activeNovel.proseTone,
+                previousChapterSummary:
+                  rollingMemory || deltaPacket.bilingualSummary.rus,
+                previousChapterSummaryEng: deltaPacket.bilingualSummary.eng,
+                deltaShortTermWindow: deltaPacket.shortTermWindow,
+                deltaLongTermMemories: deltaPacket.longTermMemories,
+                enabledRuleIds: activeNovel.enabledRuleIds,
+                twoPassCritic: twoPassCriticEnabled,
+                heroLedger: workingLedger,
+              }),
+            }),
+          { priority: 1, label: `lcd-mas-ch-${ch.number}` }
+        );
+        setQueueTelemetry(schedulerRef.current.getTelemetry());
         const data = await res.json();
         if (data.rusText) {
           workingRus = data.rusText;
           workingTitleRus = data.titleRus || ch.titleRus;
-          workingSummary =
-            data.summary ||
-            generateChapterMemorySummary(ch.number, workingTitleRus, workingRus);
+          const bilingual = generateBilingualChapterSummary(
+            ch.number,
+            ch.titleEng,
+            ch.engText,
+            workingTitleRus,
+            workingRus
+          );
+          workingSummary = data.summary || bilingual.rus;
+          workingSummaryEng = data.summaryEng || bilingual.eng;
+          if (Array.isArray(data.csiNotes)) {
+            workingCsiNotes = data.csiNotes;
+          }
+          if (data.ditingReport) {
+            workingDitingReport = data.ditingReport;
+          }
           rollingMemory = workingSummary;
           const draftLint = runQaLinter(ch.engText, workingRus, workingGlossary, {
             enabledRuleIds: activeNovel.enabledRuleIds,
@@ -582,7 +641,7 @@ export default function PipelineStudioApp() {
             id: `ver-p3-${ch.id}-${Date.now()}`,
             timestamp: stepTimeStr,
             stageLabel: twoPassCriticEnabled
-              ? '2-проходный перевод и критик (Фаза 3)'
+              ? '3-шаговый конвейер LCD-MAS + CSI (Фаза 2–3)'
               : 'Черновой перевод (Фаза 2)',
             titleRus: workingTitleRus,
             rusText: workingRus,
@@ -591,8 +650,8 @@ export default function PipelineStudioApp() {
             qaErrorCount: draftLint.errorCount,
           });
           appendLog(
-            'ПЕРЕВОД',
-            `${label}: 2-проходный перевод завершён (кэш глоссария: ${data.slicedGlossaryCount ?? 0} терм., память обновлена).`,
+            'LCD-MAS',
+            `${label}: 3-агентный перевод завершён (DelTA ок: ${deltaPacket.shortTermWindow.length} абз., CSI сносок: ${workingCsiNotes?.length ?? 0}, DITING: ${workingDitingReport?.overallScore ?? 95}/100).`,
             'success'
           );
         }
@@ -637,11 +696,26 @@ export default function PipelineStudioApp() {
         enabledRuleIds: activeNovel.enabledRuleIds,
         glossaryMeta: workingGlossaryMeta,
       });
-      if (!workingSummary && workingRus.trim()) {
-        workingSummary = generateChapterMemorySummary(
+      if ((!workingSummary || !workingSummaryEng) && workingRus.trim()) {
+        const bilingual = generateBilingualChapterSummary(
           ch.number,
+          ch.titleEng,
+          ch.engText,
           workingTitleRus,
           workingRus
+        );
+        workingSummary = workingSummary || bilingual.rus;
+        workingSummaryEng = workingSummaryEng || bilingual.eng;
+      }
+      if (!workingCsiNotes && workingRus.trim()) {
+        workingCsiNotes = extractCsiCulturalNotes(ch.engText, workingRus, workingGlossary);
+      }
+      if (workingRus.trim()) {
+        workingDitingReport = evaluateDitingQuality(
+          ch.engText,
+          workingRus,
+          workingGlossary,
+          workingGlossaryMeta
         );
       }
       rollingMemory = workingSummary || rollingMemory;
@@ -666,7 +740,7 @@ export default function PipelineStudioApp() {
         workingHistory.push({
           id: `ver-p5-${ch.id}-${Date.now()}`,
           timestamp: nowStr,
-          stageLabel: 'Авто-ремонт QA и верификация (Фаза 4–5)',
+          stageLabel: 'Авто-ремонт QA и верификация DITING (Фаза 4–5)',
           titleRus: workingTitleRus,
           rusText: workingRus,
           wordCountRus: wordsRus,
@@ -675,25 +749,32 @@ export default function PipelineStudioApp() {
         });
       }
 
+      const updatedSnapshot: ChapterRecord = {
+        ...ch,
+        titleRus: workingTitleRus,
+        rusText: workingRus,
+        summary: workingSummary,
+        summaryEng: workingSummaryEng,
+        csiNotes: workingCsiNotes,
+        ditingReport: workingDitingReport,
+        versionHistory: workingHistory.slice(-12),
+        scouted: true,
+        translated: Boolean(workingRus.trim()),
+        edited: Boolean(workingRus.trim()),
+        verified: finalLint.passed && Boolean(workingRus.trim()),
+        wordCountRus: wordsRus,
+        lastUpdated: nowStr,
+      };
+      const idxInSorted = sortedAll.findIndex((item) => item.id === ch.id);
+      if (idxInSorted >= 0) {
+        sortedAll[idxInSorted] = updatedSnapshot;
+      }
+
       updateActiveNovel((novel) => ({
         ...novel,
         heroLedger: workingLedger,
         chapters: novel.chapters.map((item) =>
-          item.id === ch.id
-            ? {
-                ...item,
-                titleRus: workingTitleRus,
-                rusText: workingRus,
-                summary: workingSummary,
-                versionHistory: workingHistory.slice(-12),
-                scouted: true,
-                translated: Boolean(workingRus.trim()),
-                edited: Boolean(workingRus.trim()),
-                verified: finalLint.passed && Boolean(workingRus.trim()),
-                wordCountRus: wordsRus,
-                lastUpdated: nowStr,
-              }
-            : item
+          item.id === ch.id ? updatedSnapshot : item
         ),
       }));
     }
@@ -1635,7 +1716,7 @@ export default function PipelineStudioApp() {
                       onChange={(e) => setAutoCanonEnabled(e.target.checked)}
                       className="h-3.5 w-3.5 rounded border-white/[0.15] bg-[#090A0F] text-[#D99B26] focus:ring-0"
                     />
-                    Авто-канон
+                    Авто-канон (A−S)
                   </label>
                   <label className="inline-flex items-center gap-1.5 hover:text-[#94A3B8] cursor-pointer select-none">
                     <input
@@ -1644,7 +1725,7 @@ export default function PipelineStudioApp() {
                       onChange={(e) => setTwoPassCriticEnabled(e.target.checked)}
                       className="h-3.5 w-3.5 rounded border-white/[0.15] bg-[#090A0F] text-[#D99B26] focus:ring-0"
                     />
-                    Критик 2x
+                    LCD-MAS (3 агента)
                   </label>
                   <label className="inline-flex items-center gap-1.5 hover:text-[#94A3B8] cursor-pointer select-none">
                     <input
@@ -1653,7 +1734,7 @@ export default function PipelineStudioApp() {
                       onChange={(e) => setParallelBatchEnabled(e.target.checked)}
                       className="h-3.5 w-3.5 rounded border-white/[0.15] bg-[#090A0F] text-[#D99B26] focus:ring-0"
                     />
-                    Кэш
+                    Очередь SW ({queueTelemetry?.requestsInCurrentWindow ?? 0}/15 RPM)
                   </label>
                 </div>
               </div>
@@ -2083,6 +2164,8 @@ export default function PipelineStudioApp() {
           <RulateExportView
             novelName={activeNovel.name}
             chapters={activeNovel.chapters}
+            heroLedger={activeNovel.heroLedger}
+            genrePreset={activeNovel.genrePreset}
             onMergeSplitChapters={handleMergeSplitChapters}
           />
         )}

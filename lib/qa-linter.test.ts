@@ -17,6 +17,12 @@ import {
   updateHeroStateLedgerFromChapter,
   batchLookaheadScoutChapters,
   computeChapterPipelineProgress,
+  runAdditionBySubtractionScout,
+  buildDelTAContextPacket,
+  extractCsiCulturalNotes,
+  evaluateDitingQuality,
+  SlidingWindowPriorityQueue,
+  buildEpub3Archive,
   type CanonicalGlossary,
   type GlossaryTermMeta,
 } from './qa-linter.ts';
@@ -349,4 +355,119 @@ test('computeChapterPipelineProgress calculates linear progress across all 5 pip
   assert.equal(running.state, 'running');
 });
 
+test('Module 1: runAdditionBySubtractionScout subtracts noise while keeping canonical domain terms', () => {
+  const eng =
+    'Suddenly, Inside the Inner Sect, Elder Zhao gave a Foundation Establishment Pill to the Young Master.';
+  const report = runAdditionBySubtractionScout(eng, 4, sampleGlossary, []);
+  assert.ok(report.addedRecallCount >= report.finalCount);
+  assert.ok(report.subtractedNoiseCount >= 1);
+  // Ensure common sentence-initial adverbs like "Suddenly" or "Inside" are subtracted
+  assert.equal(
+    report.finalTerms.some((t) => t.eng.toLowerCase() === 'suddenly'),
+    false
+  );
+  assert.ok(
+    report.finalTerms.some((t) => t.eng === 'Foundation Establishment Pill')
+  );
+});
 
+test('Module 2: buildDelTAContextPacket builds 4-level memory with last 3 ENG-RUS paragraphs and bilingual summary', () => {
+  const prevChapter = {
+    number: 1,
+    titleEng: 'Chapter 1: Awakening',
+    titleRus: 'Глава 1. Пробуждение',
+    engText: 'Para 1 Lin Xuan.\n\nPara 2 Spirit Stone.\n\nPara 3 Qi Refining.\n\nPara 4 Breakthrough.',
+    rusText: 'Абзац 1 Линь Сюань.\n\nАбзац 2 духовный камень.\n\nАбзац 3 Очищение Ци.\n\nАбзац 4 Прорыв.',
+  };
+  const packet = buildDelTAContextPacket(
+    'Lin Xuan used a Spirit Stone in Qi Refining.',
+    prevChapter,
+    [prevChapter],
+    sampleGlossary,
+    3
+  );
+  assert.equal(packet.shortTermWindow.length, 3);
+  assert.equal(packet.shortTermWindow[0].index, 1);
+  assert.ok(packet.bilingualSummary.eng.includes('Ch.1'));
+  assert.ok(packet.bilingualSummary.rus.includes('Глава 1'));
+  assert.ok(packet.properNounCount >= 2);
+});
+
+test('Module 3: extractCsiCulturalNotes and evaluateDitingQuality score 6 dimensions and detect CHORUS C3 idioms', () => {
+  const eng =
+    'Senior Brother Chen held a 50 jin spear as his dantian glowed with 10 Spirit Stones.';
+  const rus =
+    'Старший брат Чэнь сжимал копьё весом 50 цзинь, пока его даньтянь сиял с 10 духовными камнями.';
+  const notes = extractCsiCulturalNotes(eng, rus, sampleGlossary);
+  assert.ok(notes.length >= 2);
+  assert.ok(notes.some((n) => n.sourcePhrase.toLowerCase().includes('dantian')));
+
+  const diting = evaluateDitingQuality(eng, rus, sampleGlossary);
+  assert.ok(diting.overallScore >= 85);
+  assert.ok(diting.idiomAccuracy >= 90);
+});
+
+test('Module 4: SlidingWindowPriorityQueue executes high-priority tasks first and tracks sliding window telemetry', async () => {
+  const queue = new SlidingWindowPriorityQueue({
+    concurrency: 1,
+    maxRequestsPerWindow: 10,
+    windowDurationMs: 60000,
+  });
+  const executionOrder: string[] = [];
+
+  const p1 = queue.add(
+    async () => {
+      await new Promise((r) => setTimeout(r, 15));
+      executionOrder.push('first-running');
+      return 1;
+    },
+    { priority: 1 }
+  );
+  const pLow = queue.add(
+    async () => {
+      executionOrder.push('low-priority');
+      return 2;
+    },
+    { priority: 1 }
+  );
+  const pHigh = queue.add(
+    async () => {
+      executionOrder.push('high-priority-repair');
+      return 3;
+    },
+    { priority: 3 }
+  );
+
+  await Promise.all([p1, pLow, pHigh]);
+  assert.deepEqual(executionOrder, [
+    'first-running',
+    'high-priority-repair',
+    'low-priority',
+  ]);
+  const telemetry = queue.getTelemetry();
+  assert.equal(telemetry.requestsInCurrentWindow, 3);
+});
+
+test('Module 5: buildEpub3Archive compiles valid EPUB 3 ZIP binary with uncompressed mimetype and OEBPS manifest', () => {
+  const epub = buildEpub3Archive({
+    novelTitle: 'Хроники Каменного Демона',
+    author: 'Lin Xuan',
+    chapters: [
+      {
+        number: 1,
+        titleRus: 'Глава 1. Пробуждение Системы',
+        contentRus: '[Система: Очки Истока +100]\n\nЛинь Сюань открыл глаза.',
+      },
+    ],
+  });
+  assert.ok(epub.filename.endsWith('.epub'));
+  assert.ok(epub.byteSize > 500);
+  // Check ZIP local file header magic bytes PK\x03\x04
+  assert.equal(epub.bytes[0], 0x50);
+  assert.equal(epub.bytes[1], 0x4b);
+  assert.equal(epub.bytes[2], 0x03);
+  assert.equal(epub.bytes[3], 0x04);
+  // Verify "mimetype" is the first entry in the archive
+  const asciiHeader = new TextDecoder().decode(epub.bytes.slice(30, 38));
+  assert.equal(asciiHeader, 'mimetype');
+});
