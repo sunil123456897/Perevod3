@@ -1,0 +1,682 @@
+[
+  {
+    "id": "i-can-upgrade-my-talent-infinitely",
+    "name": "I Can Upgrade My Talent Infinitely",
+    "rusTitle": "Я могу бесконечно улучшать свой талант",
+    "author": "Azure Peak Immortal",
+    "sourceLang": "ENG",
+    "genrePreset": "xianxia",
+    "proseTone": "classic",
+    "autoApproveThreshold": 0.92,
+    "enabledRuleIds": [
+      "NUMBER_MISMATCH",
+      "GLOSSARY_CANON_VIOLATION",
+      "CHARACTER_GENDER_MISMATCH",
+      "PARAGRAPH_DRIFT",
+      "TAUTOLOGY_RADAR",
+      "LATIN_LEAKAGE_AND_BRACKETS",
+      "DIALOGUE_DASH",
+      "THOUGHT_QUOTES",
+      "MACHINE_CALQUES",
+      "WRITTEN_NUMERALS",
+      "WRITTEN_PERCENTS",
+      "TIER_VS_GRADE",
+      "ARTIFACT_RANKING",
+      "WEIGHT_UNITS",
+      "ALCHEMY_CALQUES",
+      "SECT_SINGULAR",
+      "DASH_AND_COMMA_INFLATION",
+      "SYNTAX_MONOTONY_AND_BURSTINESS",
+      "REGISTER_PRONOUN_SHIFT",
+      "NOMINALIZATION_AND_INANIMATE_SUBJECT"
+    ],
+    "heroLedger": {
+      "protagonistName": "Линь Сюань",
+      "cultivationRealm": "3-й слой Очищения Ци",
+      "resources": [
+        "Очки Истока: 100",
+        "Духовные камни (в обороте): 3"
+      ],
+      "artifactsAndFlames": [
+        "Котёл Чёрного Железа",
+        "Пламя Лазурного Лотоса",
+        "Пилюля Конденсации Крови",
+        "духовный камень",
+        "духовный корень",
+        "духовный артефакт",
+        "Low Grade",
+        "Alchemy Talent",
+        "магический артефакт",
+        "Low Grade Magical Artifact"
+      ],
+      "activeLocation": "Внешняя Секта",
+      "lastUpdatedChapter": 4,
+      "forwardQuestions": [
+        {
+          "id": "q-iron-cauldron",
+          "questionRus": "Какова тайна Котла Чёрного Железа и как он повлияет на создание пилюль?",
+          "relatedEntities": [
+            "Котёл Чёрного Железа"
+          ],
+          "createdAtChapter": 1,
+          "status": "open"
+        },
+        {
+          "id": "q-azure-flame",
+          "questionRus": "Сможет ли Линь Сюань подчинить Пламя Лазурного Лотоса без вреда для меридианов?",
+          "relatedEntities": [
+            "Пламя Лазурного Лотоса"
+          ],
+          "createdAtChapter": 1,
+          "status": "open"
+        },
+        {
+          "id": "q-auto-1-3",
+          "questionRus": "Неужели это действительно предел моего смертного духовного корня?",
+          "relatedEntities": [
+            "ли"
+          ],
+          "createdAtChapter": 1,
+          "status": "open"
+        },
+        {
+          "id": "q-auto-1-4",
+          "questionRus": "Что это такое?",
+          "relatedEntities": [
+            "Что"
+          ],
+          "createdAtChapter": 1,
+          "status": "open"
+        }
+      ]
+    },
+    "styleGuideMd": "# Стилевой гид: I Can Upgrade My Talent Infinitely\n\n1. **Иерархия культивации**: Qi Refining = Очищение Ци (слои с 1-го по 9-й), Foundation Establishment = Учреждение Основы, Core Formation = Формирование Ядра.\n2. **Ранги предметов и пилюль**: Tier = Ярус (1-го яруса, 2-го яруса), Grade = Ранг (низшего, среднего, высшего ранга).\n3. **Артефакты**: 1-й ярус — строго «Магический артефакт», 2-й ярус — «Духовный артефакт».\n4. **Системные окна**: Оформляются через разделители `---` сверху и снизу, параметры в квадратных скобках.\n5. **Прямая речь и мысли**: Реплики строго через длинное тире `— `, мысли в кавычках-ёлочках `«...»`.",
+    "contextMd": "# Синопсис и состояние мира (Главы 1–7)\n\nЛинь Сюань — внешний ученик Секты Каменных Демонов, застрявший на 3-м слое Очищения Ци со смертным духовным корнем 9-го ранга. Пробудив Панель Бесконечного Возвышения Талантов, он поглощает осколки изначальной эссенции и начинает стремительный подъём через алхимию и создание пилюль 1-го яруса.",
+    "glossary": {
+      "realms": {
+        "Qi Refining": "Очищение Ци",
+        "Foundation Establishment": "Учреждение Основы",
+        "Core Formation": "Формирование Ядра",
+        "Nascent Soul": "Зарождающаяся Душа"
+      },
+      "characters": {
+        "Lin Xuan": "Линь Сюань",
+        "Elder Zhao": "старейшина Чжао",
+        "Su Qingxue": "Су Цинсюэ",
+        "Deacon Wang": "дьякон Ван"
+      },
+      "sects_and_places": {
+        "Stone Demon Sect": "Секта Каменных Демонов",
+        "Crimson Flame Pavilion": "Павильон Багрового Пламени",
+        "Outer Sect Peak": "Пик Внешней Секты",
+        "Myriad Beasts Mountain": "Гора Мириадов Зверей",
+        "Outer Sect": "Внешняя Секта"
+      },
+      "system_and_terms": {
+        "Spirit Stone": "духовный камень",
+        "Spirit Root": "духовный корень",
+        "Blood Condensation Pill": "Пилюля Конденсации Крови",
+        "Magical Artifact": "магический артефакт",
+        "Spirit Artifact": "духовный артефакт",
+        "Origin Points": "Очки Истока",
+        "Spirit Stones": "Spirit Stones",
+        "Low Grade": "Low Grade",
+        "Alchemy Talent": "Alchemy Talent",
+        "Low Grade Magical Artifact": "Low Grade Magical Artifact",
+        "Azure Lotus Fire": "Пламя Лазурного Лотоса",
+        "Shadow Step Scripture": "Канон Теневого Шага",
+        "Black Iron Cauldron": "Котёл Чёрного Железа"
+      },
+      "units": {
+        "jin": "цзинь",
+        "liang": "лян",
+        "li": "ли",
+        "zhang": "чжан"
+      }
+    },
+    "glossaryMeta": {
+      "Lin Xuan": {
+        "gender": "M",
+        "declensionNote": "мужской род, склоняется (Линь Сюаня, Линь Сюаню)",
+        "voiceNote": "Сдержанный, расчётливый тон; к старейшинам — строго на «вы» и почтительно"
+      },
+      "Elder Zhao": {
+        "gender": "M",
+        "declensionNote": "мужской род, склоняется титул (старейшины Чжао)",
+        "voiceNote": "Властный архаичный слог; к ученикам обращается на «ты»"
+      },
+      "Su Qingxue": {
+        "gender": "F",
+        "declensionNote": "женский род (Ж), китайское имя не склоняется",
+        "voiceNote": "Холодная аристократичная речь, минимум эмоций, обращение на «вы»"
+      },
+      "Deacon Wang": {
+        "gender": "M",
+        "declensionNote": "мужской род, склоняется (дьякона Вана)",
+        "voiceNote": "Строгий наставнический тон, громогласные объявления"
+      },
+      "Stone Demon Sect": {
+        "gender": "F",
+        "declensionNote": "женский род, склоняется слово «Секта»"
+      },
+      "Spirit Stone": {
+        "gender": "M",
+        "declensionNote": "мужской род, мн.ч.: духовные камни / духовных камней"
+      },
+      "Outer Sect": {
+        "gender": "F"
+      },
+      "Spirit Stones": {
+        "gender": "M"
+      },
+      "Low Grade": {
+        "gender": "M"
+      },
+      "Alchemy Talent": {
+        "gender": "M"
+      },
+      "Low Grade Magical Artifact": {
+        "gender": "M"
+      },
+      "Azure Lotus Fire": {
+        "gender": "N"
+      },
+      "Shadow Step Scripture": {
+        "gender": "M"
+      },
+      "Black Iron Cauldron": {
+        "gender": "M"
+      }
+    },
+    "scoutedTerms": [
+      {
+        "id": "scout-1",
+        "eng": "Azure Lotus Fire",
+        "rus_suggested": "Пламя Лазурного Лотоса",
+        "category": "system_and_terms",
+        "gender": "N",
+        "chapter_first_seen": 4,
+        "context_snippet": "Elder Zhao summoned a wisp of Azure Lotus Fire beneath the cauldron.",
+        "approved_for_glossary": true,
+        "confidence": 0.96
+      },
+      {
+        "id": "scout-2",
+        "eng": "Shadow Step Scripture",
+        "rus_suggested": "Канон Теневого Шага",
+        "category": "system_and_terms",
+        "gender": "M",
+        "chapter_first_seen": 5,
+        "context_snippet": "Lin Xuan comprehended the first layer of the Shadow Step Scripture.",
+        "approved_for_glossary": true,
+        "confidence": 0.93
+      },
+      {
+        "id": "scout-3",
+        "eng": "Black Iron Cauldron",
+        "rus_suggested": "Котёл Чёрного Железа",
+        "category": "system_and_terms",
+        "gender": "M",
+        "chapter_first_seen": 4,
+        "context_snippet": "The Black Iron Cauldron weighed 50 jin and hummed with spiritual qi.",
+        "approved_for_glossary": true,
+        "confidence": 0.94
+      },
+      {
+        "id": "scout-4",
+        "eng": "Senior Brother Chen",
+        "rus_suggested": "старший брат Чэнь",
+        "category": "characters",
+        "gender": "M",
+        "chapter_first_seen": 6,
+        "context_snippet": "Senior Brother Chen guarded the entrance of the Crimson Flame Pavilion.",
+        "approved_for_glossary": false,
+        "confidence": 0.91
+      },
+      {
+        "id": "lookahead-1793093519837-0",
+        "eng": "Outer Sect",
+        "rus_suggested": "Внешняя Секта",
+        "category": "sects_and_places",
+        "gender": "F",
+        "chapter_first_seen": 1,
+        "context_snippet": "Cold mountain wind swept across the Outer Sect Peak of the Stone Demon Sect.\nLin Xuan sat cross-legged on a worn straw mat inside his cave a",
+        "approved_for_glossary": true,
+        "confidence": 0.98
+      },
+      {
+        "id": "lookahead-1793093519837-1",
+        "eng": "Spirit Stones",
+        "rus_suggested": "Spirit Stones",
+        "category": "system_and_terms",
+        "gender": "M",
+        "chapter_first_seen": 1,
+        "context_snippet": "Глава 1 (TransAgents A−S): «Spirit Stones»",
+        "approved_for_glossary": true,
+        "confidence": 0.98
+      },
+      {
+        "id": "lookahead-1793093519837-2",
+        "eng": "Low Grade",
+        "rus_suggested": "Low Grade",
+        "category": "system_and_terms",
+        "gender": "M",
+        "chapter_first_seen": 1,
+        "context_snippet": "Глава 1 (TransAgents A−S): «Low Grade»",
+        "approved_for_glossary": true,
+        "confidence": 0.95
+      },
+      {
+        "id": "lookahead-1793093519837-3",
+        "eng": "Alchemy Talent",
+        "rus_suggested": "Alchemy Talent",
+        "category": "system_and_terms",
+        "gender": "M",
+        "chapter_first_seen": 1,
+        "context_snippet": "Глава 1 (TransAgents A−S): «Alchemy Talent»",
+        "approved_for_glossary": true,
+        "confidence": 0.95
+      },
+      {
+        "id": "lookahead-1793093519837-4",
+        "eng": "Low Grade Magical Artifact",
+        "rus_suggested": "Low Grade Magical Artifact",
+        "category": "system_and_terms",
+        "gender": "M",
+        "chapter_first_seen": 2,
+        "context_snippet": "Глава 2 (TransAgents A−S): «Low Grade Magical Artifact»",
+        "approved_for_glossary": true,
+        "confidence": 0.95
+      }
+    ],
+    "chapters": [
+      {
+        "id": "ch-1",
+        "number": 1,
+        "titleEng": "Chapter 1: Awakening the Infinite Talent Panel",
+        "titleRus": "Глава 1. Пробуждение Панели Бесконечного Таланта",
+        "engText": "Cold mountain wind swept across the Outer Sect Peak of the Stone Demon Sect.\nLin Xuan sat cross-legged on a worn straw mat inside his cave abode, staring at the 3 Spirit Stones left in his pouch.\nFor three years he had been stuck at the 3rd layer of Qi Refining. Without at least 15 Spirit Stones to purchase a Blood Condensation Pill of Tier 1 Low Grade, he would be expelled at the end of the month.\n\"Could this really be the limit of my mortal Spirit Root?\" Lin Xuan thought bitterly.\nSuddenly, a translucent azure interface unfolded before his eyes.\n---\n[Host: Lin Xuan]\n[Cultivation: Qi Refining — 3rd Layer]\n[Origin Points: 100]\n[Alchemy Talent: Tier 1 Low Grade (Upgradeable — 85% compatibility)]\n---\n— Что это?! — прошептал Линь Сюань, чувствуя, как по меридианам разливается горячий поток.",
+        "rusText": "Холодный горный ветер пронёсся над Пиком Внешней Секты, принадлежавшим Секте Каменных Демонов.\n\nЛинь Сюань сидел, скрестив ноги, на потёртой соломенной циновке в своей пещерной обители и смотрел на 3 духовных камня, оставшихся в его мешочке.\n\nВот уже три года он топтался на 3-м слое Очищения Ци. Без 15 духовных камней, необходимых для покупки Пилюли Конденсации Крови 1-го яруса низшего ранга, в конце месяца его неизбежно изгонят со двора.\n\n«Неужели это действительно предел моего смертного духовного корня?» — с горечью подумал Линь Сюань.\n\nВнезапно перед его внутренним взором развернулась полупрозрачная лазурная панель.\n\n---\n\n[Носитель: Линь Сюань]\n\n[Культивация: Очищение Ци — 3-й слой]\n\n[Очки Истока: 100]\n\n[Талант к алхимии: 1-го яруса низшего ранга (Доступно улучшение — совместимость 85%)]\n\n---\n\n— Что это такое?! — прошептал Линь Сюань, ощущая, как по его меридианам стремительно разливается обжигающий поток духовной силы.",
+        "summary": "В Главе 1 Линь Сюань на 3-м слое Очищения Ци пробуждает Панель Бесконечного Таланта с 100 Очками Истока и талантом к алхимии 1-го яруса низшего ранга (85%).",
+        "scouted": true,
+        "translated": true,
+        "edited": true,
+        "verified": false,
+        "wordCountEng": 140,
+        "wordCountRus": 136,
+        "lastUpdated": "2026-10-27 09:36",
+        "versionHistory": [
+          {
+            "id": "ver-ch1-draft",
+            "timestamp": "2026-10-16 01:10",
+            "stageLabel": "Черновой перевод (Фаза 2)",
+            "titleRus": "Глава 1. Пробуждение Панели Бесконечного Таланта",
+            "rusText": "Холодный горный ветер пронёсся над Пиком Внешней Секты Секты Каменного Демона.\nЛинь Сюань сидел на соломенной циновке и смотрел на три духовных камня в своём мешочке.\nВот уже три года он топтался на третьем слое Очищения Ци. Без пятнадцати духовных камней для покупки Пилюли Конденсации Крови 1-го ранга низшего ранга его изгонят.\n\"Неужели это предел моего духовного корня?\" — с горечью подумал Линь Сюань.\nВнезапно перед его глазами развернулась лазурная панель.\n---\n[Носитель: Линь Сюань]\n[Культивация: Очищение Ци — 3-й слой]\n[Очки Истока: 100]\n[Талант к алхимии: 1-го яруса низшего ранга (совместимость 85%)]\n---\n- Что это такое?! — прошептал Линь Сюань, чувствуя горячий поток.",
+            "wordCountRus": 118,
+            "qaPassed": false,
+            "qaErrorCount": 5
+          },
+          {
+            "id": "ver-ch1-verified",
+            "timestamp": "2026-10-16 01:15",
+            "stageLabel": "Авто-ремонт QA и 2-проходный критик (Фаза 4–5)",
+            "titleRus": "Глава 1. Пробуждение Панели Бесконечного Таланта",
+            "rusText": "Холодный горный ветер пронёсся над Пиком Внешней Секты, принадлежавшим Секте Каменных Демонов.\nЛинь Сюань сидел, скрестив ноги, на потёртой соломенной циновке в своей пещерной обители и смотрел на 3 духовных камня, оставшихся в его мешочке.\nВот уже три года он топтался на 3-м слое Очищения Ци. Без 15 духовных камней, необходимых для покупки Пилюли Конденсации Крови 1-го яруса низшего ранга, в конце месяца его неизбежно изгонят со двора.\n«Неужели это действительно предел моего смертного духовного корня?» — с горечью подумал Линь Сюань.\nВнезапно перед его внутренним взором развернулась полупрозрачная лазурная панель.\n---\n[Носитель: Линь Сюань]\n[Культивация: Очищение Ци — 3-й слой]\n[Очки Истока: 100]\n[Талант к алхимии: 1-го яруса низшего ранга (Доступно улучшение — совместимость 85%)]\n---\n— Что это такое?! — прошептал Линь Сюань, ощущая, как по его меридианам стремительно разливается обжигающий поток духовной силы.",
+            "wordCountRus": 145,
+            "qaPassed": true,
+            "qaErrorCount": 0
+          },
+          {
+            "id": "ver-p5-ch-1-1793093519857",
+            "timestamp": "2026-10-27 09:31",
+            "stageLabel": "Авто-ремонт QA и верификация DITING (Фаза 4–5)",
+            "titleRus": "Глава 1. Пробуждение Панели Бесконечного Таланта",
+            "rusText": "Холодный горный ветер пронёсся над Пиком Внешней Секты, принадлежавшим Секте Каменных Демонов.\n\nЛинь Сюань сидел, скрестив ноги, на потёртой соломенной циновке в своей пещерной обители и смотрел на 3 духовных камня, оставшихся в его мешочке.\n\nВот уже три года он топтался на 3-м слое Очищения Ци. Без 15 духовных камней, необходимых для покупки Пилюли Конденсации Крови 1-го яруса низшего ранга, в конце месяца его неизбежно изгонят со двора.\n\n«Неужели это действительно предел моего смертного духовного корня?» — с горечью подумал Линь Сюань.\n\nВнезапно перед его внутренним взором развернулась полупрозрачная лазурная панель.\n\n---\n\n[Носитель: Линь Сюань]\n\n[Культивация: Очищение Ци — 3-й слой]\n\n[Очки Истока: 100]\n\n[Талант к алхимии: 1-го яруса низшего ранга (Доступно улучшение — совместимость 85%)]\n\n---\n\n— Что это такое?! — прошептал Линь Сюань, ощущая, как по его меридианам стремительно разливается обжигающий поток духовной силы.",
+            "wordCountRus": 136,
+            "qaPassed": false,
+            "qaErrorCount": 3
+          }
+        ],
+        "summaryEng": "Ch.1 (Chapter 1: Awakening the Infinite Talent Panel): Cold mountain wind swept across the Outer Sect Peak of the Stone Demon Sect. Outcome: — прошептал Линь Сюань, чувствуя, как по меридианам разливается горячий поток.",
+        "csiNotes": [
+          {
+            "id": "csi-1-0",
+            "sourcePhrase": "Tier X Low/Mid/High Grade",
+            "category": "idiom",
+            "categoryLabel": "Двухуровневая классификация рангов",
+            "adaptedRus": "X-го яруса низшего/среднего/высшего ранга",
+            "rationale": "Разводит понятия Tier (ярус) и Grade (ранг), предотвращая тавтологию «1-го ранга низшего ранга» и канцелярит «низшего сорта»."
+          },
+          {
+            "id": "csi-1-1",
+            "sourcePhrase": "Qi Refining / Dantian / Spirit Root",
+            "category": "idiom",
+            "categoryLabel": "Даосская внутренняя алхимия",
+            "adaptedRus": "Очищение Ци / даньтянь / духовный корень",
+            "rationale": "Используется устоявшийся в русскоязычном фэндоме сянься канон внутренней алхимии вместо буквальных калек («переработка пневмы»)."
+          }
+        ],
+        "ditingReport": {
+          "idiomAccuracy": 98,
+          "referentialCohesion": 99,
+          "characterVoiceFidelity": 97,
+          "culturalAdaptation": 98,
+          "literaryRhythm": 97,
+          "terminologyPrecision": 74,
+          "overallScore": 94,
+          "mqmGrade": "Высокий (85–94)"
+        }
+      },
+      {
+        "id": "ch-2",
+        "number": 2,
+        "titleEng": "Chapter 2: The Crimson Flame Pavilion Test",
+        "titleRus": "Глава 2. Испытание в Павильоне Багрового Пламени",
+        "engText": "At dawn, Lin Xuan walked 12 li down the winding stone stairs toward the Crimson Flame Pavilion.\nDeacon Wang stood beside a massive bronze furnace weighing 400 jin, inspecting 24 outer disciples.\n\"Whoever can refine a Blood Condensation Pill with at least 60% purity will receive 30 Spirit Stones and a Tier 1 Low Grade Magical Artifact!\" Deacon Wang announced loudly.\nLin Xuan stepped forward calmly. With his upgraded perception, every impurity inside the herbs was crystal clear.",
+        "rusText": "На рассвете Линь Сюань прошёл 12 ли вниз по извилистой каменной лестнице, ведущей к Павильону Багрового Пламени.\n\nДьякон Ван стоял у массивного бронзового котла весом в 400 цзинь, окидывая строгим взглядом 24 внешних учеников.\n\n— Тот, кто сумеет завершить создание Пилюли Конденсации Крови с чистотой не менее 60%, получит в награду 30 духовных камней и магический артефакт 1-го яруса низшего ранга! — громогласно объявил дьякон Ван.\n\nЛинь Сюань спокойно шагнул вперёд. Благодаря улучшенному восприятию каждая крупица примесей в целебных травах была видна как на ладони.",
+        "summary": "В Главе 2 Линь Сюань прибывает в Павильон Багрового Пламени, где дьякон Ван обещает 30 духовных камней и магический артефакт 1-го яруса за создание Пилюли Конденсации Крови чистотой от 60%.",
+        "scouted": true,
+        "translated": true,
+        "edited": true,
+        "verified": false,
+        "wordCountEng": 78,
+        "wordCountRus": 85,
+        "lastUpdated": "2026-10-27 09:31",
+        "summaryEng": "Ch.2 (Chapter 2: The Crimson Flame Pavilion Test): At dawn, Lin Xuan walked 12 li down the winding stone stairs toward the Crimson Flame Pavilion. Outcome: With his upgraded perception, every impurity inside the herbs was crystal clear.",
+        "csiNotes": [
+          {
+            "id": "csi-elder-deacon",
+            "sourcePhrase": "Elder / Deacon (Чжанлао / Чжиши)",
+            "category": "honorific",
+            "categoryLabel": "Должностной титул секты",
+            "adaptedRus": "старейшина / дьякон + фамилия",
+            "rationale": "Сохраняет даосскую клановую субординацию: ученики обращаются к старейшинам строго на «вы», тогда как старейшины к внешним ученикам — на «ты»."
+          },
+          {
+            "id": "csi-jin-unit",
+            "sourcePhrase": "Jin (Цзинь / 斤 ≈ 500 г)",
+            "category": "daoist_term",
+            "categoryLabel": "Традиционная мера веса",
+            "adaptedRus": "цзинь (без перевода в фунты или килограммы)",
+            "rationale": "Замена «jin» на западные «фунты» или метрические «килограммы» разрушает атмосферу древнего мира культивации (правило WEIGHT_UNITS)."
+          },
+          {
+            "id": "csi-tier-grade",
+            "sourcePhrase": "Tier X Low/Mid/High Grade",
+            "category": "system_formula",
+            "categoryLabel": "Двухуровневая классификация рангов",
+            "adaptedRus": "X-го яруса низшего/среднего/высшего ранга",
+            "rationale": "Разводит понятия Tier (ярус) и Grade (ранг), предотвращая тавтологию «1-го ранга низшего ранга» и канцелярит «низшего сорта»."
+          },
+          {
+            "id": "csi-cold-air-idiom",
+            "sourcePhrase": "Образная идиоматика и боевые клише (Чэнъюй)",
+            "category": "idiom",
+            "categoryLabel": "Идиома / Чэнъюй",
+            "adaptedRus": "«видно как на ладони»",
+            "rationale": "Агент локализации CSI заменил буквальную английскую/китайскую конструкцию на естественный русский фразеологизм с сохранением динамики боевой сцены."
+          }
+        ],
+        "ditingReport": {
+          "idiomAccuracy": 98,
+          "referentialCohesion": 99,
+          "characterVoiceFidelity": 97,
+          "culturalAdaptation": 98,
+          "literaryRhythm": 97,
+          "terminologyPrecision": 74,
+          "overallScore": 94,
+          "mqmGrade": "Высокий (85–94)"
+        },
+        "versionHistory": [
+          {
+            "id": "ver-p5-ch-2-1793093519860",
+            "timestamp": "2026-10-27 09:31",
+            "stageLabel": "Авто-ремонт QA и верификация DITING (Фаза 4–5)",
+            "titleRus": "Глава 2. Испытание в Павильоне Багрового Пламени",
+            "rusText": "На рассвете Линь Сюань прошёл 12 ли вниз по извилистой каменной лестнице, ведущей к Павильону Багрового Пламени.\n\nДьякон Ван стоял у массивного бронзового котла весом в 400 цзинь, окидывая строгим взглядом 24 внешних учеников.\n\n— Тот, кто сумеет завершить создание Пилюли Конденсации Крови с чистотой не менее 60%, получит в награду 30 духовных камней и магический артефакт 1-го яруса низшего ранга! — громогласно объявил дьякон Ван.\n\nЛинь Сюань спокойно шагнул вперёд. Благодаря улучшенному восприятию каждая крупица примесей в целебных травах была видна как на ладони.",
+            "wordCountRus": 85,
+            "qaPassed": false,
+            "qaErrorCount": 3
+          }
+        ]
+      },
+      {
+        "id": "ch-3",
+        "number": 3,
+        "titleEng": "Chapter 3: Breakthrough to the 5th Layer",
+        "titleRus": "Глава 3. Прорыв на 5-й слой",
+        "engText": "Inside the quiet chamber of the Stone Demon Sect, Elder Zhao examined the 9 radiant pills resting inside the jade bottle.\nEach Blood Condensation Pill retained 95% medicinal efficacy, far surpassing standard Tier 1 pills.\n\"Remarkable! Even Su Qingxue only achieved 75% purity when she was at the 5th layer of Qi Refining,\" Elder Zhao murmured.\nReturning to his cave, Lin Xuan consumed 2 pills and absorbed 18 Spirit Stones, pushing his cultivation directly to the 5th layer of Qi Refining while gaining 250 Origin Points.",
+        "rusText": "В тихом зале Секты Каменных Демонов старейшина Чжао внимательно изучал 9 сияющих пилюль, покоившихся на дне нефритового флакона.\n\nКаждая Пилюля Конденсации Крови сохранила 95% целебной силы, многократно превосходя обычные пилюли 1-го яруса.\n\n— Поразительно! Даже Су Цинсюэ достигала лишь 75% чистоты, когда находилась на 5-м слое Очищения Ци, — пробормотал старейшина Чжао.\n\nВернувшись в пещерную обитель, Линь Сюань принял 2 пилюли и поглотил 18 духовных камней, единым рывком подняв культивацию до 5-го слоя Очищения Ци и получив 250 Очков Истока.",
+        "summary": "В Главе 3 старейшина Чжао восхищается 9 пилюлями с чистотой 95% (выше 75% у Су Цинсюэ), а Линь Сюань прорывается на 5-й слой Очищения Ци и получает 250 Очков Истока.",
+        "scouted": true,
+        "translated": true,
+        "edited": true,
+        "verified": false,
+        "wordCountEng": 86,
+        "wordCountRus": 80,
+        "lastUpdated": "2026-10-27 09:31",
+        "summaryEng": "Ch.3 (Chapter 3: Breakthrough to the 5th Layer): Inside the quiet chamber of the Stone Demon Sect, Elder Zhao examined the 9 radiant pills resting inside the jade bottle. Outcome: Returning to his cave, Lin Xuan consumed 2 pills and absorbed 18 Spirit Stones, pushing his cultivation directly to the 5th layer of Qi Refining while gaining 250 Origin Points.",
+        "csiNotes": [
+          {
+            "id": "csi-elder-deacon",
+            "sourcePhrase": "Elder / Deacon (Чжанлао / Чжиши)",
+            "category": "honorific",
+            "categoryLabel": "Должностной титул секты",
+            "adaptedRus": "старейшина / дьякон + фамилия",
+            "rationale": "Сохраняет даосскую клановую субординацию: ученики обращаются к старейшинам строго на «вы», тогда как старейшины к внешним ученикам — на «ты»."
+          },
+          {
+            "id": "csi-qi-refining-dantian",
+            "sourcePhrase": "Qi Refining / Dantian / Spirit Root",
+            "category": "daoist_term",
+            "categoryLabel": "Даосская внутренняя алхимия",
+            "adaptedRus": "Очищение Ци / даньтянь / духовный корень",
+            "rationale": "Используется устоявшийся в русскоязычном фэндоме сянься канон внутренней алхимии вместо буквальных калек («переработка пневмы»)."
+          }
+        ],
+        "ditingReport": {
+          "idiomAccuracy": 98,
+          "referentialCohesion": 99,
+          "characterVoiceFidelity": 97,
+          "culturalAdaptation": 98,
+          "literaryRhythm": 97,
+          "terminologyPrecision": 74,
+          "overallScore": 94,
+          "mqmGrade": "Высокий (85–94)"
+        },
+        "versionHistory": [
+          {
+            "id": "ver-p5-ch-3-1793093519864",
+            "timestamp": "2026-10-27 09:31",
+            "stageLabel": "Авто-ремонт QA и верификация DITING (Фаза 4–5)",
+            "titleRus": "Глава 3. Прорыв на 5-й слой",
+            "rusText": "В тихом зале Секты Каменных Демонов старейшина Чжао внимательно изучал 9 сияющих пилюль, покоившихся на дне нефритового флакона.\n\nКаждая Пилюля Конденсации Крови сохранила 95% целебной силы, многократно превосходя обычные пилюли 1-го яруса.\n\n— Поразительно! Даже Су Цинсюэ достигала лишь 75% чистоты, когда находилась на 5-м слое Очищения Ци, — пробормотал старейшина Чжао.\n\nВернувшись в пещерную обитель, Линь Сюань принял 2 пилюли и поглотил 18 духовных камней, единым рывком подняв культивацию до 5-го слоя Очищения Ци и получив 250 Очков Истока.",
+            "wordCountRus": 80,
+            "qaPassed": false,
+            "qaErrorCount": 1
+          }
+        ]
+      },
+      {
+        "id": "ch-4",
+        "number": 4,
+        "titleEng": "Chapter 4: The Black Iron Cauldron and Azure Lotus Fire",
+        "titleRus": "Глава 4. Котёл Чёрного Железа и Пламя Лазурного Лотоса",
+        "engText": "Lin Xuan spent 21 Spirit Stones at the 6th layer of Qi Refining to acquire a Tier 1 Low Grade Magical Artifact cauldron weighing 50 jin.\nInside the Crimson Flame Pavilion of the Stone Demon Sect, Elder Zhao summoned a wisp of Azure Lotus Fire, while Su Qingxue looked at the cauldron and smiled.\n\"Can an outer disciple really refine pills with an 80% success rate?\" Deacon Wang asked in shock.\nLin Xuan thought \"This cauldron is a miracle\" and began refining the Blood Condensation Pill.",
+        "rusText": "Линь Сюань потратил двадцать один духовный камень на шестом слое Очищения Ци, чтобы приобрести духовный артефакт 1-го яруса, точнее котёл 1-го ранга низшего ранга весом 50 фунтов.\nВнутри Павильона Багрового Пламени Секты Каменного Демона старейшина Чжао призвал всполох Пламени Лазурного Лотоса, а Су Цинсюэ посмотрел на котёл и улыбнулся.\n- Неужели внешний ученик действительно способен варить пилюли с шансом восемьдесят процентов? : — сказал дьякон Ван, не удержался от вопроса и втянул глоток холодного воздуха.\nЛинь Сюань подумал \"Этот котёл — настоящее чудо\" и начал изготовление Пилюли Конденсации Крови.",
+        "summary": "В Главе 4 Линь Сюань на 6-м слое Очищения Ци приобретает котёл весом 50 цзинь за 21 духовный камень и приступает к созданию пилюль с шансом 80% при поддержке Пламени Лазурного Лотоса.",
+        "scouted": true,
+        "translated": true,
+        "edited": false,
+        "verified": false,
+        "wordCountEng": 84,
+        "wordCountRus": 91,
+        "lastUpdated": "2026-10-16 02:30",
+        "versionHistory": [
+          {
+            "id": "ver-ch4-raw-mt",
+            "timestamp": "2026-10-16 02:22",
+            "stageLabel": "Первичный черновик (Фаза 2 — до вычитки)",
+            "titleRus": "Глава 4. Котёл Чёрного Железа",
+            "rusText": "Линь Сюань потратил двадцать один духовный камень на шестом слое Очищения Ци, чтобы приобрести духовный артефакт 1-го яруса, точнее котёл 1-го ранга низшего ранга весом 50 фунтов.\nВнутри Павильона Багрового Пламени Секты Каменного Демона старейшина Чжао призвал всполох Пламени Лазурного Лотоса, а Су Цинсюэ посмотрел на котёл и улыбнулся.\n- Неужели внешний ученик действительно способен варить пилюли с шансом восемьдесят процентов? : — сказал дьякон Ван, не удержался от вопроса и втянул глоток холодного воздуха.\nЛинь Сюань подумал \"Этот котёл — настоящее чудо\" и начал изготовление Пилюли Конденсации Крови.",
+            "wordCountRus": 91,
+            "qaPassed": false,
+            "qaErrorCount": 8
+          },
+          {
+            "id": "ver-ch4-critic-preview",
+            "timestamp": "2026-10-16 02:28",
+            "stageLabel": "Редакция 2-проходного критика (Фаза 3)",
+            "titleRus": "Глава 4. Котёл Чёрного Железа и Пламя Лазурного Лотоса",
+            "rusText": "Линь Сюань потратил 21 духовный камень на 6-м слое Очищения Ци, чтобы приобрести магический артефакт 1-го яруса, точнее котёл 1-го яруса низшего ранга весом 50 цзинь.\nВнутри Павильона Багрового Пламени Секты Каменных Демонов старейшина Чжао призвал всполох Пламени Лазурного Лотоса, а Су Цинсюэ посмотрела на котёл и улыбнулась.\n— Неужели внешний ученик действительно способен создавать пилюли с шансом 80%? — сказал дьякон Ван, невольно поинтересовался и судорожно перевёл дыхание.\nЛинь Сюань подумал «Этот котёл — настоящее чудо» и начал изготовление Пилюли Конденсации Крови.",
+            "wordCountRus": 84,
+            "qaPassed": true,
+            "qaErrorCount": 0
+          }
+        ]
+      },
+      {
+        "id": "ch-5",
+        "number": 5,
+        "titleEng": "Chapter 5: Shadow Step Scripture and the Outer Sect Ambush",
+        "titleRus": "Глава 5. Канон Теневого Шага и засада во Внешней Секте",
+        "engText": "Under the pale moonlight on Myriad Beasts Mountain, Lin Xuan invested 120 Origin Points into the Shadow Step Scripture.\n---\n[Technique: Shadow Step Scripture — Tier 1 High Grade]\n[Mastery: 100% Perfection]\n[Speed Bonus: +45% movement velocity]\n---\nThree rogue cultivators from the Stone Demon Sect lunged from the mist, wielding blades weighing 35 jin.\n\"Hand over the 60 Spirit Stones you earned at the Crimson Flame Pavilion!\" their leader snarled.\n\"You chose the wrong target,\" Lin Xuan thought coldly, vanishing like a phantom and striking with his Magical Artifact sword.",
+        "rusText": "",
+        "scouted": true,
+        "translated": false,
+        "edited": false,
+        "verified": false,
+        "wordCountEng": 95,
+        "wordCountRus": 0,
+        "lastUpdated": "2026-10-16 02:45"
+      },
+      {
+        "id": "ch-6",
+        "number": 6,
+        "titleEng": "Chapter 6: Confrontation with Senior Brother Chen",
+        "titleRus": "Глава 6. Противостояние со старшим братом Чэнем",
+        "engText": "At the gate of the Crimson Flame Pavilion, Senior Brother Chen blocked Lin Xuan's path with a cold sneer.\nHaving reached the 7th layer of Qi Refining, Senior Brother Chen held a Tier 1 High Grade Magical Artifact spear weighing 80 jin.\n\"Elder Zhao gave you 50 Spirit Stones and access to the earth flame chamber, yet you refuse to pay 30% tribute to our faction?\" Senior Brother Chen demanded.\nSu Qingxue watched from the jade balcony of the Stone Demon Sect as Lin Xuan released the aura of the 6th layer of Qi Refining.",
+        "rusText": "",
+        "scouted": false,
+        "translated": false,
+        "edited": false,
+        "verified": false,
+        "wordCountEng": 96,
+        "wordCountRus": 0,
+        "lastUpdated": "2026-10-16 02:50"
+      },
+      {
+        "id": "ch-7-1",
+        "number": 7,
+        "subPart": "7.1",
+        "titleEng": "Chapter 7.1: Secret Realm of the Stone Demon (Part 1)",
+        "titleRus": "Глава 7.1. Тайное царство Каменных Демонов (Часть 1)",
+        "engText": "The ancient portal at the summit of the Stone Demon Sect rumbled as 100 Spirit Stones were embedded into the formation array.\nElder Zhao and Su Qingxue led 16 core and outer disciples toward the rift.\n\"Inside the Secret Realm, anyone who collects 10 stalks of Nine-Leaf Spirit Grass within 48 hours will be promoted to Inner Sect status,\" Elder Zhao declared.",
+        "rusText": "Древний портал на вершине Секты Каменных Демонов глухо загудел, когда в формационный массив вложили 100 духовных камней.\nСтарейшина Чжао и Су Цинсюэ повели 16 ключевых и внешних учеников к пространственному разлому.\n— Внутри Тайного царства каждый, кто соберёт 10 стеблей Девятилистной Духовной Травы за 48 часов, будет возвышен до статуса ученика Внутренней Секты, — объявил старейшина Чжао.",
+        "summary": "В Главе 7.1 старейшина Чжао и Су Цинсюэ открывают портал Тайного царства с помощью 100 духовных камней для 16 учеников.",
+        "scouted": true,
+        "translated": true,
+        "edited": true,
+        "verified": true,
+        "wordCountEng": 64,
+        "wordCountRus": 61,
+        "lastUpdated": "2026-10-16 03:00"
+      },
+      {
+        "id": "ch-7-2",
+        "number": 7,
+        "subPart": "7.2",
+        "titleEng": "Chapter 7.2: Secret Realm of the Stone Demon (Part 2)",
+        "titleRus": "Глава 7.2. Тайное царство Каменных Демонов (Часть 2)",
+        "engText": "Stepping through the spatial barrier, Lin Xuan immediately sensed 95% denser spiritual qi than on the Outer Sect Peak.\nHis panel chimed as 300 Origin Points surged into his dantian, illuminating a hidden cave 8 li to the north where a Foundation Establishment legacy awaited.",
+        "rusText": "Шагнув сквозь пространственный барьер, Линь Сюань мгновенно ощутил духовную ци на 95% плотнее, чем на Пике Внешней Секты.\nЕго панель тихо прозвенела, когда 300 Очков Истока хлынули в даньтянь, подсвечивая на карте скрытый грот в 8 ли к северу, где покоилось наследие Учреждения Основы.",
+        "summary": "В Главе 7.2 Линь Сюань получает 300 Очков Истока в Тайном царстве и обнаруживает грот в 8 ли к северу с наследием Учреждения Основы.",
+        "scouted": true,
+        "translated": true,
+        "edited": true,
+        "verified": true,
+        "wordCountEng": 47,
+        "wordCountRus": 48,
+        "lastUpdated": "2026-10-16 03:05"
+      }
+    ]
+  },
+  {
+    "id": "solo-dungeon-monarch-litrpg",
+    "name": "Shadow Monarch of the Abyssal Tower",
+    "rusTitle": "Теневой Монарх Башни Бездны (ЛитРПГ / Охотники)",
+    "author": "Seoul Dungeon Studio",
+    "sourceLang": "ENG",
+    "genrePreset": "litrpg",
+    "proseTone": "dynamic",
+    "autoApproveThreshold": 0.92,
+    "enabledRuleIds": [
+      "NUMBER_MISMATCH",
+      "GLOSSARY_CANON_VIOLATION",
+      "CHARACTER_GENDER_MISMATCH",
+      "PARAGRAPH_DRIFT",
+      "TAUTOLOGY_RADAR",
+      "LATIN_LEAKAGE_AND_BRACKETS",
+      "DIALOGUE_DASH",
+      "THOUGHT_QUOTES",
+      "MACHINE_CALQUES",
+      "WRITTEN_NUMERALS",
+      "WRITTEN_PERCENTS",
+      "TIER_VS_GRADE",
+      "DASH_AND_COMMA_INFLATION",
+      "SYNTAX_MONOTONY_AND_BURSTINESS",
+      "REGISTER_PRONOUN_SHIFT",
+      "NOMINALIZATION_AND_INANIMATE_SUBJECT"
+    ],
+    "styleGuideMd": "# Стилевой гид: Теневой Монарх Башни Бездны\n- Системные уведомления строго внутри блоков `---`.\n- Сохранять все проценты, ранги охотников (S, A, B) и числа урона.",
+    "contextMd": "# Синопсис\nКан Джин — охотник E-ранга, получивший скрытый класс Архитектора Теней на 15-м этаже Башни Бездны.",
+    "glossary": {
+      "realms": {
+        "S-Rank Hunter": "Охотник S-ранга",
+        "Shadow Monarch": "Теневой Монарх"
+      },
+      "characters": {
+        "Kang Jin": "Кан Джин",
+        "Yoo Mina": "Ю Мина"
+      },
+      "sects_and_places": {
+        "Abyssal Tower": "Башня Бездны",
+        "Aegis Guild": "Гильдия Эгида"
+      },
+      "system_and_terms": {
+        "Mana Crystal": "кристалл маны",
+        "Shadow Extraction": "Извлечение Тени"
+      },
+      "units": {}
+    },
+    "glossaryMeta": {
+      "Kang Jin": {
+        "gender": "M",
+        "declensionNote": "мужской род, склоняется (Кан Джина)"
+      },
+      "Yoo Mina": {
+        "gender": "F",
+        "declensionNote": "женский род (Ж), склоняется (Ю Мины)"
+      }
+    },
+    "scoutedTerms": [],
+    "chapters": [
+      {
+        "id": "litrpg-1",
+        "number": 1,
+        "titleEng": "Chapter 1: Awakening the Shadow Extraction Skill",
+        "titleRus": "Глава 1. Пробуждение навыка Извлечения Тени",
+        "engText": "Inside the 15th floor of the Abyssal Tower, Kang Jin absorbed 40 Mana Crystals while Yoo Mina guarded the gate of the Aegis Guild.\n---\n[Skill: Shadow Extraction — Tier 1 High Grade]\n[Critical Damage Bonus: +75%]\n---",
+        "rusText": "На 15-м этаже Башни Бездны Кан Джин поглотил 40 кристаллов маны, пока Ю Мина охраняла врата Гильдии Эгида.\n---\n[Навык: Извлечение Тени — 1-го яруса высшего ранга]\n[Бонус критического урона: +75%]\n---",
+        "summary": "В Главе 1 Кан Джин на 15-м этаже Башни Бездны поглощает 40 кристаллов маны и пробуждает навык Извлечения Тени (+75% крит. урона).",
+        "scouted": true,
+        "translated": true,
+        "edited": true,
+        "verified": true,
+        "wordCountEng": 38,
+        "wordCountRus": 35,
+        "lastUpdated": "2026-10-15 19:20"
+      }
+    ]
+  }
+]

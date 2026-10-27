@@ -216,6 +216,19 @@ export default function PipelineStudioApp() {
     }
   }, [llmConfig]);
 
+  // Session Safety Guard: Prevent accidental tab closure during active pipeline batch
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isRunningPipeline) {
+        e.preventDefault();
+        e.returnValue = 'Идёт пакетный перевод новеллы. Вы уверены, что хотите закрыть вкладку?';
+        return e.returnValue;
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isRunningPipeline]);
+
   const handlePingColabServer = async () => {
     const cleanUrl = normalizeColabEndpointUrl(llmConfig.colabEndpointUrl || '');
     if (!cleanUrl) {
