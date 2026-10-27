@@ -14,6 +14,7 @@ import {
 import {
   buildRulateExportPackages,
   buildEpub3Archive,
+  buildChaptersZipArchive,
   GENRE_PRESET_LABELS,
   type RulateExportPackage,
   type HeroStateLedger,
@@ -96,6 +97,11 @@ export default function RulateExportView({
     exportableChapters,
   ]);
 
+  const chaptersZipPackage = useMemo(() => {
+    if (exportableChapters.length === 0) return null;
+    return buildChaptersZipArchive(novelName, exportableChapters, 'txt');
+  }, [novelName, exportableChapters]);
+
   const activePackage = packages[selectedBatchIdx] || packages[0] || null;
 
   const handleDownloadPackage = (pkg: RulateExportPackage) => {
@@ -104,6 +110,19 @@ export default function RulateExportView({
     const a = document.createElement('a');
     a.href = url;
     a.download = pkg.filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadChaptersZip = () => {
+    if (!chaptersZipPackage) return;
+    const blob = new Blob([chaptersZipPackage.bytes.buffer as ArrayBuffer], {
+      type: 'application/zip',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = chaptersZipPackage.filename;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -178,7 +197,7 @@ export default function RulateExportView({
           </button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3">
           {subTab !== 'merge' && (
             <label className="inline-flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
               <input
@@ -208,6 +227,18 @@ export default function RulateExportView({
               <option value={10}>По 10 глав</option>
               <option value={20}>По 20 глав (макс.)</option>
             </select>
+          )}
+
+          {chaptersZipPackage && (
+            <button
+              type="button"
+              onClick={handleDownloadChaptersZip}
+              title="Каждая глава отдельным файлом Chapter_0001.txt внутри ZIP (для Ranobelib, Author.Today, Boosty)"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3.5 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/25 transition-colors"
+            >
+              <Download className="h-3.5 w-3.5 text-emerald-400" />
+              ZIP по главам · Ranobelib/AT ({chaptersZipPackage.chapterCount} ф.)
+            </button>
           )}
 
           {epubPackage && subTab !== 'epub' && (

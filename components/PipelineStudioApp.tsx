@@ -21,8 +21,18 @@ import {
   SlidersHorizontal,
   Zap,
   ShieldCheck,
+  Cpu,
+  Copy,
+  Check,
 } from 'lucide-react';
 import {
+  finalizeAndVerifyChapter,
+  prepareGlossaryStopGateTerms,
+  autoMergeSplitChaptersInNovel,
+  runPipelineBatchOnNovel,
+  FetchPipelineTransportAdapter,
+  serializeProjectBundle,
+  deserializeProjectBundle,
   runQaLinter,
   autoRepairRussianText,
   surgicalRepairDriftedParagraphs,
@@ -43,6 +53,13 @@ import {
   SlidingWindowTaskQueue,
   previewAndApplyCanonRipple,
   computeChapterPipelineProgress,
+  COLAB_L4_MODEL_CATALOG,
+  AGY_CLI_MODEL_CATALOG,
+  DEFAULT_LLM_PROVIDER_CONFIG,
+  generateColabL4LaunchScript,
+  normalizeColabEndpointUrl,
+  sanitizeRawChapterText,
+  parseEpubArchiveToChaptersAsync,
   type GlossaryCategory,
   type GrammaticalGender,
   type ScoutedTerm,
@@ -52,6 +69,7 @@ import {
   type CsiCulturalNote,
   type DitingQualityReport,
   type SlidingWindowQueueTelemetry,
+  type LlmProviderConfig,
 } from '@/lib/qa-linter';
 import {
   INITIAL_NOVELS,
@@ -134,6 +152,12 @@ export default function PipelineStudioApp() {
     `Chapter 8: Refining the Foundation Establishment Pill\nInside the Stone Demon Sect, Lin Xuan used 45 Spirit Stones and the Black Iron Cauldron weighing 50 jin to refine a Tier 2 Low Grade pill with a 90% success rate.\n\nChapter 9: Entering the Inner Sect\nElder Zhao and Su Qingxue welcomed Lin Xuan into the Inner Sect after he reached the 7th layer of Qi Refining with 500 Origin Points.`
   );
   const [uploadedFileCount, setUploadedFileCount] = useState<number>(0);
+  const [sanitizeOnImport, setSanitizeOnImport] = useState<boolean>(true);
+  const [sanitizedRemovedCount, setSanitizedRemovedCount] = useState<number>(0);
+
+  // Glossary Stop-Gate Modal before Batch Translation (Q3: A & Q7: C)
+  const [showStopGateModal, setShowStopGateModal] = useState<boolean>(false);
+  const [stopGateTerms, setStopGateTerms] = useState<ScoutedTerm[]>([]);
 
   // Add Novel Modal
   const [showAddNovelModal, setShowAddNovelModal] = useState(false);
@@ -141,8 +165,35 @@ export default function PipelineStudioApp() {
   const [newNovelRusTitle, setNewNovelRusTitle] = useState('');
   const [newNovelGenre, setNewNovelGenre] = useState<GenrePreset>('xianxia');
 
+  // Google Colab L4 (24GB VRAM) & Multi-Model Provider Configuration
+  const [llmConfig, setLlmConfig] = useState<LlmProviderConfig>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedLlm = localStorage.getItem('xianxia_colab_llm_config_v1');
+        if (savedLlm) {
+          const parsed = JSON.parse(savedLlm) as Partial<LlmProviderConfig>;
+          return { ...DEFAULT_LLM_PROVIDER_CONFIG, ...parsed };
+        }
+      } catch {
+        // ignore storage errors
+      }
+    }
+    return DEFAULT_LLM_PROVIDER_CONFIG;
+  });
+  const [showColabModal, setShowColabModal] = useState<boolean>(false);
+  const [copiedColabScript, setCopiedColabScript] = useState<boolean>(false);
+  const [colabPingState, setColabPingState] = useState<{
+    loading: boolean;
+    ok?: boolean;
+    latencyMs?: number;
+    runtime?: string;
+    models?: string[];
+    error?: string;
+  } | null>(null);
+
   const abortRef = useRef<boolean>(false);
   const backupInputRef = useRef<HTMLInputElement | null>(null);
+  const driveBundleInputRef = useRef<HTMLInputElement | null>(null);
   const schedulerRef = useRef<SlidingWindowTaskQueue>(
     new SlidingWindowTaskQueue({
       concurrency: 3,
@@ -154,10 +205,73 @@ export default function PipelineStudioApp() {
     useState<SlidingWindowQueueTelemetry | null>(null);
 
   useEffect(() => {
+    try {
+      localStorage.setItem('xianxia_colab_llm_config_v1', JSON.stringify(llmConfig));
+    } catch {
+      // ignore storage errors
+    }
+  }, [llmConfig]);
+
+  const handlePingColabServer = async () => {
+    const cleanUrl = normalizeColabEndpointUrl(llmConfig.colabEndpointUrl || '');
+    if (!cleanUrl) {
+      setColabPingState({
+        loading: false,
+        ok: false,
+        error: 'Вставьте ссылку на туннель из вывода ячейки Google Colab (например, https://xxxx.trycloudflare.com).',
+      });
+      return;
+    }
+    setColabPingState({ loading: true });
+    try {
+      const res = await fetch('/api/pipeline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'ping_colab',
+          engText: '',
+          glossary: activeNovel.glossary,
+          llmConfig: {
+            ...llmConfig,
+            colabEndpointUrl: cleanUrl,
+          },
+        }),
+      });
+      const data = await res.json();
+      setColabPingState({
+        loading: false,
+        ok: Boolean(data.ok),
+        latencyMs: data.latencyMs,
+        runtime: data.runtime,
+        models: data.models,
+        error: data.error,
+      });
+      if (data.ok) {
+        appendLog(
+          'COLAB L4',
+          `Связь с сервером ${cleanUrl} установлена (${data.latencyMs} мс · модели в VRAM: ${(data.models || []).join(', ') || llmConfig.modelId}).`,
+          'success'
+        );
+      }
+    } catch {
+      setColabPingState({
+        loading: false,
+        ok: false,
+        error: 'Ошибка запроса к /api/pipeline при проверке туннеля Colab.',
+      });
+    }
+  };
+
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
     let mounted = true;
     loadNovelsFromStorage(INITIAL_NOVELS).then(({ novels: saved }) => {
-      if (mounted && Array.isArray(saved) && saved.length > 0) {
-        setNovels(saved);
+      if (mounted) {
+        if (Array.isArray(saved) && saved.length > 0) {
+          setNovels(saved);
+        }
+        setIsHydrated(true);
       }
     });
     return () => {
@@ -166,20 +280,16 @@ export default function PipelineStudioApp() {
   }, []);
 
   useEffect(() => {
-    saveNovelsToStorage(novels);
-  }, [novels]);
+    if (isHydrated) {
+      saveNovelsToStorage(novels);
+    }
+  }, [novels, isHydrated]);
 
-  const activeNovel = useMemo(
-    () => novels.find((n) => n.id === activeNovelId) || novels[0],
-    [novels, activeNovelId]
-  );
+  const activeNovel = novels.find((n) => n.id === activeNovelId) || novels[0];
 
-  const activeChapter = useMemo(
-    () =>
-      activeNovel.chapters.find((c) => c.id === selectedChapterId) ||
-      activeNovel.chapters[0],
-    [activeNovel, selectedChapterId]
-  );
+  const activeChapter =
+    activeNovel.chapters.find((c) => c.id === selectedChapterId) ||
+    activeNovel.chapters[0];
 
   const appendLog = (
     phase: string,
@@ -345,443 +455,68 @@ export default function PipelineStudioApp() {
     setIsRunningPipeline(true);
     abortRef.current = false;
 
-    appendLog(
-      'СТАРТ',
-      `Пакетная обработка (${targetChapters.length} гл.) · Жанр: ${GENRE_PRESET_LABELS[activeNovel.genrePreset].title} · Тон: ${PROSE_TONE_LABELS[activeNovel.proseTone].title}.`,
-      'info'
-    );
+    const transport = new FetchPipelineTransportAdapter({
+      baseUrl: '/api/pipeline',
+      queue: schedulerRef.current,
+    });
 
-    let workingGlossary = { ...activeNovel.glossary };
-    let workingGlossaryMeta = { ...activeNovel.glossaryMeta };
-    let workingScouted = [...activeNovel.scoutedTerms];
+    try {
+      const res = await runPipelineBatchOnNovel({
+        novel: activeNovel,
+        targetChapterIds: targetChapters.map((c) => c.id),
+        mode,
+        autoCanonEnabled,
+        twoPassCriticEnabled,
+        llmConfig,
+        transport,
+        shouldAbort: () => abortRef.current,
+        onProgress: (event) => {
+          setQueueTelemetry(schedulerRef.current.getTelemetry());
+          if (event.type === 'start') {
+            appendLog(
+              'СТАРТ',
+              `Пакетная обработка (${event.totalChapters} гл.) · Жанр: ${GENRE_PRESET_LABELS[event.genrePreset].title} · Тон: ${PROSE_TONE_LABELS[event.proseTone].title}.`,
+              'info'
+            );
+          } else if (event.type === 'chapter_start') {
+            setRunningChapterId(event.chapterId);
+          } else if (event.type === 'phase_step') {
+            setActivePhaseStep(event.step);
+          } else if (event.type === 'log') {
+            appendLog(
+              event.tag,
+              event.message,
+              event.level === 'error' ? 'warn' : event.level
+            );
+          } else if (event.type === 'chapter_complete') {
+            updateActiveNovel((prev) => ({
+              ...prev,
+              chapters: prev.chapters.map((c) =>
+                c.id === event.chapterId ? event.chapter : c
+              ),
+            }));
+          } else if (event.type === 'batch_complete') {
+            updateActiveNovel(() => event.updatedNovel);
+          } else if (event.type === 'aborted') {
+            appendLog('СТОП', 'Выполнение остановлено пользователем.', 'warn');
+          }
+        },
+      });
 
-    // Phase 0: Lookahead Batch Pre-Scouting across the entire chapter range
-    if (
-      (mode === 'full_5_phase' || mode === 'scout_only') &&
-      targetChapters.length > 1 &&
-      autoCanonEnabled
-    ) {
-      const lookahead = batchLookaheadScoutChapters(
-        targetChapters,
-        workingGlossary,
-        workingScouted
+      if (res?.updatedNovel) {
+        updateActiveNovel(() => res.updatedNovel);
+      }
+    } catch (err) {
+      appendLog(
+        'ОШИБКА',
+        `Сбой пакета конвейера: ${err instanceof Error ? err.message : String(err)}`,
+        'warn'
       );
-      if (lookahead.autoPromotedCount > 0) {
-        lookahead.discoveredTerms.forEach((dt) => {
-          workingGlossary = {
-            ...workingGlossary,
-            [dt.category]: {
-              ...(workingGlossary[dt.category] || {}),
-              [dt.eng]: dt.rus_suggested,
-            },
-          };
-          if (dt.gender) {
-            workingGlossaryMeta = {
-              ...workingGlossaryMeta,
-              [dt.eng]: {
-                ...workingGlossaryMeta[dt.eng],
-                gender: dt.gender,
-              },
-            };
-          }
-        });
-        workingScouted = [...workingScouted, ...lookahead.discoveredTerms];
-        updateActiveNovel((novel) => ({
-          ...novel,
-          glossary: workingGlossary,
-          glossaryMeta: workingGlossaryMeta,
-          scoutedTerms: workingScouted,
-        }));
-        appendLog(
-          'ПРЕ-СКАУТ',
-          `Lookahead-сканирование пакета (${targetChapters.length} гл.): до старта перевода в канон зачислено ${lookahead.autoPromotedCount} сквозных терминов (точность ≥95%).`,
-          'success'
-        );
-      }
+    } finally {
+      setRunningChapterId(null);
+      setActivePhaseStep(0);
+      setIsRunningPipeline(false);
     }
-
-    // Track rolling chapter memory & live hero state ledger across chapters in the batch
-    let rollingMemory = '';
-    let workingLedger = activeNovel.heroLedger;
-    const sortedAll = [...activeNovel.chapters].sort((a, b) => a.number - b.number);
-    const firstTargetIdx = sortedAll.findIndex((c) => c.id === targetChapters[0]?.id);
-    if (firstTargetIdx > 0 && sortedAll[firstTargetIdx - 1]?.summary) {
-      rollingMemory = sortedAll[firstTargetIdx - 1].summary || '';
-    }
-
-    for (const ch of targetChapters) {
-      if (abortRef.current) {
-        appendLog('СТОП', 'Выполнение остановлено пользователем.', 'warn');
-        break;
-      }
-
-      setRunningChapterId(ch.id);
-      const label = `Глава ${ch.subPart || ch.number}`;
-
-      // Phase 1: Scouting (TransAgents Addition-by-Subtraction Agent A + Agent S) + Auto-Canon >= 92%
-      if (mode === 'full_5_phase' || mode === 'scout_only') {
-        setActivePhaseStep(1);
-        try {
-          setQueueTelemetry(schedulerRef.current.getTelemetry());
-          const res = await schedulerRef.current.add(
-            () =>
-              fetch('/api/pipeline', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  action: 'scout',
-                  engText: ch.engText,
-                  chapterNumber: ch.number,
-                  glossary: workingGlossary,
-                  scoutedTerms: workingScouted,
-                  genrePreset: activeNovel.genrePreset,
-                }),
-              }),
-            { priority: 2, label: `scout-ch-${ch.number}` }
-          );
-          setQueueTelemetry(schedulerRef.current.getTelemetry());
-          const data = await res.json();
-          const newTerms: ScoutedTerm[] = (data.discoveredTerms || []).map(
-            (
-              t: {
-                eng: string;
-                rus_suggested: string;
-                category: GlossaryCategory;
-                gender?: GrammaticalGender;
-                context_snippet: string;
-                confidence?: number;
-              },
-              i: number
-            ) => {
-              const conf = t.confidence || 0.93;
-              const autoApproved =
-                autoCanonEnabled && conf >= activeNovel.autoApproveThreshold;
-              return {
-                id: `scout-${Date.now()}-${i}`,
-                eng: t.eng,
-                rus_suggested: t.rus_suggested,
-                category: t.category || 'system_and_terms',
-                gender: t.gender || 'M',
-                chapter_first_seen: ch.number,
-                context_snippet: t.context_snippet || ch.titleEng,
-                approved_for_glossary: autoApproved,
-                confidence: conf,
-              };
-            }
-          );
-
-          const autoPromotedCount = newTerms.filter((t) => t.approved_for_glossary).length;
-
-          const existingEng = new Set(workingScouted.map((st) => st.eng.toLowerCase()));
-          const filteredNew = newTerms.filter(
-            (nt) => !existingEng.has(nt.eng.toLowerCase())
-          );
-          const nextGlossary = { ...workingGlossary };
-          const nextMeta = { ...workingGlossaryMeta };
-
-          const updatedExistingScouted = workingScouted.map((st) => {
-            if (
-              autoCanonEnabled &&
-              !st.approved_for_glossary &&
-              st.confidence >= activeNovel.autoApproveThreshold
-            ) {
-              nextGlossary[st.category] = {
-                ...(nextGlossary[st.category] || {}),
-                [st.eng]: st.rus_suggested,
-              };
-              if (st.gender) {
-                nextMeta[st.eng] = {
-                  ...nextMeta[st.eng],
-                  gender: st.gender,
-                };
-              }
-              return { ...st, approved_for_glossary: true };
-            }
-            return st;
-          });
-
-          filteredNew.forEach((nt) => {
-            if (nt.approved_for_glossary) {
-              nextGlossary[nt.category] = {
-                ...(nextGlossary[nt.category] || {}),
-                [nt.eng]: nt.rus_suggested,
-              };
-              if (nt.gender) {
-                nextMeta[nt.eng] = { gender: nt.gender };
-              }
-            }
-          });
-
-          workingGlossary = nextGlossary;
-          workingGlossaryMeta = nextMeta;
-          workingScouted = [...updatedExistingScouted, ...filteredNew];
-
-          updateActiveNovel((novel) => ({
-            ...novel,
-            glossary: workingGlossary,
-            glossaryMeta: workingGlossaryMeta,
-            scoutedTerms: workingScouted,
-            chapters: novel.chapters.map((item) =>
-              item.id === ch.id ? { ...item, scouted: true } : item
-            ),
-          }));
-
-          appendLog(
-            'СКАУТ A−S',
-            `${label}: Сложение через вычитание (Агент A: ${data.addedRecallCount ?? newTerms.length}, Агент S отсеял шума: ${data.subtractedNoiseCount ?? 0}, чисто: ${newTerms.length}${autoPromotedCount > 0 ? `, авто-канон: +${autoPromotedCount}` : ''}).`,
-            'success'
-          );
-        } catch {
-          appendLog('СКАУТ', `${label}: скаутинг завершён.`, 'info');
-        }
-
-        if (mode === 'scout_only') continue;
-      }
-
-      if (abortRef.current) break;
-
-      let workingRus = ch.rusText;
-      let workingTitleRus = ch.titleRus;
-      let workingSummary = ch.summary || '';
-      const workingHistory: ChapterVersionSnapshot[] = [...(ch.versionHistory || [])];
-      const stepTimeStr = new Date().toISOString().slice(0, 16).replace('T', ' ');
-
-      if (
-        ch.rusText.trim() &&
-        !workingHistory.some((v) => v.rusText.trim() === ch.rusText.trim())
-      ) {
-        const preLint = runQaLinter(ch.engText, ch.rusText, workingGlossary, {
-          enabledRuleIds: activeNovel.enabledRuleIds,
-          glossaryMeta: workingGlossaryMeta,
-        });
-        workingHistory.push({
-          id: `ver-pre-${ch.id}-${Date.now()}`,
-          timestamp: ch.lastUpdated || stepTimeStr,
-          stageLabel: 'Исходная редакция (до запуска конвейера)',
-          titleRus: ch.titleRus,
-          rusText: ch.rusText,
-          wordCountRus: ch.rusText.trim().split(/\s+/).length,
-          qaPassed: preLint.passed,
-          qaErrorCount: preLint.errorCount,
-        });
-      }
-
-      let workingSummaryEng = ch.summaryEng || '';
-      let workingCsiNotes: CsiCulturalNote[] | undefined = ch.csiNotes;
-      let workingDitingReport: DitingQualityReport | undefined = ch.ditingReport;
-
-      // Phase 2 & 3: Chapter-Sliced Glossary + DelTA 4-Level Memory + 3-Role LCD-MAS (Translator + Critic + CHORUS CSI)
-      if (mode === 'full_5_phase' && !ch.translated) {
-        setActivePhaseStep(2);
-        const curIdx = sortedAll.findIndex((c) => c.id === ch.id);
-        const prevCh = curIdx > 0 ? sortedAll[curIdx - 1] : null;
-        const earlierChs = curIdx > 0 ? sortedAll.slice(0, curIdx) : [];
-        const deltaPacket = buildDelTAContextPacket(
-          ch.engText,
-          prevCh,
-          earlierChs,
-          workingGlossary,
-          3
-        );
-        setQueueTelemetry(schedulerRef.current.getTelemetry());
-        const res = await schedulerRef.current.add(
-          () =>
-            fetch('/api/pipeline', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'translate_and_edit',
-                engText: ch.engText,
-                titleEng: ch.titleEng,
-                chapterNumber: ch.number,
-                glossary: workingGlossary,
-                glossaryMeta: workingGlossaryMeta,
-                scoutedTerms: workingScouted,
-                styleGuideMd: activeNovel.styleGuideMd,
-                genrePreset: activeNovel.genrePreset,
-                proseTone: activeNovel.proseTone,
-                previousChapterSummary:
-                  rollingMemory || deltaPacket.bilingualSummary.rus,
-                previousChapterSummaryEng: deltaPacket.bilingualSummary.eng,
-                deltaShortTermWindow: deltaPacket.shortTermWindow,
-                deltaLongTermMemories: deltaPacket.longTermMemories,
-                enabledRuleIds: activeNovel.enabledRuleIds,
-                twoPassCritic: twoPassCriticEnabled,
-                heroLedger: workingLedger,
-              }),
-            }),
-          { priority: 1, label: `lcd-mas-ch-${ch.number}` }
-        );
-        setQueueTelemetry(schedulerRef.current.getTelemetry());
-        const data = await res.json();
-        if (data.rusText) {
-          workingRus = data.rusText;
-          workingTitleRus = data.titleRus || ch.titleRus;
-          const bilingual = generateBilingualChapterSummary(
-            ch.number,
-            ch.titleEng,
-            ch.engText,
-            workingTitleRus,
-            workingRus
-          );
-          workingSummary = data.summary || bilingual.rus;
-          workingSummaryEng = data.summaryEng || bilingual.eng;
-          if (Array.isArray(data.csiNotes)) {
-            workingCsiNotes = data.csiNotes;
-          }
-          if (data.ditingReport) {
-            workingDitingReport = data.ditingReport;
-          }
-          rollingMemory = workingSummary;
-          const draftLint = runQaLinter(ch.engText, workingRus, workingGlossary, {
-            enabledRuleIds: activeNovel.enabledRuleIds,
-            glossaryMeta: workingGlossaryMeta,
-          });
-          workingHistory.push({
-            id: `ver-p3-${ch.id}-${Date.now()}`,
-            timestamp: stepTimeStr,
-            stageLabel: twoPassCriticEnabled
-              ? '3-шаговый конвейер LCD-MAS + CSI (Фаза 2–3)'
-              : 'Черновой перевод (Фаза 2)',
-            titleRus: workingTitleRus,
-            rusText: workingRus,
-            wordCountRus: workingRus.trim().split(/\s+/).length,
-            qaPassed: draftLint.passed,
-            qaErrorCount: draftLint.errorCount,
-          });
-          appendLog(
-            'LCD-MAS',
-            `${label}: 3-агентный перевод завершён (DelTA ок: ${deltaPacket.shortTermWindow.length} абз., CSI сносок: ${workingCsiNotes?.length ?? 0}, DITING: ${workingDitingReport?.overallScore ?? 95}/100).`,
-            'success'
-          );
-        }
-      }
-
-      if (abortRef.current) break;
-
-      // Phase 4: Surgical Paragraph Auto-Repair + Zero-Leakage Gatekeeper + Auto-De-Tautologizer
-      setActivePhaseStep(4);
-      const initialLint = runQaLinter(ch.engText, workingRus, workingGlossary, {
-        enabledRuleIds: activeNovel.enabledRuleIds,
-        glossaryMeta: workingGlossaryMeta,
-      });
-      if (!initialLint.passed) {
-        const surgical = surgicalRepairDriftedParagraphs(
-          ch.engText,
-          workingRus,
-          workingGlossary,
-          workingGlossaryMeta,
-          activeNovel.enabledRuleIds
-        );
-        const { repairedText, appliedFixes } = autoRepairRussianText(
-          surgical.repairedRusText,
-          {
-            glossary: workingGlossary,
-            glossaryMeta: workingGlossaryMeta,
-            enabledRuleIds: activeNovel.enabledRuleIds,
-          }
-        );
-        workingRus = repairedText;
-        const totalFixCount = surgical.details.length + appliedFixes.length;
-        appendLog(
-          'АВТО-РЕМОНТ',
-          `${label}: точечный ремонт абзацев и QA-линтер применили ${totalFixCount} исправлений (числа, род, тавтологии, латиница).`,
-          'success'
-        );
-      }
-
-      // Phase 5: Verification, Live Hero State Ledger Update & Rolling Summary Commit
-      setActivePhaseStep(5);
-      const finalLint = runQaLinter(ch.engText, workingRus, workingGlossary, {
-        enabledRuleIds: activeNovel.enabledRuleIds,
-        glossaryMeta: workingGlossaryMeta,
-      });
-      if ((!workingSummary || !workingSummaryEng) && workingRus.trim()) {
-        const bilingual = generateBilingualChapterSummary(
-          ch.number,
-          ch.titleEng,
-          ch.engText,
-          workingTitleRus,
-          workingRus
-        );
-        workingSummary = workingSummary || bilingual.rus;
-        workingSummaryEng = workingSummaryEng || bilingual.eng;
-      }
-      if (!workingCsiNotes && workingRus.trim()) {
-        workingCsiNotes = extractCsiCulturalNotes(ch.engText, workingRus, workingGlossary);
-      }
-      if (workingRus.trim()) {
-        workingDitingReport = evaluateDitingQuality(
-          ch.engText,
-          workingRus,
-          workingGlossary,
-          workingGlossaryMeta
-        );
-      }
-      rollingMemory = workingSummary || rollingMemory;
-
-      if (workingRus.trim()) {
-        workingLedger = updateHeroStateLedgerFromChapter(
-          workingLedger,
-          ch.number,
-          ch.engText,
-          workingRus,
-          workingGlossary
-        );
-      }
-
-      const wordsRus = workingRus.trim() ? workingRus.trim().split(/\s+/).length : 0;
-      const nowStr = new Date().toISOString().slice(0, 16).replace('T', ' ');
-
-      if (
-        workingRus.trim() &&
-        !workingHistory.some((v) => v.rusText.trim() === workingRus.trim())
-      ) {
-        workingHistory.push({
-          id: `ver-p5-${ch.id}-${Date.now()}`,
-          timestamp: nowStr,
-          stageLabel: 'Авто-ремонт QA и верификация DITING (Фаза 4–5)',
-          titleRus: workingTitleRus,
-          rusText: workingRus,
-          wordCountRus: wordsRus,
-          qaPassed: finalLint.passed,
-          qaErrorCount: finalLint.errorCount,
-        });
-      }
-
-      const updatedSnapshot: ChapterRecord = {
-        ...ch,
-        titleRus: workingTitleRus,
-        rusText: workingRus,
-        summary: workingSummary,
-        summaryEng: workingSummaryEng,
-        csiNotes: workingCsiNotes,
-        ditingReport: workingDitingReport,
-        versionHistory: workingHistory.slice(-12),
-        scouted: true,
-        translated: Boolean(workingRus.trim()),
-        edited: Boolean(workingRus.trim()),
-        verified: finalLint.passed && Boolean(workingRus.trim()),
-        wordCountRus: wordsRus,
-        lastUpdated: nowStr,
-      };
-      const idxInSorted = sortedAll.findIndex((item) => item.id === ch.id);
-      if (idxInSorted >= 0) {
-        sortedAll[idxInSorted] = updatedSnapshot;
-      }
-
-      updateActiveNovel((novel) => ({
-        ...novel,
-        heroLedger: workingLedger,
-        chapters: novel.chapters.map((item) =>
-          item.id === ch.id ? updatedSnapshot : item
-        ),
-      }));
-    }
-
-    setRunningChapterId(null);
-    setActivePhaseStep(0);
-    setIsRunningPipeline(false);
   };
 
   const handleStartRangePipeline = () => {
@@ -791,67 +526,126 @@ export default function PipelineStudioApp() {
     executePipelineOnChapters(targets, pipelineMode);
   };
 
+  /**
+   * "Стоп-кран глоссария перед переводом" (Q3: A & Q7: C):
+   * Scans the target chapter range, discovers new terms + genders, and pauses for a 1-minute user review
+   * before launching autonomous 2-pass translation.
+   */
+  const handleOpenGlossaryStopGate = () => {
+    const mergedTerms = prepareGlossaryStopGateTerms(activeNovel, startChapter, endChapter);
+    if (mergedTerms.length === 0 && !activeNovel.chapters.some((c) => c.number >= startChapter && c.number <= endChapter)) return;
+
+    setStopGateTerms(mergedTerms);
+    setShowStopGateModal(true);
+    appendLog(
+      'СТОП-КРАН ГЛОССАРИЯ',
+      `Пре-скаут глав ${startChapter}–${endChapter} завершён: найдено ${mergedTerms.length} терминов для 1-минутной сверки перед переводом пакета.`,
+      'info'
+    );
+  };
+
+  const handleApproveStopGateAndTranslate = () => {
+    updateActiveNovel((novel) => {
+      const nextGlossary = { ...novel.glossary };
+      const nextMeta = { ...novel.glossaryMeta };
+      for (const term of stopGateTerms) {
+        if (!term.eng.trim() || !term.rus_suggested.trim()) continue;
+        nextGlossary[term.category] = {
+          ...(nextGlossary[term.category] || {}),
+          [term.eng.trim()]: term.rus_suggested.trim(),
+        };
+        nextMeta[term.eng.trim()] = {
+          ...nextMeta[term.eng.trim()],
+          gender: term.gender || 'M',
+        };
+      }
+      return {
+        ...novel,
+        glossary: nextGlossary,
+        glossaryMeta: nextMeta,
+      };
+    });
+
+    setShowStopGateModal(false);
+    appendLog(
+      'КАНОН УТВЕРЖДЁН',
+      `Утверждено ${stopGateTerms.length} терминов в Стоп-кране глоссария. Запуск 2-проходного перевода глав ${startChapter}–${endChapter}...`,
+      'success'
+    );
+
+    setTimeout(() => {
+      const targets = activeNovel.chapters.filter(
+        (c) => c.number >= startChapter && c.number <= endChapter
+      );
+      executePipelineOnChapters(targets, 'full_5_phase');
+    }, 50);
+  };
+
+  /**
+   * Exports `kanon_project_bundle.json` for the autonomous overnight Google Drive + Colab L4 worker (`Q9: A`).
+   */
+  const handleExportColabDriveBundle = () => {
+    const jsonStr = serializeProjectBundle({
+      novel: activeNovel,
+      llmConfig,
+      format: 'v4.1',
+    });
+    const blob = new Blob([jsonStr], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'kanon_project_bundle.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    appendLog(
+      'GOOGLE DRIVE БАНДЛ',
+      'Выгружен файл kanon_project_bundle.json для автономного ночного воркера в Google Colab L4 (Ячейка 2).',
+      'success'
+    );
+  };
+
+  const handleImportColabDriveBundle = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const raw = await file.text();
+      const res = deserializeProjectBundle(raw);
+      const importedProject = res.activeProject || res.novels[0];
+      if (importedProject) {
+        setNovels((prev) => {
+          const exists = prev.some((n) => n.id === importedProject.id);
+          return exists
+            ? prev.map((n) => (n.id === importedProject.id ? importedProject : n))
+            : [...prev, importedProject];
+        });
+        setActiveNovelId(importedProject.id);
+        appendLog(
+          'GOOGLE DRIVE БАНДЛ',
+          `Импортирован ночной перевод из Google Drive («${importedProject.name}» · глав: ${importedProject.chapters.length}).`,
+          'success'
+        );
+      }
+    } catch {
+      appendLog('ОШИБКА', 'Не удалось прочитать файл kanon_project_bundle.json.', 'warn');
+    }
+  };
+
   const handleRunFullAutopilotRelease = async () => {
     if (isRunningPipeline) return;
     setAutopilotBanner(null);
 
     // Step 1: Detect and auto-merge any split half-chapters (e.g., 7.1 + 7.2 -> Chapter 7)
-    let workingChapters = [...activeNovel.chapters];
-    const splitParts = workingChapters.filter((c) => Boolean(c.subPart));
-    let mergedSplitCount = 0;
-
-    if (splitParts.length >= 2) {
-      const byBaseNumber = new Map<number, ChapterRecord[]>();
-      splitParts.forEach((sp) => {
-        const list = byBaseNumber.get(sp.number) || [];
-        list.push(sp);
-        byBaseNumber.set(sp.number, list);
-      });
-
-      byBaseNumber.forEach((parts, baseNum) => {
-        if (parts.length >= 2) {
-          const [partA, partB] = parts.sort((a, b) =>
-            (a.subPart || '').localeCompare(b.subPart || '')
-          );
-          const merged = mergeSplitChapters(
-            { title: partA.titleEng, engText: partA.engText, rusText: partA.rusText },
-            { title: partB.titleEng, engText: partB.engText, rusText: partB.rusText },
-            baseNum
-          );
-          const mergedRec: ChapterRecord = {
-            id: `ch-merged-${baseNum}-${Date.now()}`,
-            number: baseNum,
-            titleEng: merged.titleEng,
-            titleRus: `Глава ${baseNum}. Врата Тайного Царства и Девятилистная Духовная Трава`,
-            engText: merged.engText,
-            rusText: merged.rusText,
-            scouted: false,
-            translated: Boolean(merged.rusText.trim()),
-            edited: Boolean(merged.rusText.trim()),
-            verified: false,
-            wordCountEng: merged.engText.split(/\s+/).length,
-            wordCountRus: merged.rusText ? merged.rusText.split(/\s+/).length : 0,
-            lastUpdated: new Date().toISOString().slice(0, 16).replace('T', ' '),
-          };
-          workingChapters = [
-            ...workingChapters.filter((c) => c.id !== partA.id && c.id !== partB.id),
-            mergedRec,
-          ].sort((a, b) => a.number - b.number);
-          mergedSplitCount++;
-        }
-      });
-
-      if (mergedSplitCount > 0) {
-        updateActiveNovel((novel) => ({
-          ...novel,
-          chapters: workingChapters,
-        }));
-        appendLog(
-          'АВТО-СКЛЕЙКА',
-          `Автопилот автоматически объединил дробные главы (${mergedSplitCount} склеек: 7.1 + 7.2 → Глава 7).`,
-          'success'
-        );
-      }
+    const { updatedNovel: mergedNovel, mergedCount: mergedSplitCount } = autoMergeSplitChaptersInNovel(activeNovel);
+    let workingChapters = mergedNovel.chapters;
+    if (mergedSplitCount > 0) {
+      updateActiveNovel(() => mergedNovel);
+      appendLog(
+        'АВТО-СКЛЕЙКА',
+        `Автопилот автоматически объединил дробные главы (${mergedSplitCount} склеек: 7.1 + 7.2 → Глава 7).`,
+        'success'
+      );
     }
 
     // Step 2: Select all chapters that need translation or QA repair
@@ -1095,12 +889,11 @@ export default function PipelineStudioApp() {
   };
 
   const handleExportProjectBackup = () => {
-    const payload = {
-      studio_version: '2.5-idb',
-      exported_at: new Date().toISOString(),
+    const jsonStr = serializeProjectBundle({
       novels,
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      format: 'v2.5',
+    });
+    const blob = new Blob([jsonStr], {
       type: 'application/json',
     });
     const url = URL.createObjectURL(blob);
@@ -1117,12 +910,8 @@ export default function PipelineStudioApp() {
     if (!file) return;
     try {
       const text = await file.text();
-      const parsed = JSON.parse(text);
-      const importedNovels: NovelProject[] = Array.isArray(parsed)
-        ? parsed
-        : Array.isArray(parsed?.novels)
-          ? parsed.novels
-          : [];
+      const res = deserializeProjectBundle(text);
+      const importedNovels = res.novels;
       if (importedNovels.length > 0) {
         setNovels(importedNovels);
         setActiveNovelId(importedNovels[0].id);
@@ -1207,21 +996,55 @@ export default function PipelineStudioApp() {
     if (!files || files.length === 0) return;
 
     const items: Array<{ filename: string; content: string }> = [];
+    let removedJunkTotal = 0;
+    const maxExistingNum = activeNovel.chapters.reduce(
+      (max, c) => Math.max(max, c.number),
+      0
+    );
+    let nextChapNum = maxExistingNum + 1;
+
     for (let i = 0; i < files.length; i++) {
       const f = files[i];
-      const text = await f.text();
-      items.push({ filename: f.name, content: text });
+      if (f.name.toLowerCase().endsWith('.epub')) {
+        try {
+          const buf = new Uint8Array(await f.arrayBuffer());
+          const epubRes = await parseEpubArchiveToChaptersAsync(buf);
+          removedJunkTotal += epubRes.totalRemovedJunkLines;
+          for (const ch of epubRes.chapters) {
+            items.push({
+              filename: ch.href,
+              content: `Chapter ${nextChapNum++}: ${ch.titleEng}\n${ch.engText}`,
+            });
+          }
+          appendLog(
+            'ИМПОРТ EPUB',
+            `Книга «${epubRes.bookTitle}» (${f.name}): распаковано ${epubRes.chapters.length} глав, очищено ${epubRes.totalRemovedJunkLines} строк мусора/водяных знаков.`,
+            'success'
+          );
+        } catch {
+          appendLog('ОШИБКА EPUB', `Не удалось распаковать архив ${f.name}.`, 'warn');
+        }
+      } else {
+        const rawText = await f.text();
+        const processed = sanitizeOnImport
+          ? sanitizeRawChapterText(rawText)
+          : { cleanedText: rawText, removedLinesCount: 0 };
+        removedJunkTotal += processed.removedLinesCount;
+        items.push({ filename: f.name, content: processed.cleanedText });
+      }
     }
+
     const combinedPreview = items
       .map((it) =>
         /^Chapter\s+\d+/i.test(it.content.trim())
           ? it.content.trim()
-          : `Chapter ${it.filename.replace(/\D+/g, '') || 8}: ${it.filename}\n${it.content.trim()}`
+          : `Chapter ${it.filename.replace(/\D+/g, '') || nextChapNum++}: ${it.filename}\n${it.content.trim()}`
       )
       .join('\n\n');
 
     setBulkRawText(combinedPreview);
     setUploadedFileCount(files.length);
+    setSanitizedRemovedCount(removedJunkTotal);
   };
 
   const handleCreateOrBulkImportChapters = (e: React.FormEvent) => {
@@ -1230,14 +1053,17 @@ export default function PipelineStudioApp() {
 
     if (importMode === 'single') {
       if (!newChTitleEng.trim() || !newChEngText.trim()) return;
+      const sanitizedSingle = sanitizeOnImport
+        ? sanitizeRawChapterText(newChEngText)
+        : { cleanedText: newChEngText.trim(), removedLinesCount: 0 };
       const id = `ch-${newChNum}-${Date.now()}`;
-      const words = newChEngText.trim().split(/\s+/).length;
+      const words = sanitizedSingle.cleanedText.split(/\s+/).filter(Boolean).length;
       const record: ChapterRecord = {
         id,
         number: newChNum,
         titleEng: newChTitleEng.trim(),
         titleRus: `Глава ${newChNum}`,
-        engText: newChEngText.trim(),
+        engText: sanitizedSingle.cleanedText,
         rusText: '',
         scouted: false,
         translated: false,
@@ -1257,13 +1083,16 @@ export default function PipelineStudioApp() {
       return;
     }
 
-    // Bulk import mode
+    // Bulk import mode (with optional sanitizer pass on pasted text)
     const maxExistingNum = activeNovel.chapters.reduce(
       (max, c) => Math.max(max, c.number),
       0
     );
+    const sanitizedBulk = sanitizeOnImport
+      ? sanitizeRawChapterText(bulkRawText)
+      : { cleanedText: bulkRawText, removedLinesCount: 0 };
     const parsedList = parseBulkChaptersInput(
-      [{ content: bulkRawText }],
+      [{ content: sanitizedBulk.cleanedText }],
       maxExistingNum + 1
     );
     if (parsedList.length === 0) return;
@@ -1293,11 +1122,13 @@ export default function PipelineStudioApp() {
 
     setSelectedChapterId(createdRecords[0].id);
     setEndChapter(createdRecords[createdRecords.length - 1].number);
+    const totalCleanCount = sanitizedRemovedCount + sanitizedBulk.removedLinesCount;
     appendLog(
       'ИМПОРТ',
-      `Массово загружено глав: ${createdRecords.length} (Главы ${createdRecords[0].number}–${createdRecords[createdRecords.length - 1].number}).`,
+      `Массово загружено глав: ${createdRecords.length} (Главы ${createdRecords[0].number}–${createdRecords[createdRecords.length - 1].number})${totalCleanCount > 0 ? ` · Автоочистка удалила ${totalCleanCount} строк мусора/TL Note` : ''}.`,
       'success'
     );
+    setSanitizedRemovedCount(0);
     setShowAddChapterModal(false);
   };
 
@@ -1555,6 +1386,24 @@ export default function PipelineStudioApp() {
           <div className="flex flex-wrap lg:flex-nowrap items-center gap-1 shrink-0">
             <button
               type="button"
+              onClick={() => setShowColabModal(true)}
+              className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+                (llmConfig.provider === 'colab_ollama' && llmConfig.colabEndpointUrl?.trim()) ||
+                llmConfig.provider === 'antigravity_cli'
+                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
+                  : 'border-[#D99B26]/30 bg-[#D99B26]/10 text-[#F1F5F9] hover:bg-[#D99B26]/20'
+              }`}
+              title="Настроить провайдер ИИ: локальный Antigravity CLI (agy), выделенный сервер Google Colab L4 или облачный Gemini API"
+            >
+              <Cpu className="h-3.5 w-3.5 text-[#D99B26]" />
+              {llmConfig.provider === 'antigravity_cli'
+                ? `agy CLI · ${llmConfig.modelId || 'gemini-3.8-flash-high'} → ${llmConfig.criticModelId || 'gemini-4-argon-medium'}`
+                : llmConfig.provider === 'colab_ollama'
+                  ? `Colab L4 · ${llmConfig.modelId}`
+                  : 'AI Studio API'}
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 setImportMode('bulk');
                 setShowAddChapterModal(true);
@@ -1716,7 +1565,7 @@ export default function PipelineStudioApp() {
                       onChange={(e) => setAutoCanonEnabled(e.target.checked)}
                       className="h-3.5 w-3.5 rounded border-white/[0.15] bg-[#090A0F] text-[#D99B26] focus:ring-0"
                     />
-                    Авто-канон (A−S)
+                    Авто-канон глоссария
                   </label>
                   <label className="inline-flex items-center gap-1.5 hover:text-[#94A3B8] cursor-pointer select-none">
                     <input
@@ -1725,21 +1574,23 @@ export default function PipelineStudioApp() {
                       onChange={(e) => setTwoPassCriticEnabled(e.target.checked)}
                       className="h-3.5 w-3.5 rounded border-white/[0.15] bg-[#090A0F] text-[#D99B26] focus:ring-0"
                     />
-                    LCD-MAS (3 агента)
-                  </label>
-                  <label className="inline-flex items-center gap-1.5 hover:text-[#94A3B8] cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={parallelBatchEnabled}
-                      onChange={(e) => setParallelBatchEnabled(e.target.checked)}
-                      className="h-3.5 w-3.5 rounded border-white/[0.15] bg-[#090A0F] text-[#D99B26] focus:ring-0"
-                    />
-                    Очередь SW ({queueTelemetry?.requestsInCurrentWindow ?? 0}/15 RPM)
+                    2 прохода (Точность + Хирург-редактор)
                   </label>
                 </div>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  disabled={isRunningPipeline}
+                  onClick={handleOpenGlossaryStopGate}
+                  title="Пре-скаут глав и 1-минутная проверка новых имён и рода (М/Ж) перед запуском перевода пакета"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-500/20 disabled:opacity-50 transition-colors whitespace-nowrap shrink-0"
+                >
+                  <ShieldCheck className="h-3.5 w-3.5 text-[#D99B26]" />
+                  Стоп-кран глоссария
+                </button>
+
                 <button
                   type="button"
                   disabled={isRunningPipeline}
@@ -2134,6 +1985,9 @@ export default function PipelineStudioApp() {
               }
             }}
             isPipelineBusy={isRunningPipeline}
+            llmConfig={llmConfig}
+            onAddCanonTerm={handleAddCanonTerm}
+            onApplyCanonRipple={handleApplyCanonRipple}
           />
         )}
 
@@ -2304,23 +2158,36 @@ export default function PipelineStudioApp() {
                     >
                       <Upload className="h-4 w-4 text-amber-400" />
                       <span>
-                        Выберите один или несколько файлов <code className="font-mono">.txt / .md</code>
+                        Выберите книгу <code className="font-mono text-amber-300">.epub</code> или файлы глав <code className="font-mono">.txt / .md</code>
                       </span>
                       {uploadedFileCount > 0 && (
                         <span className="text-emerald-400 font-medium">
                           Загружено файлов: {uploadedFileCount}
+                          {sanitizedRemovedCount > 0
+                            ? ` · Очищено мусора (TL Note/Patreon/Rulate): ${sanitizedRemovedCount} стр.`
+                            : ''}
                         </span>
                       )}
                     </label>
                     <input
                       id="bulk-files-input"
                       type="file"
-                      accept=".txt,.md"
+                      accept=".epub,.txt,.md"
                       multiple
                       onChange={handleFileUploadBatch}
                       className="hidden"
                     />
                   </div>
+
+                  <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={sanitizeOnImport}
+                      onChange={(e) => setSanitizeOnImport(e.target.checked)}
+                      className="rounded border-slate-700 bg-slate-950 text-amber-500"
+                    />
+                    Автоочистка <code className="font-mono text-amber-300">TL Note</code>, Patreon/Discord-рекламы, водяных знаков Rulate и HTML-тегов
+                  </label>
 
                   <div>
                     <label
@@ -2477,6 +2344,556 @@ export default function PipelineStudioApp() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Google Colab L4 (24GB VRAM) & Open-Weights LLM Selector */}
+      {showColabModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="colab-l4-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+        >
+          <div className="w-full max-w-3xl rounded-xl border border-slate-800 bg-[#0F111A] p-6 space-y-5 max-h-[90vh] flex flex-col text-xs text-slate-200">
+            <div className="flex items-start justify-between gap-4 border-b border-white/[0.07] pb-4">
+              <div>
+                <h3
+                  id="colab-l4-modal-title"
+                  className="text-base font-semibold text-slate-100 flex items-center gap-2"
+                >
+                  <Cpu className="h-4 w-4 text-[#D99B26]" />
+                  Выделенный GPU Google Colab L4 (24 ГБ VRAM) и выбор модели
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Обход ошибок <code className="font-mono text-amber-300">503 Model is overloaded</code> и очередей Free Tier за счёт запуска открытых весов напрямую на вашей карте L4 в плане Google AI Ultra.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowColabModal(false)}
+                aria-label="Закрыть окно настройки Colab L4"
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto space-y-5 pr-1 flex-1">
+              {/* Step 1: Provider Switch */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLlmConfig((prev) => ({
+                      ...prev,
+                      provider: 'antigravity_cli',
+                      modelId:
+                        prev.modelId && !prev.modelId.includes(':')
+                          ? prev.modelId
+                          : 'gemini-3.8-flash-high',
+                      criticModelId: prev.criticModelId || 'gemini-4-argon-medium',
+                      scoutModelId:
+                        prev.scoutModelId && !prev.scoutModelId.includes(':')
+                          ? prev.scoutModelId
+                          : 'gemini-3.8-flash-low',
+                    }))
+                  }
+                  className={`rounded-lg border p-3 text-left transition-colors ${
+                    llmConfig.provider === 'antigravity_cli'
+                      ? 'border-emerald-500 bg-emerald-500/10'
+                      : 'border-white/[0.08] bg-[#090A0F] opacity-70 hover:opacity-100'
+                  }`}
+                >
+                  <div className="font-semibold text-emerald-300">
+                    Подписка Antigravity CLI (agy)
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    Локальный headless-режим <code className="font-mono">agy -p</code>: <code className="font-mono text-emerald-300">gemini-3.8-flash</code> на перевод + <code className="font-mono text-amber-300">gemini-4-argon</code> на финальное ревью.
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLlmConfig((prev) => ({
+                      ...prev,
+                      provider: 'colab_ollama',
+                      modelId: prev.modelId.includes(':') ? prev.modelId : 'gemma4:26b-a4b',
+                    }))
+                  }
+                  className={`rounded-lg border p-3 text-left transition-colors ${
+                    llmConfig.provider === 'colab_ollama'
+                      ? 'border-[#D99B26] bg-[#D99B26]/10'
+                      : 'border-white/[0.08] bg-[#090A0F] opacity-70 hover:opacity-100'
+                  }`}
+                >
+                  <div className="font-semibold text-slate-100">
+                    Выделенный Google Colab L4 (Ollama / vLLM)
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    Ноль ошибок 503, без лимита 15 RPM, 24 ГБ VRAM под Gemma 4 / Qwen 3 / TranslateGemma.
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLlmConfig((prev) => ({ ...prev, provider: 'gemini_api' }))
+                  }
+                  className={`rounded-lg border p-3 text-left transition-colors ${
+                    llmConfig.provider === 'gemini_api'
+                      ? 'border-[#D99B26] bg-[#D99B26]/10'
+                      : 'border-white/[0.08] bg-[#090A0F] opacity-70 hover:opacity-100'
+                  }`}
+                >
+                  <div className="font-semibold text-slate-100">
+                    Google AI Studio API (Облачный ключ)
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    Работа через <code className="font-mono">GEMINI_API_KEY</code> с автоматическим экспоненциальным повтором при 503.
+                  </div>
+                </button>
+              </div>
+
+              {/* Step 1.5: Two-Tier Antigravity CLI Configuration */}
+              {llmConfig.provider === 'antigravity_cli' && (
+                <div className="rounded-lg border border-emerald-500/35 bg-emerald-950/15 p-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-semibold text-emerald-200">
+                      Двухконтурная маршрутизация через локальный Antigravity CLI (<code className="font-mono">agy --input-format stream-json</code>)
+                    </span>
+                    <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                      Без расхода API-ключей · Поток stdin без лимита 8 КБ
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label
+                        htmlFor="agy-primary-model-select"
+                        className="block text-[11px] text-slate-300 mb-1"
+                      >
+                        Основная модель (Pass 1 & Self-Repair)
+                      </label>
+                      <select
+                        id="agy-primary-model-select"
+                        value={llmConfig.modelId || 'gemini-3.8-flash-high'}
+                        onChange={(e) =>
+                          setLlmConfig((prev) => ({ ...prev, modelId: e.target.value }))
+                        }
+                        className="w-full rounded border border-white/[0.12] bg-[#090A0F] px-2.5 py-1.5 font-mono text-xs text-emerald-300 focus:border-emerald-400 focus:outline-none"
+                      >
+                        {AGY_CLI_MODEL_CATALOG.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.title}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="agy-critic-model-select"
+                        className="block text-[11px] text-slate-300 mb-1"
+                      >
+                        Тяжёлая проверка в конце (Pass 2 Хирург)
+                      </label>
+                      <select
+                        id="agy-critic-model-select"
+                        value={llmConfig.criticModelId || 'gemini-4-argon-medium'}
+                        onChange={(e) =>
+                          setLlmConfig((prev) => ({
+                            ...prev,
+                            criticModelId: e.target.value,
+                          }))
+                        }
+                        className="w-full rounded border border-white/[0.12] bg-[#090A0F] px-2.5 py-1.5 font-mono text-xs text-amber-300 focus:border-[#D99B26] focus:outline-none"
+                      >
+                        {AGY_CLI_MODEL_CATALOG.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.title}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="agy-scout-model-select"
+                        className="block text-[11px] text-slate-300 mb-1"
+                      >
+                        Пре-скаут терминов (Pass 0)
+                      </label>
+                      <select
+                        id="agy-scout-model-select"
+                        value={llmConfig.scoutModelId || 'gemini-3.8-flash-low'}
+                        onChange={(e) =>
+                          setLlmConfig((prev) => ({
+                            ...prev,
+                            scoutModelId: e.target.value,
+                          }))
+                        }
+                        className="w-full rounded border border-white/[0.12] bg-[#090A0F] px-2.5 py-1.5 font-mono text-xs text-slate-200 focus:border-emerald-400 focus:outline-none"
+                      >
+                        {AGY_CLI_MODEL_CATALOG.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.title}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 2: Endpoint URL & Health Check */}
+              <div className="rounded-lg border border-white/[0.08] bg-[#090A0F] p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label
+                    htmlFor="colab-endpoint-input"
+                    className="font-semibold text-slate-100"
+                  >
+                    1. Адрес туннеля Google Colab L4 (Cloudflare / Ngrok или локальный Ollama)
+                  </label>
+                  <a
+                    href="/colab_l4_translation_server.ipynb"
+                    download="colab_l4_translation_server.ipynb"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-[#D99B26]/40 bg-[#D99B26]/10 px-2.5 py-1 text-[11px] font-semibold text-[#D99B26] hover:bg-[#D99B26]/20"
+                  >
+                    <Download className="h-3 w-3" />
+                    Скачать готовый .ipynb для Colab L4
+                  </a>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    id="colab-endpoint-input"
+                    type="text"
+                    value={llmConfig.colabEndpointUrl}
+                    onChange={(e) =>
+                      setLlmConfig((prev) => ({
+                        ...prev,
+                        colabEndpointUrl: e.target.value,
+                      }))
+                    }
+                    placeholder="https://xxxx-xxxx.trycloudflare.com или http://localhost:11434"
+                    className="flex-1 rounded-md border border-white/[0.1] bg-[#11131C] px-3 py-2 font-mono text-xs text-slate-100 placeholder:text-slate-500 focus:border-[#D99B26] focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    disabled={colabPingState?.loading}
+                    onClick={handlePingColabServer}
+                    className="rounded-md bg-[#D99B26] px-4 py-2 text-xs font-semibold text-[#090A0F] hover:bg-[#E3A836] disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {colabPingState?.loading ? 'Проверка...' : 'Проверить связь с L4'}
+                  </button>
+                </div>
+
+                {colabPingState && !colabPingState.loading && (
+                  <div
+                    className={`rounded-md border px-3 py-2 text-[11px] ${
+                      colabPingState.ok
+                        ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                        : 'border-rose-500/40 bg-rose-500/10 text-rose-300'
+                    }`}
+                  >
+                    {colabPingState.ok ? (
+                      <span>
+                        Связь установлена ({colabPingState.runtime}, пинг{' '}
+                        <strong className="font-mono">{colabPingState.latencyMs} мс</strong>). Загруженные модели:{' '}
+                        <code className="font-mono">
+                          {(colabPingState.models || []).join(', ') || llmConfig.modelId}
+                        </code>
+                      </span>
+                    ) : (
+                      <span>{colabPingState.error}</span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Step 3: Curated L4 24GB VRAM Model Catalog */}
+              <div className="space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-semibold text-slate-100">
+                    2. Рейтинг лучших открытых моделей под 24 ГБ VRAM (NVIDIA L4) для перевода новелл
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-slate-400">Тег модели:</span>
+                    <input
+                      type="text"
+                      aria-label="Пользовательский тег модели Ollama"
+                      value={llmConfig.modelId}
+                      onChange={(e) =>
+                        setLlmConfig((prev) => ({ ...prev, modelId: e.target.value }))
+                      }
+                      className="w-44 rounded border border-white/[0.1] bg-[#090A0F] px-2.5 py-1 font-mono text-xs text-[#D99B26] focus:border-[#D99B26] focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2">
+                  {COLAB_L4_MODEL_CATALOG.map((spec) => {
+                    const isSelected = llmConfig.modelId === spec.ollamaTag;
+                    return (
+                      <div
+                        key={spec.id}
+                        onClick={() =>
+                          setLlmConfig((prev) => ({
+                            ...prev,
+                            provider: 'colab_ollama',
+                            modelId: spec.ollamaTag,
+                          }))
+                        }
+                        className={`rounded-lg border p-3 cursor-pointer transition-colors ${
+                          isSelected
+                            ? 'border-[#D99B26] bg-[#D99B26]/[0.08]'
+                            : 'border-white/[0.07] bg-[#090A0F] hover:border-white/[0.18]'
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-slate-100">
+                              {spec.title}
+                            </span>
+                            <span className="rounded bg-[#D99B26]/20 px-2 py-0.5 text-[10px] font-semibold text-[#D99B26]">
+                              {spec.roleBadge}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 font-mono text-[11px] text-slate-400 tabular-nums">
+                            <span>VRAM: {spec.vramGb}</span>
+                            <span>·</span>
+                            <span className="text-emerald-400">{spec.speedOnL4}</span>
+                            <span>·</span>
+                            <span>Ctx: {spec.contextWindow}</span>
+                          </div>
+                        </div>
+                        <p className="text-[11px] text-slate-300 mt-1.5 leading-relaxed">
+                          <strong className="text-slate-100">Плюсы:</strong> {spec.strengthsRus}
+                        </p>
+                        <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                          <strong className="text-slate-300">Нюанс:</strong> {spec.caveatsRus}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Step 4: 1-Click Colab Cell Script */}
+              <div className="rounded-lg border border-white/[0.08] bg-[#090A0F] p-4 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-slate-100">
+                    3. Готовый код ячейки для Google Colab (GPU L4 · 24 ГБ VRAM)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(
+                        generateColabL4LaunchScript(llmConfig.modelId)
+                      );
+                      setCopiedColabScript(true);
+                      setTimeout(() => setCopiedColabScript(false), 2500);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-white/[0.12] bg-white/[0.05] px-2.5 py-1 text-[11px] font-medium text-slate-100 hover:bg-white/[0.1]"
+                  >
+                    {copiedColabScript ? (
+                      <>
+                        <Check className="h-3.5 w-3.5 text-emerald-400" />
+                        Скопировано!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3.5 w-3.5 text-[#D99B26]" />
+                        Скопировать код для Colab
+                      </>
+                    )}
+                  </button>
+                </div>
+                <pre className="max-h-40 overflow-y-auto rounded bg-[#050609] p-3 font-mono text-[11px] text-slate-300 leading-relaxed">
+                  {generateColabL4LaunchScript(llmConfig.modelId)}
+                </pre>
+              </div>
+
+              {/* Step 5: Autonomous Overnight Google Drive Bundle (Q9: A) */}
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/15 p-4 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <span className="font-semibold text-emerald-200">
+                      4. Автономный ночной перевод через Google Drive (с выключенным ПК)
+                    </span>
+                    <p className="text-[11px] text-slate-300 mt-0.5">
+                      Скачайте <code className="font-mono text-amber-300">kanon_project_bundle.json</code>, положите его в <code className="font-mono">/MyDrive/KanonXianxia/</code> и запустите Ячейку №2 в ноутбуке Colab. После каждой главы Colab атомарно перезаписывает чекпоинт на Google Диске.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleExportColabDriveBundle}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-slate-950 hover:bg-emerald-400"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Скачать бандл для ночного Google Drive
+                  </button>
+                  <input
+                    ref={driveBundleInputRef}
+                    type="file"
+                    accept=".json,application/json"
+                    onChange={handleImportColabDriveBundle}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => driveBundleInputRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-200 hover:bg-emerald-500/20"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    Загрузить готовый бандл с Google Drive
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-white/[0.07]">
+              <span className="text-[11px] text-slate-400 font-mono">
+                Активный движок:{' '}
+                <strong className="text-slate-200">
+                  {llmConfig.provider === 'antigravity_cli'
+                    ? `agy CLI (Pass 1: ${llmConfig.modelId || 'gemini-3.8-flash-high'} · Pass 2: ${llmConfig.criticModelId || 'gemini-4-argon-medium'})`
+                    : llmConfig.provider === 'colab_ollama'
+                      ? `Colab L4 (${llmConfig.modelId})`
+                      : 'Google AI Studio API'}
+                </strong>
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowColabModal(false)}
+                className="rounded-lg bg-[#D99B26] px-4 py-2 text-xs font-semibold text-[#090A0F] hover:bg-[#E3A836]"
+              >
+                Сохранить и закрыть
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Glossary Stop-Gate before Batch Translation (Q3: A & Q7: C) */}
+      {showStopGateModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="stop-gate-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+        >
+          <div className="w-full max-w-3xl rounded-xl border border-slate-800 bg-[#0F111A] p-6 space-y-4 max-h-[88vh] flex flex-col text-xs text-slate-200">
+            <div className="flex items-start justify-between gap-4 border-b border-white/[0.08] pb-3">
+              <div>
+                <h3
+                  id="stop-gate-modal-title"
+                  className="text-base font-semibold text-slate-100 flex items-center gap-2"
+                >
+                  <ShieldCheck className="h-4 w-4 text-[#D99B26]" />
+                  Стоп-кран глоссария перед переводом (Главы {startChapter}–{endChapter})
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Проверьте или поправьте русские названия и грамматический род (М / Ж / Ср / Мн) новых терминов. После нажатия кнопки весь пакет глав переведётся строго по этому канону.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowStopGateModal(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto space-y-2 pr-1 flex-1">
+              {stopGateTerms.length === 0 ? (
+                <div className="rounded-lg border border-white/[0.07] bg-[#090A0F] p-6 text-center text-slate-400">
+                  В главах {startChapter}–{endChapter} все ключевые термины уже находятся в утверждённом глоссарии ({kpiStats.canonCount} записей). Можно сразу запускать перевод!
+                </div>
+              ) : (
+                stopGateTerms.map((term, idx) => (
+                  <div
+                    key={term.id || idx}
+                    className="grid grid-cols-1 sm:grid-cols-12 items-center gap-2 rounded-lg border border-white/[0.08] bg-[#090A0F] p-2.5"
+                  >
+                    <div className="sm:col-span-4 font-mono text-xs text-amber-300 truncate">
+                      {term.eng}
+                    </div>
+                    <div className="sm:col-span-4">
+                      <input
+                        type="text"
+                        aria-label={`Русский перевод для ${term.eng}`}
+                        value={term.rus_suggested}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setStopGateTerms((prev) =>
+                            prev.map((item, i) =>
+                              i === idx ? { ...item, rus_suggested: val } : item
+                            )
+                          );
+                        }}
+                        className="w-full rounded border border-white/[0.12] bg-[#11131C] px-2.5 py-1 text-xs text-slate-100 focus:border-[#D99B26] focus:outline-none"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <select
+                        aria-label={`Род для ${term.eng}`}
+                        value={term.gender || 'M'}
+                        onChange={(e) => {
+                          const g = e.target.value as GrammaticalGender;
+                          setStopGateTerms((prev) =>
+                            prev.map((item, i) =>
+                              i === idx ? { ...item, gender: g } : item
+                            )
+                          );
+                        }}
+                        className="w-full rounded border border-white/[0.12] bg-[#11131C] px-2 py-1 font-mono text-xs text-slate-200"
+                      >
+                        <option value="M">Род: М</option>
+                        <option value="F">Род: Ж</option>
+                        <option value="N">Род: Ср</option>
+                        <option value="PL">Род: Мн</option>
+                      </select>
+                    </div>
+                    <div className="sm:col-span-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setStopGateTerms((prev) => prev.filter((_, i) => i !== idx))
+                        }
+                        className="rounded border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[11px] text-rose-300 hover:bg-rose-500/20"
+                      >
+                        Убрать
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-white/[0.08]">
+              <span className="text-[11px] text-slate-400 font-mono">
+                Новых терминов к утверждению: <strong>{stopGateTerms.length}</strong>
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowStopGateModal(false)}
+                  className="rounded-lg border border-slate-800 px-3.5 py-2 text-xs text-slate-300 hover:text-white"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApproveStopGateAndTranslate}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#D99B26] px-4 py-2 text-xs font-semibold text-[#090A0F] hover:bg-[#E3A836]"
+                >
+                  <Play className="h-3.5 w-3.5 fill-current" />
+                  Утвердить канон и перевести главы {startChapter}–{endChapter}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

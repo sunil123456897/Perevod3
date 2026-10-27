@@ -21,6 +21,7 @@ import {
   Clock,
 } from 'lucide-react';
 import {
+  finalizeAndVerifyChapter,
   runQaLinter,
   autoRepairRussianText,
   surgicalRepairDriftedParagraphs,
@@ -40,6 +41,7 @@ import {
   type GenrePreset,
   type ProseTone,
   type ScoutedTerm,
+  type LlmProviderConfig,
 } from '@/lib/qa-linter';
 import type { ChapterRecord, ChapterVersionSnapshot } from '@/lib/seed-data';
 
@@ -59,6 +61,9 @@ interface ParallelEditorViewProps {
   onSaveChapter: (updated: ChapterRecord) => void;
   onRunSingleChapterPipeline: (chapterId: string) => Promise<void>;
   isPipelineBusy: boolean;
+  llmConfig?: LlmProviderConfig;
+  onAddCanonTerm?: (category: keyof CanonicalGlossary, eng: string, rus: string) => void;
+  onApplyCanonRipple?: (eng: string, newRus: string) => void;
 }
 
 export default function ParallelEditorView({
@@ -77,6 +82,9 @@ export default function ParallelEditorView({
   onSaveChapter,
   onRunSingleChapterPipeline,
   isPipelineBusy,
+  llmConfig,
+  onAddCanonTerm,
+  onApplyCanonRipple,
 }: ParallelEditorViewProps) {
   const [syncedChapterId, setSyncedChapterId] = useState(chapter.id);
   const [syncedParentRus, setSyncedParentRus] = useState(chapter.rusText);
@@ -100,6 +108,34 @@ export default function ParallelEditorView({
   const [repairNotice, setRepairNotice] = useState<string>('');
   const [isAiRepairing, setIsAiRepairing] = useState(false);
   const [lastPreRepairSnapshot, setLastPreRepairSnapshot] = useState<string | null>(null);
+
+  // Quick Canon Term Modal & Canon Ripple (Ctrl+Shift+M)
+  const [showQuickTermModal, setShowQuickTermModal] = useState(false);
+  const [quickTermEng, setQuickTermEng] = useState('');
+  const [quickTermRus, setQuickTermRus] = useState('');
+  const [quickTermCategory, setQuickTermCategory] = useState<keyof CanonicalGlossary>('system_and_terms');
+  const [quickTermRipple, setQuickTermRipple] = useState(true);
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'M' || e.key === 'm')) {
+        e.preventDefault();
+        const sel = window.getSelection()?.toString().trim() || '';
+        if (sel) {
+          if (/[a-zA-Z]/.test(sel)) {
+            setQuickTermEng(sel);
+            setQuickTermRus('');
+          } else {
+            setQuickTermRus(sel);
+            setQuickTermEng('');
+          }
+        }
+        setShowQuickTermModal(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   if (syncedChapterId !== chapter.id) {
     setSyncedChapterId(chapter.id);
@@ -164,6 +200,45 @@ export default function ParallelEditorView({
     () => alignChapterParagraphs(draftEng, draftRus),
     [draftEng, draftRus]
   );
+
+  // Live bilingual summary synchronization with current draft
+  const liveBilingualSummary = useMemo(() => {
+    if (!draftEng.trim() || !draftRus.trim()) return null;
+    return generateBilingualChapterSummary(
+      chapter.number,
+      chapter.titleEng,
+      draftEng,
+      draftTitleRus || `Глава ${chapter.number}`,
+      draftRus
+    );
+  }, [chapter.number, chapter.titleEng, draftEng, draftTitleRus, draftRus]);
+
+  const handleSyncSummaryToDraft = () => {
+    if (liveBilingualSummary) {
+      setDraftSummary(liveBilingualSummary.rus);
+      setRepairNotice('Краткое содержание синхронизировано с текущим текстом.');
+    }
+  };
+
+  const handleSaveQuickTerm = () => {
+    if (!quickTermEng.trim() || !quickTermRus.trim()) return;
+    if (onAddCanonTerm) {
+      onAddCanonTerm(quickTermCategory, quickTermEng.trim(), quickTermRus.trim());
+    }
+    if (quickTermRipple && onApplyCanonRipple) {
+      onApplyCanonRipple(quickTermEng.trim(), quickTermRus.trim());
+    }
+    const re = new RegExp(`\\b${quickTermEng.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\b`, 'gi');
+    if (re.test(draftRus)) {
+      setDraftRus((prev) => prev.replace(re, quickTermRus.trim()));
+    }
+    setShowQuickTermModal(false);
+    setRepairNotice(
+      `Термин «${quickTermEng}» → «${quickTermRus}» добавлен в канон${
+        quickTermRipple ? ' с Canon Ripple' : ''
+      }.`
+    );
+  };
 
   // Tautology & Repetition Radar
   const tautologyItems = useMemo(() => detectTautologies(draftRus), [draftRus]);
@@ -254,30 +329,24 @@ export default function ParallelEditorView({
     const preReport = lintReport;
     setLastPreRepairSnapshot(preText);
     setComparedVersionLabel('Предыдущая редакция (до Авто-ремонта QA)');
-    const surgical = surgicalRepairDriftedParagraphs(
-      draftEng,
-      draftRus,
-      glossary,
-      glossaryMeta,
-      enabledRuleIds
-    );
-    const { repairedText, appliedFixes } = autoRepairRussianText(surgical.repairedRusText, {
+    const verified = finalizeAndVerifyChapter({
+      chapterNumber: chapter.number,
+      titleEng: chapter.titleEng,
+      titleRus: draftTitleRus,
+      engText: draftEng,
+      candidateRusText: draftRus,
       glossary,
       glossaryMeta,
       enabledRuleIds,
+      runSurgicalDriftRepair: true,
+      existingSummaryRus: draftSummary,
+      existingSummaryEng: chapter.summaryEng,
+      aiCsiNotes: chapter.csiNotes,
     });
-    const combinedFixes = [...surgical.details, ...appliedFixes];
-    const postReport = runQaLinter(draftEng, repairedText, glossary, {
-      enabledRuleIds,
-      glossaryMeta,
-    });
-    const nextSummary =
-      draftSummary.trim() ||
-      generateChapterMemorySummary(
-        chapter.number,
-        draftTitleRus || chapter.titleEng,
-        repairedText
-      );
+    const repairedText = verified.rusText;
+    const combinedFixes = verified.appliedFixes;
+    const postReport = verified.lintReport;
+    const nextSummary = verified.summary;
     const nowStr = new Date().toISOString().slice(0, 16).replace('T', ' ');
     const updatedHistory = appendSnapshotsToHistory(versionHistoryList, [
       {
@@ -416,6 +485,7 @@ export default function ParallelEditorView({
           previousChapterSummary: previousChapter?.summary || '',
           styleGuideMd,
           contextMd,
+          llmConfig,
         }),
       });
       const data = await response.json();
@@ -452,12 +522,18 @@ export default function ParallelEditorView({
         });
       }
     } catch {
-      const fallback = autoRepairRussianText(draftRus, {
+      const fallback = finalizeAndVerifyChapter({
+        chapterNumber: chapter.number,
+        titleEng: chapter.titleEng,
+        titleRus: draftTitleRus,
+        engText: draftEng,
+        candidateRusText: draftRus,
         glossary,
         glossaryMeta,
         enabledRuleIds,
+        runSurgicalDriftRepair: true,
       });
-      setDraftRus(fallback.repairedText);
+      setDraftRus(fallback.rusText);
       setEditorMode('inline_diff');
       setRepairNotice('Выполнен локальный авто-ремонт по правилам канона.');
     } finally {
@@ -1437,6 +1513,93 @@ export default function ParallelEditorView({
               }
               return <React.Fragment key={i}>{seg.text}</React.Fragment>;
             })}
+          </div>
+        </div>
+      )}
+
+      {showQuickTermModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl border border-amber-500/30 bg-slate-900 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-sm font-bold text-amber-300 flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-amber-400" />
+                Быстрое добавление в Канон (Ctrl+Shift+M)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowQuickTermModal(false)}
+                className="text-xs text-slate-400 hover:text-slate-200"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-400 mb-1 font-medium">Оригинал (ENG / CJK):</label>
+                <input
+                  type="text"
+                  value={quickTermEng}
+                  onChange={(e) => setQuickTermEng(e.target.value)}
+                  placeholder="e.g. Origin Points, Lin Xuan"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder-slate-500 focus:border-amber-400 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1 font-medium">Канонический русский перевод:</label>
+                <input
+                  type="text"
+                  value={quickTermRus}
+                  onChange={(e) => setQuickTermRus(e.target.value)}
+                  placeholder="например: Очки Истока, Линь Сюань"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder-slate-500 focus:border-amber-400 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1 font-medium">Категория глоссария:</label>
+                <select
+                  value={quickTermCategory}
+                  onChange={(e) => setQuickTermCategory(e.target.value as keyof CanonicalGlossary)}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:border-amber-400 focus:outline-none"
+                >
+                  <option value="characters">Персонажи (characters)</option>
+                  <option value="realms">Ступени культивации (realms)</option>
+                  <option value="sects_and_places">Секты и локации (sects_and_places)</option>
+                  <option value="system_and_terms">Техники и термины (system_and_terms)</option>
+                  <option value="units">Меры и единицы (units)</option>
+                </select>
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer pt-1 text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={quickTermRipple}
+                  onChange={(e) => setQuickTermRipple(e.target.checked)}
+                  className="rounded border-slate-700 text-amber-500 focus:ring-0"
+                />
+                <span>Canon Ripple (каскадная замена во всех главах)</span>
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowQuickTermModal(false)}
+                className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveQuickTerm}
+                disabled={!quickTermEng.trim() || !quickTermRus.trim()}
+                className="rounded-lg bg-amber-500 px-4 py-1.5 text-xs font-semibold text-slate-950 hover:bg-amber-400 disabled:opacity-50"
+              >
+                Внести в Канон
+              </button>
+            </div>
           </div>
         </div>
       )}

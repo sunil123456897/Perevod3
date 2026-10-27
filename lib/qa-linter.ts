@@ -6,6 +6,8 @@
  * Self-contained module testable via `node --test`.
  */
 
+import { type SocialRegisterEdge, buildInflectedRussianForms } from './canon-glossary-vault.ts';
+
 export type GlossaryCategory =
   | 'realms'
   | 'characters'
@@ -15,10 +17,26 @@ export type GlossaryCategory =
 
 export type GrammaticalGender = 'M' | 'F' | 'N' | 'PL';
 
+export interface CharacterSpeechVector {
+  registerLevel: number; // [-1.0 (грубый просторечный) .. +1.0 (высокий архаичный)]
+  sentenceLengthBias: 'clipped_staccato' | 'balanced_conversational' | 'ornate_periodic';
+  ellipsisRate: 'low' | 'medium' | 'high';
+  inversionTendency: 'low' | 'medium' | 'high';
+  preferredParticles: string[]; // e.g. ["же", "-то", "ну", "ведь", "что ли"]
+  forbiddenLexicon: string[];   // e.g. ["окей", "круто", "проблема", "информация"]
+  catchphrasesOrTics?: string[];
+  contrastiveDialogueSamples?: Array<{
+    context: string;
+    badNeutralAi: string;
+    canonicalVoiceRu: string;
+  }>;
+}
+
 export interface GlossaryTermMeta {
   gender?: GrammaticalGender;
   declensionNote?: string; // e.g., "не склоняется" or "род. п.: Су Цинсюэ"
   voiceNote?: string; // e.g., "к ученикам на «ты», архаично-властный тон; к нему все на «вы»"
+  speechVector?: CharacterSpeechVector;
 }
 
 export interface CanonicalGlossary {
@@ -68,7 +86,11 @@ export type LintRuleId =
   | 'CHARACTER_GENDER_MISMATCH'
   | 'PARAGRAPH_DRIFT'
   | 'TAUTOLOGY_RADAR'
-  | 'LATIN_LEAKAGE_AND_BRACKETS';
+  | 'LATIN_LEAKAGE_AND_BRACKETS'
+  | 'DASH_AND_COMMA_INFLATION'
+  | 'SYNTAX_MONOTONY_AND_BURSTINESS'
+  | 'REGISTER_PRONOUN_SHIFT'
+  | 'NOMINALIZATION_AND_INANIMATE_SUBJECT';
 
 export interface LintRuleDefinition {
   id: LintRuleId;
@@ -174,6 +196,30 @@ export const ALL_LINT_RULES: LintRuleDefinition[] = [
     description: 'Исправляет кальки вида «Секта Каменного Демона» на «Секта Каменных Демонов».',
     defaultGenres: ['xianxia', 'korean_murim'],
   },
+  {
+    id: 'DASH_AND_COMMA_INFLATION',
+    title: 'Инфляция тире и искусственные связки (Dash & Comma Inflation)',
+    description: 'Выявляет избыточную плотность не-диалоговых тире (ΔDash ≥ 3 на абзац) и искусственные тире-связки (« — это », « — был »).',
+    defaultGenres: ['xianxia', 'litrpg', 'korean_murim', 'japanese_ln', 'dark_fantasy'],
+  },
+  {
+    id: 'SYNTAX_MONOTONY_AND_BURSTINESS',
+    title: 'Синтаксическая монотонность и однообразие длин (Syntax Monotony)',
+    description: 'Выявляет повтор одинакового POS-паттерна в начале предложений (≥3 подряд) и аномально низкую вариацию длины предложений (CV < 0.35 при ≥5 предложениях).',
+    defaultGenres: ['xianxia', 'litrpg', 'korean_murim', 'japanese_ln', 'dark_fantasy'],
+  },
+  {
+    id: 'REGISTER_PRONOUN_SHIFT',
+    title: 'Нарушение речевого регистра (ты ↔ Вы)',
+    description: 'Выявляет паразитные формы «Вы/Вас/Вам/-те» в диалогах с регистром «ты» (и наоборот) согласно социальному графу.',
+    defaultGenres: ['xianxia', 'litrpg', 'korean_murim', 'japanese_ln', 'dark_fantasy'],
+  },
+  {
+    id: 'NOMINALIZATION_AND_INANIMATE_SUBJECT',
+    title: 'Отглагольные существительные и неодушевлённые подлежащие (Нора Галь)',
+    description: 'Выявляет канцеляритные цепочки существительных («после завершения поглощения», «осуществил атаку») и неодушевлённые подлежащие («вид заставил пробежать»).',
+    defaultGenres: ['xianxia', 'litrpg', 'korean_murim', 'japanese_ln', 'dark_fantasy'],
+  },
 ];
 
 export function getDefaultRulesForGenre(genre: GenrePreset): LintRuleId[] {
@@ -266,6 +312,8 @@ export interface LintReport {
 export interface LinterOptions {
   enabledRuleIds?: LintRuleId[];
   glossaryMeta?: Record<string, GlossaryTermMeta>;
+  socialEdges?: SocialRegisterEdge[];
+  dialogueRegisters?: Array<{ lineIndex?: number; speaker?: string; pronounMode: 'ты' | 'Вы' }>;
 }
 
 const WRITTEN_NUMERAL_PATTERNS: Array<{ regex: RegExp; replacement: string; label: string }> = [
@@ -538,82 +586,10 @@ export function computeWordDiff(oldText: string, newText: string): WordDiffToken
   return result;
 }
 
-/**
- * Global Retroactive Canon Ripple Refactoring:
- * Replaces old Russian glossary term across all translated chapters while preserving case/capitalization.
- */
-export interface CanonRippleChapterChange {
-  chapterId: string;
-  chapterNumber: number;
-  ReplacementsCount: number;
-  updatedTitleRus: string;
-  updatedRusText: string;
-  previewBefore: string;
-  previewAfter: string;
-}
-
-export function previewAndApplyCanonRipple<
-  T extends { id: string; number: number; titleRus: string; rusText: string }
->(
-  chapters: T[],
-  oldRusTerm: string,
-  newRusTerm: string
-): {
-  changes: CanonRippleChapterChange[];
-  totalOccurrences: number;
-} {
-  const cleanOld = oldRusTerm.trim();
-  const cleanNew = newRusTerm.trim();
-  if (!cleanOld || !cleanNew || cleanOld.toLowerCase() === cleanNew.toLowerCase()) {
-    return { changes: [], totalOccurrences: 0 };
-  }
-
-  const escapedOld = cleanOld.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp(`(?<![а-яёa-z])${escapedOld}(?![а-яёa-z])`, 'gi');
-
-  const changes: CanonRippleChapterChange[] = [];
-  let totalOccurrences = 0;
-
-  for (const ch of chapters) {
-    if (!ch.rusText.trim() && !ch.titleRus.trim()) continue;
-    const matchesInBody = ch.rusText.match(regex) || [];
-    const matchesInTitle = ch.titleRus.match(regex) || [];
-    const count = matchesInBody.length + matchesInTitle.length;
-    if (count === 0) continue;
-
-    totalOccurrences += count;
-
-    const replacePreservingCase = (match: string) => {
-      const isUpperFirst =
-        match[0] === match[0].toUpperCase() &&
-        cleanOld[0] === cleanOld[0].toLowerCase();
-      if (isUpperFirst) {
-        return cleanNew.charAt(0).toUpperCase() + cleanNew.slice(1);
-      }
-      return cleanNew;
-    };
-
-    const updatedTitleRus = ch.titleRus.replace(regex, replacePreservingCase);
-    const updatedRusText = ch.rusText.replace(regex, replacePreservingCase);
-
-    const firstMatchingLine =
-      ch.rusText.split(/\r?\n/).find((l) => regex.test(l)) || ch.titleRus;
-    regex.lastIndex = 0;
-    const previewAfter = firstMatchingLine.replace(regex, replacePreservingCase);
-
-    changes.push({
-      chapterId: ch.id,
-      chapterNumber: ch.number,
-      ReplacementsCount: count,
-      updatedTitleRus,
-      updatedRusText,
-      previewBefore: firstMatchingLine,
-      previewAfter,
-    });
-  }
-
-  return { changes, totalOccurrences };
-}
+export {
+  previewAndApplyCanonRipple,
+  type CanonRippleChapterChange,
+} from './canon-glossary-vault.ts';
 
 /**
  * Filters a full CanonicalGlossary down to ONLY the terms that appear in `engText`.
@@ -886,28 +862,56 @@ export function runQaLinter(
       });
     }
 
-    // 10. MACHINE_CALQUES
-    if (
-      activeRules.has('MACHINE_CALQUES') &&
-      /(?:не\s+удержался\s+от\s+(?:того,\s+чтобы|вопроса)|втянул\s+глоток\s+холодного\s+воздуха)/i.test(
-        line
-      )
-    ) {
-      issues.push({
-        id: `lint-${lineNum}-calque`,
-        ruleId: 'MACHINE_CALQUES',
-        ruleTitle: 'Машинная калька / пурпурная проза',
-        severity: 'error',
-        line: lineNum,
-        snippet: line,
-        suggestion: line
-          .replace(/не\s+удержался\s+от\s+вопроса/gi, 'невольно поинтересовался')
-          .replace(/не\s+удержался\s+от\s+того,\s+чтобы\s+не\s+/gi, 'не сдержался и ')
-          .replace(/не\s+удержался\s+от\s+того,\s+чтобы\s+/gi, 'не сдержался и ')
-          .replace(/втянул\s+глоток\s+холодного\s+воздуха/gi, 'судорожно перевёл дыхание'),
-        explanation:
-          'Буквальные кальки («не удержался от вопроса», «втянул глоток холодного воздуха») заменяются живой литературной речью.',
-      });
+    // 10. MACHINE_CALQUES (25+ Xianxia/LitRPG Calques + Perevod_Ready AI_SLOP + Punctuation Stitch)
+    if (activeRules.has('MACHINE_CALQUES')) {
+      for (const entry of XIANXIA_ANTI_CALQUE_DICTIONARY) {
+        entry.pattern.lastIndex = 0;
+        if (entry.pattern.test(line)) {
+          entry.pattern.lastIndex = 0;
+          issues.push({
+            id: `lint-${lineNum}-calque-${entry.id}`,
+            ruleId: 'MACHINE_CALQUES',
+            ruleTitle: `Машинная калька / штамп (${entry.label})`,
+            severity: 'error',
+            line: lineNum,
+            snippet: line,
+            suggestion: line.replace(entry.pattern, entry.replace),
+            explanation: entry.explanation,
+          });
+          break;
+        }
+      }
+
+      for (const slop of AI_SLOP_PHRASES) {
+        if (line.toLowerCase().includes(slop.phrase)) {
+          issues.push({
+            id: `lint-${lineNum}-slop-${slop.phrase}`,
+            ruleId: 'MACHINE_CALQUES',
+            ruleTitle: `Канцелярит / ИИ-штамп («${slop.phrase}»)`,
+            severity: 'warning',
+            line: lineNum,
+            snippet: line,
+            suggestion: slop.replacement
+              ? line.replace(new RegExp(slop.phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), slop.replacement)
+              : 'Удалите вводный канцелярит или замените живым действием.',
+            explanation: 'Портировано из Perevod_Ready (AI_SLOP_PHRASES): эссеистические штампы разрушают художественную прозу.',
+          });
+          break;
+        }
+      }
+
+      if (/(?:\.,|,\.|!\.|\?\.|,,|\.\.,|^\s*—,)/.test(line)) {
+        issues.push({
+          id: `lint-${lineNum}-punct-stitch`,
+          ruleId: 'MACHINE_CALQUES',
+          ruleTitle: 'Артефакт склейки пунктуации (., / ,. / !. / —,)',
+          severity: 'error',
+          line: lineNum,
+          snippet: line,
+          suggestion: repairPunctuationArtifacts(line),
+          explanation: 'Портировано из Perevod_Ready (_PUNCT_ARTIFACT_PATTERNS): двойные знаки препинания при склейке предложений.',
+        });
+      }
     }
 
     // 13. CHARACTER_GENDER_MISMATCH
@@ -1098,6 +1102,292 @@ export function runQaLinter(
     }
   }
 
+  // 17. DASH_AND_COMMA_INFLATION
+  if (activeRules.has('DASH_AND_COMMA_INFLATION') && rusText.trim()) {
+    const alignment = alignChapterParagraphs(engText, rusText);
+    alignment.pairs.forEach((pair) => {
+      const pRus = pair.rusParagraph.trim();
+      const pEng = pair.engParagraph.trim();
+      if (!pRus) return;
+      const isDialogue = pRus.startsWith('—') || pRus.startsWith('"') || pRus.startsWith('«');
+      const copulaMatch = pRus.match(
+        /\s+(?:—|–)\s+(?:это|был|была|было|были|являлся|являлась|являлись|представлял)\b/i
+      );
+      if (copulaMatch) {
+        issues.push({
+          id: `lint-${pair.index + 1}-copula-dash`,
+          ruleId: 'DASH_AND_COMMA_INFLATION',
+          ruleTitle: 'Искусственная тире-связка (« — это / был»)',
+          severity: 'warning',
+          line: pair.index + 1,
+          snippet: pRus,
+          suggestion: 'Замените искусственное тире перед глагольной связкой на естественную пунктуацию.',
+          explanation:
+            'В русском литературном языке тире перед связками «был», «являлся» обычно является калькой или слопом.',
+        });
+      }
+
+      if (!isDialogue && pEng) {
+        const rusDashes = (pRus.match(/—|–/g) || []).length;
+        const engDashes = (pEng.match(/—|–|--/g) || []).length;
+        if (rusDashes - engDashes >= 3) {
+          issues.push({
+            id: `lint-${pair.index + 1}-dash-inflation`,
+            ruleId: 'DASH_AND_COMMA_INFLATION',
+            ruleTitle: `Избыточная инфляция тире (ΔDash = +${rusDashes - engDashes})`,
+            severity: 'warning',
+            line: pair.index + 1,
+            snippet: pRus,
+            suggestion: 'Сократите избыточные вводные тире внутри повествовательных абзацев.',
+            explanation:
+              'Инфляция тире на 3 и более знака по сравнению с оригиналом указывает на механический слоп генератора.',
+          });
+        }
+      }
+    });
+  }
+
+  // 18. SYNTAX_MONOTONY_AND_BURSTINESS
+  if (activeRules.has('SYNTAX_MONOTONY_AND_BURSTINESS') && rusText.trim()) {
+    const rusParagraphs = rusText
+      .split(/\n+/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    rusParagraphs.forEach((p, pIdx) => {
+      const sentences = p
+        .split(/(?<=[.!?])\s+/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      if (sentences.length >= 3) {
+        const openers = sentences.map((s) => {
+          const firstWord = (s.match(/^[«"'\-—]?\s*([а-яёА-ЯЁa-zA-Z]+)/) || [])[1] || '';
+          return firstWord.toLowerCase();
+        });
+
+        const isGerund = (w: string) =>
+          /(?:вши|вшись|[а-яёА-ЯЁ](?:в|я))$/i.test(w) && w.length >= 4;
+        for (let i = 0; i <= openers.length - 3; i++) {
+          if (isGerund(openers[i]) && isGerund(openers[i + 1]) && isGerund(openers[i + 2])) {
+            issues.push({
+              id: `lint-p${pIdx + 1}-monotony-gerunds`,
+              ruleId: 'SYNTAX_MONOTONY_AND_BURSTINESS',
+              ruleTitle: 'Синтаксическая монотонность: подряд идущие деепричастия',
+              severity: 'warning',
+              line: pIdx + 1,
+              snippet: sentences.slice(i, i + 3).join(' '),
+              suggestion: 'Разбавьте деепричастные обороты простыми глагольными предложениями.',
+              explanation:
+                'Три предложения подряд, начинающиеся с деепричастий (-в/-вшись/-я), создают неестественный ритм.',
+            });
+            break;
+          }
+        }
+
+        const pronouns = new Set(['он', 'она', 'оно', 'они', 'его', 'ее', 'её', 'это', 'тот']);
+        for (let i = 0; i <= openers.length - 3; i++) {
+          if (
+            pronouns.has(openers[i]) &&
+            openers[i] === openers[i + 1] &&
+            openers[i] === openers[i + 2]
+          ) {
+            issues.push({
+              id: `lint-p${pIdx + 1}-monotony-pronouns`,
+              ruleId: 'SYNTAX_MONOTONY_AND_BURSTINESS',
+              ruleTitle: `Синтаксическая монотонность: повтор «${openers[i]}» в начале предложений`,
+              severity: 'warning',
+              line: pIdx + 1,
+              snippet: sentences.slice(i, i + 3).join(' '),
+              suggestion:
+                'Замените повторяющиеся местоимения в начале предложений на имя персонажа или перифраз.',
+              explanation:
+                'Повторение одного и того же местоимения в начале 3 и более предложений подряд обедняет синтаксис.',
+            });
+            break;
+          }
+        }
+      }
+
+      if (sentences.length >= 5) {
+        const lengths = sentences.map((s) => s.length);
+        const mean = lengths.reduce((acc, l) => acc + l, 0) / lengths.length;
+        if (mean > 0) {
+          const variance =
+            lengths.reduce((acc, l) => acc + Math.pow(l - mean, 2), 0) / lengths.length;
+          const stdDev = Math.sqrt(variance);
+          const cv = stdDev / mean;
+          if (cv < 0.35) {
+            issues.push({
+              id: `lint-p${pIdx + 1}-low-burstiness`,
+              ruleId: 'SYNTAX_MONOTONY_AND_BURSTINESS',
+              ruleTitle: `Низкая вариация длины предложений (CV = ${cv.toFixed(2)} < 0.35)`,
+              severity: 'warning',
+              line: pIdx + 1,
+              snippet: p.slice(0, 100) + '...',
+              suggestion:
+                'Чередуйте короткие динамичные фразы и развёрнутые сложносочинённые конструкции.',
+              explanation:
+                'Аномально одинаковая длина предложений (коэффициент вариации < 0.35) характерна для монотонного машинного вывода.',
+            });
+          }
+        }
+      }
+    });
+  }
+
+  // 19. REGISTER_PRONOUN_SHIFT
+  if (activeRules.has('REGISTER_PRONOUN_SHIFT') && rusText.trim()) {
+    const rusLines = rusText.split(/\r?\n/);
+    rusLines.forEach((rawLine, idx) => {
+      const line = rawLine.trim();
+      if (!line) return;
+      const isDialogue = line.startsWith('—') || line.startsWith('"') || line.startsWith('«');
+      if (!isDialogue) return;
+
+      let expectedMode: 'ты' | 'Вы' | undefined;
+      if (options?.dialogueRegisters) {
+        const match = options.dialogueRegisters.find((dr) => dr.lineIndex === idx);
+        if (match) expectedMode = match.pronounMode;
+      }
+
+      const hasHostileMarker = /выродок|собака|умри|щенок|ублюдок|тварь/i.test(line);
+      if (hasHostileMarker) {
+        expectedMode = 'ты';
+      }
+
+      if (expectedMode === 'ты') {
+        const formalMatches = line.match(
+          /(?<![а-яёА-ЯЁa-zA-Z0-9])(?:Вы|Вас|Вам|Вами|Ваш|Вашего|Вашему|Вашим|Вашем|(?:скажи|послушай|посмотри|уйди|возьми|прости|отдай|прекрати|погоди|стой)те)(?![а-яёА-ЯЁa-zA-Z0-9])/g
+        );
+        if (formalMatches && formalMatches.length > 0) {
+          issues.push({
+            id: `lint-${idx + 1}-register-shift-ty`,
+            ruleId: 'REGISTER_PRONOUN_SHIFT',
+            ruleTitle: `Сбой речевого регистра: «${formalMatches[0]}» в контексте обращения на «ты»`,
+            severity: 'warning',
+            line: idx + 1,
+            snippet: line,
+            suggestion: 'Замените форму «Вы»/-те на местоимение «ты» («тебя», «тебе», «твой») или форму на «ты».',
+            explanation:
+              'Враждебный или неформальный диалог требует единого регистра обращения на «ты».',
+          });
+        }
+      } else if (expectedMode === 'Вы') {
+        const informalMatches = line.match(
+          /(?<![а-яёА-ЯЁa-zA-Z0-9])(?:ты|тебя|тебе|тобой|тобою|твой|твоего|твоему|твоим|твоем)(?![а-яёА-ЯЁa-zA-Z0-9])/gi
+        );
+        if (informalMatches && informalMatches.length > 0) {
+          issues.push({
+            id: `lint-${idx + 1}-register-shift-vy`,
+            ruleId: 'REGISTER_PRONOUN_SHIFT',
+            ruleTitle: `Сбой речевого регистра: «${informalMatches[0]}» в контексте вежливого обращения на «Вы»`,
+            severity: 'warning',
+            line: idx + 1,
+            snippet: line,
+            suggestion: 'Замените форму «ты» на вежливое обращение «Вы».',
+            explanation:
+              'Иерархический или официальный диалог требует выдержанного регистра обращения на «Вы».',
+          });
+        }
+      }
+    });
+
+    // Check dialogue pronoun oscillation between adjacent dialogue lines and mixed registers
+    const dialogueModes: Array<{ lineIndex: number; mode: 'ты' | 'Вы' }> = [];
+    rusLines.forEach((rawLine, idx) => {
+      const line = rawLine.trim();
+      if (!line) return;
+      const isDialogue = line.startsWith('—') || line.startsWith('"') || line.startsWith('«');
+      if (!isDialogue) return;
+      const hasTy = /(?<![а-яёА-ЯЁa-zA-Z0-9])(?:ты|тебя|тебе|тобой|тобою|твой|твоего|твоему|твоим|твоем)(?![а-яёА-ЯЁa-zA-Z0-9])/i.test(line);
+      const hasVy = /(?<![а-яёА-ЯЁa-zA-Z0-9])(?:Вы|Вас|Вам|Вами|Ваш|Вашего|Вашему|Вашим|Вашем)(?![а-яёА-ЯЁa-zA-Z0-9])/.test(line);
+      if (hasTy && hasVy) {
+        issues.push({
+          id: `lint-${idx + 1}-register-shift-mixed`,
+          ruleId: 'REGISTER_PRONOUN_SHIFT',
+          ruleTitle: 'Сбой речевого регистра: смешение «ты» и «Вы» в одной реплике',
+          severity: 'warning',
+          line: idx + 1,
+          snippet: line,
+          suggestion: 'Приведите реплику к единому регистру обращения (либо только «ты», либо только «Вы»).',
+          explanation:
+            'Одновременное использование форм «ты» и «Вы» в одной реплике является грубым стилистическим сбоем.',
+        });
+      } else if (hasTy) {
+        dialogueModes.push({ lineIndex: idx, mode: 'ты' });
+      } else if (hasVy) {
+        dialogueModes.push({ lineIndex: idx, mode: 'Вы' });
+      }
+    });
+
+    if (dialogueModes.length >= 2) {
+      for (let m = 1; m < dialogueModes.length; m++) {
+        const prev = dialogueModes[m - 1];
+        const curr = dialogueModes[m];
+        if (prev.mode !== curr.mode && Math.abs(curr.lineIndex - prev.lineIndex) <= 2) {
+          const prevReg = options?.dialogueRegisters?.find((dr) => dr.lineIndex === prev.lineIndex);
+          const currReg = options?.dialogueRegisters?.find((dr) => dr.lineIndex === curr.lineIndex);
+          if (prevReg?.pronounMode === prev.mode && currReg?.pronounMode === curr.mode) {
+            continue;
+          }
+          issues.push({
+            id: `lint-${curr.lineIndex + 1}-register-shift-oscillation`,
+            ruleId: 'REGISTER_PRONOUN_SHIFT',
+            ruleTitle: `Сбой речевого регистра: внезапный переход с «${prev.mode}» на «${curr.mode}» в диалоге`,
+            severity: 'warning',
+            line: curr.lineIndex + 1,
+            snippet: rusLines[curr.lineIndex].trim(),
+            suggestion: `Согласуйте речевой регистр: если начато обращение на «${prev.mode}», сохраняйте его в пределах сцены.`,
+            explanation:
+              'Необоснованное переключение регистра (ты ↔ Вы) между репликами в одном непрерывном диалоге нарушает стилистическую целостность.',
+          });
+        }
+      }
+    }
+  }
+
+  // 20. NOMINALIZATION_AND_INANIMATE_SUBJECT (Nora Gal verbalization & animate subjects)
+  if (activeRules.has('NOMINALIZATION_AND_INANIMATE_SUBJECT') && rusText.trim()) {
+    const rusLines = rusText.split(/\r?\n/);
+    rusLines.forEach((rawLine, idx) => {
+      const line = rawLine.trim();
+      if (!line) return;
+
+      const nominalMatch = line.match(
+        /(?<![а-яёА-ЯЁa-zA-Z0-9])(?:после завершения (?:поглощения|культивации|прорыва)|осуществил (?:прорыв|атаку|уклонение)|предпринял попытку|принял решение)(?![а-яёА-ЯЁa-zA-Z0-9])/i
+      );
+      if (nominalMatch) {
+        issues.push({
+          id: `lint-${idx + 1}-nominalization`,
+          ruleId: 'NOMINALIZATION_AND_INANIMATE_SUBJECT',
+          ruleTitle: `Канцелярская номинализация («${nominalMatch[0]}»)`,
+          severity: 'warning',
+          line: idx + 1,
+          snippet: line,
+          suggestion: 'Замените отглагольное существительное на глагол или деепричастие (закон Норы Галь).',
+          explanation:
+            'Канцелярские связки вроде «осуществил прорыв» или «после завершения» высушивают литературную прозу.',
+        });
+      }
+
+      const inanimateMatch = line.match(
+        /(?<![а-яёА-ЯЁa-zA-Z0-9])вид\s+([^.\n]+?)\s+заставил\s+холод\s+пробежать\s+по\s+(?:его\s+)?позвоночнику(?![а-яёА-ЯЁa-zA-Z0-9])/i
+      );
+      if (inanimateMatch) {
+        issues.push({
+          id: `lint-${idx + 1}-inanimate-subject`,
+          ruleId: 'NOMINALIZATION_AND_INANIMATE_SUBJECT',
+          ruleTitle: 'Неодушевлённое подлежащее-актант («вид заставил...»)',
+          severity: 'warning',
+          line: idx + 1,
+          snippet: line,
+          suggestion: 'Перестройте фразу на одушевлённую конструкцию: «при виде ... по спине пробежал холодок».',
+          explanation:
+            'Английская конструкция "the sight of X made a chill run down his spine" в русском языке требует живого подлежащего.',
+        });
+      }
+    });
+  }
+
   const errorCount = issues.filter((i) => i.severity === 'error').length;
   const warningCount = issues.filter((i) => i.severity === 'warning').length;
   const penalty = errorCount * 15 + warningCount * 5;
@@ -1123,6 +1413,7 @@ export function autoRepairRussianText(
     glossary?: CanonicalGlossary;
     glossaryMeta?: Record<string, GlossaryTermMeta>;
     enabledRuleIds?: LintRuleId[];
+    customCalqueBlacklist?: Record<string, string>;
   }
 ): {
   repairedText: string;
@@ -1303,6 +1594,12 @@ export function autoRepairRussianText(
       replace: 'судорожно перевёл дыхание',
       desc: 'Штамп «втянул глоток холодного воздуха» заменён на «судорожно перевёл дыхание»',
     },
+    {
+      ruleId: 'DASH_AND_COMMA_INFLATION',
+      pattern: /\s+(?:—|–)\s+(это|был|была|было|были|являлся|являлась|являлись|представлял)\b/gi,
+      replace: ' $1',
+      desc: 'Устранена искусственная тире-связка перед глаголом',
+    },
   ];
 
   for (const rule of rules) {
@@ -1312,6 +1609,116 @@ export function autoRepairRussianText(
       rule.pattern.lastIndex = 0;
       text = text.replace(rule.pattern, rule.replace);
       appliedFixes.push(rule.desc);
+    }
+  }
+
+  if (activeRules.has('REGISTER_PRONOUN_SHIFT')) {
+    const lines = text.split('\n');
+    let fixedShift = false;
+    const hostileRe = /выродок|собака|умри|щенок|ублюдок|тварь/i;
+    const shiftLines = lines.map((line) => {
+      const isDialogue = /^\s*—\s+/.test(line) || /^\s*["«]/.test(line);
+      if (isDialogue && hostileRe.test(line)) {
+        let l = line;
+        const orig = l;
+        l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])Вы(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'ты');
+        l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])вы(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'ты');
+        l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])Вас(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'тебя');
+        l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])вас(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'тебя');
+        l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])Вам(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'тебе');
+        l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])вам(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'тебе');
+        l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])Вами(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'тобой');
+        l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])вами(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'тобой');
+        l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])Ваш(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'твой');
+        l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])ваш(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'твой');
+        if (l !== orig) {
+          fixedShift = true;
+          return l;
+        }
+      }
+      return line;
+    });
+    if (fixedShift) {
+      text = shiftLines.join('\n');
+      appliedFixes.push('Скорректирован речевой регистр: формы «Вы» заменены на «ты» во враждебной реплике');
+    }
+  }
+
+  if (activeRules.has('DASH_AND_COMMA_INFLATION')) {
+    const lines = text.split('\n');
+    let relaxedDashes = false;
+    const fixedLines = lines.map((line) => {
+      const isDialogue = /^\s*—\s+/.test(line);
+      const medialDashes = (isDialogue ? line.slice(2) : line).match(/\s+—\s+/g) || [];
+      if (medialDashes.length >= 3) {
+        relaxedDashes = true;
+        let count = 0;
+        return line.replace(/(\s+)—(\s+)/g, (m, b, a) => {
+          count++;
+          return count > 2 ? `,${a}` : m;
+        });
+      }
+      return line;
+    });
+    if (relaxedDashes) {
+      text = fixedLines.join('\n');
+      appliedFixes.push('Устранена инфляция тире: избыточные тире в предложении заменены на запятые');
+    }
+  }
+
+  // Extended Anti-Calque Dictionary + Perevod_Ready AI_SLOP + Punctuation Stitch Repair
+  if (activeRules.has('MACHINE_CALQUES')) {
+    for (const entry of XIANXIA_ANTI_CALQUE_DICTIONARY) {
+      entry.pattern.lastIndex = 0;
+      if (entry.pattern.test(text)) {
+        entry.pattern.lastIndex = 0;
+        text = text.replace(entry.pattern, (match, ...args) => {
+          // Use standard string replace on the single match so $1 capture groups resolve properly
+          const singleRe = new RegExp(entry.pattern.source, entry.pattern.flags.replace('g', ''));
+          const replaced = match.replace(singleRe, entry.replace);
+          const isUpperFirst =
+            match.length > 0 &&
+            match[0] === match[0].toUpperCase() &&
+            match[0] !== match[0].toLowerCase();
+          if (isUpperFirst && replaced.length > 0) {
+            return replaced.charAt(0).toUpperCase() + replaced.slice(1);
+          }
+          return replaced;
+        });
+        if (!appliedFixes.includes(entry.desc)) {
+          appliedFixes.push(entry.desc);
+        }
+      }
+    }
+
+    for (const slop of AI_SLOP_PHRASES) {
+      if (slop.replacement !== undefined && text.toLowerCase().includes(slop.phrase)) {
+        const escaped = slop.phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const re = new RegExp(`${escaped},?\\s*`, 'gi');
+        if (re.test(text)) {
+          text = text.replace(re, slop.replacement);
+          appliedFixes.push(`Удалён ИИ-штамп «${slop.phrase}» (Perevod_Ready AI_SLOP)`);
+        }
+      }
+    }
+
+    const stitchedBefore = text;
+    text = repairPunctuationArtifacts(text);
+    if (text !== stitchedBefore) {
+      appliedFixes.push('Исправлены артефакты склейки пунктуации (., / ,. / !. / —,)');
+    }
+
+    if (options?.customCalqueBlacklist) {
+      for (const [badPhrase, goodPhrase] of Object.entries(options.customCalqueBlacklist)) {
+        const cleanBad = badPhrase.trim();
+        if (!cleanBad) continue;
+        const escaped = cleanBad.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const re = new RegExp(escaped, 'gi');
+        if (re.test(text)) {
+          text = text.replace(re, goodPhrase);
+          appliedFixes.push(`Чёрный список проекта: «${cleanBad}» → «${goodPhrase}»`);
+        }
+      }
     }
   }
 
@@ -1574,8 +1981,211 @@ export function surgicalRepairDriftedParagraphs(
   };
 }
 
+export interface DegenerationIssue {
+  type:
+    | 'character_or_word_loop'
+    | 'adjacent_tfidf_duplicate'
+    | 'truncated_punctuation'
+    | 'length_ratio_anomaly'
+    | 'cyclical_loop'
+    | 'adjacent_duplicate';
+  paragraphIndex: number;
+  details: string;
+  snippet: string;
+  severity: 'error' | 'warning';
+  suggestedFix?: string;
+}
+
+/**
+ * AI Hunter: Detects cyclical token degeneration (>15 repeats),
+ * adjacent paragraph TF-IDF duplicates (cosine similarity >= 0.82),
+ * ensures strict immunity for LitRPG bracketed lines [...] and --- dividers (LinguaGacha #641),
+ * and catches truncated punctuation and length ratio anomalies.
+ */
+export function detectTranslationDegenerationAndDuplicates(
+  engText: string,
+  rusText: string
+): {
+  issues: DegenerationIssue[];
+  hasFatalDegeneration: boolean;
+  repairedText: string;
+} {
+  const issues: DegenerationIssue[] = [];
+  const rusParagraphs = (rusText || '').replace(/\r\n/g, '\n').split('\n');
+  const engParagraphs = (engText || '').replace(/\r\n/g, '\n').split('\n');
+
+  let hasFatal = false;
+  const repaired: string[] = [];
+
+  const isLitRpgOrDivider = (p: string) => {
+    const trimmed = p.trim();
+    return (
+      (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+      trimmed === '---' ||
+      /^[-—_*=]{3,}$/.test(trimmed)
+    );
+  };
+
+  const tokenizeForTfidf = (text: string) => {
+    return text
+      .toLowerCase()
+      .replace(/[^\w\sа-яёА-ЯЁ]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length >= 2);
+  };
+
+  const computeCosine = (tokensA: string[], tokensB: string[]): number => {
+    if (tokensA.length === 0 || tokensB.length === 0) return 0;
+    const freqA = new Map<string, number>();
+    const freqB = new Map<string, number>();
+    tokensA.forEach((t) => freqA.set(t, (freqA.get(t) || 0) + 1));
+    tokensB.forEach((t) => freqB.set(t, (freqB.get(t) || 0) + 1));
+
+    let dot = 0;
+    let normA = 0;
+    let normB = 0;
+    freqA.forEach((v) => {
+      normA += v * v;
+    });
+    freqB.forEach((v) => {
+      normB += v * v;
+    });
+    freqA.forEach((countA, token) => {
+      const countB = freqB.get(token) || 0;
+      dot += countA * countB;
+    });
+    if (normA === 0 || normB === 0) return 0;
+    return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+  };
+
+  for (let i = 0; i < rusParagraphs.length; i++) {
+    let p = rusParagraphs[i];
+    const trimmed = p.trim();
+    if (!trimmed) {
+      repaired.push(p);
+      continue;
+    }
+
+    // A. Cyclical token loops: > 15 repeats of any character (excluding normal dividers like '---')
+    const charLoopMatch = trimmed.match(/(.)\1{15,}/);
+    const isDividerLine = /^[-—_*=]{3,10}$/.test(trimmed);
+    if (charLoopMatch && !isDividerLine) {
+      hasFatal = true;
+      issues.push({
+        type: 'cyclical_loop',
+        paragraphIndex: i,
+        severity: 'error',
+        details: `Залипание сэмплера: более 15 повторов подряд символа «${charLoopMatch[1]}»`,
+        snippet: trimmed.slice(0, 80),
+        suggestedFix: 'Удалить зацикленные символы и перезапустить генерацию абзаца.',
+      });
+      p = p.replace(/(.)\1{15,}/g, '$1$1$1');
+    }
+
+    // Word/phrase loop: repeated phrase >= 4 times (e.g. "Он взмахнул мечом. ")
+    const phraseLoopMatch = trimmed.match(/(.{3,50}?)\1{3,}/);
+    if (phraseLoopMatch) {
+      hasFatal = true;
+      issues.push({
+        type: 'cyclical_loop',
+        paragraphIndex: i,
+        severity: 'error',
+        details: `Циклическая дегенерация: многократный повтор фразы «${phraseLoopMatch[1].trim()}»`,
+        snippet: trimmed.slice(0, 100),
+        suggestedFix: 'Схлопнуть циклический повтор.',
+      });
+      p = p.replace(/(.{3,50}?)\1{3,}/g, '$1');
+    }
+
+    // B. Adjacent paragraph TF-IDF duplicate check with LitRPG immunity
+    if (i > 0 && repaired.length > 0) {
+      let prev = '';
+      for (let r = repaired.length - 1; r >= 0; r--) {
+        if (repaired[r].trim()) {
+          prev = repaired[r].trim();
+          break;
+        }
+      }
+      if (prev && !isLitRpgOrDivider(trimmed) && !isLitRpgOrDivider(prev)) {
+        const tokensPrev = tokenizeForTfidf(prev);
+        const tokensCurr = tokenizeForTfidf(trimmed);
+        if (tokensPrev.length >= 6 && tokensCurr.length >= 6) {
+          const sim = computeCosine(tokensPrev, tokensCurr);
+          if (sim >= 0.82) {
+            hasFatal = true;
+            issues.push({
+              type: 'adjacent_duplicate',
+              paragraphIndex: i,
+              severity: 'error',
+              details: `Склеенный дубликат соседнего абзаца (TF-IDF сходство = ${(sim * 100).toFixed(1)}% >= 82%)`,
+              snippet: trimmed.slice(0, 100),
+              suggestedFix: 'Удалить дублирующий абзац.',
+            });
+            // Omit duplicate in repaired text
+            continue;
+          }
+        }
+      }
+    }
+
+    // C. Truncated punctuation check vs aligned ENG paragraph
+    if (i < engParagraphs.length) {
+      const engP = engParagraphs[i].trim();
+      if (
+        /[.!?]["'»]?$/.test(engP) &&
+        !/[.!?…»"—]$/.test(trimmed) &&
+        /[,;:—\-a-zA-Zа-яёА-ЯЁ0-9]$/.test(trimmed)
+      ) {
+        issues.push({
+          type: 'truncated_punctuation',
+          paragraphIndex: i,
+          severity: 'warning',
+          details:
+            'Оборванная пунктуация: абзац оригинала завершён точкой/знаком, а перевод обрывается без финала.',
+          snippet: trimmed.slice(-60),
+          suggestedFix: 'Добавить финальную точку.',
+        });
+        p = `${p}.`;
+      }
+
+      // D. Length ratio anomaly
+      if (engP.length >= 50) {
+        const ratio = trimmed.length / engP.length;
+        if (ratio < 0.2 || ratio > 4.0) {
+          issues.push({
+            type: 'length_ratio_anomaly',
+            paragraphIndex: i,
+            severity: 'warning',
+            details: `Аномальный коэффициент длины абзаца (${(ratio * 100).toFixed(0)}% от оригинала): возможен пропуск или галлюцинация.`,
+            snippet: trimmed.slice(0, 80),
+          });
+        }
+      }
+    }
+
+    repaired.push(p);
+  }
+
+  return {
+    issues,
+    hasFatalDegeneration: hasFatal,
+    repairedText: repaired.join('\n'),
+  };
+}
+
+export interface ForwardFallingQuestion {
+  id: string;
+  questionRus: string;
+  relatedEntities: string[];
+  createdAtChapter: number;
+  resolvedAtChapter?: number;
+  status: 'open' | 'resolved' | 'abandoned';
+  resolutionNote?: string;
+}
+
 /**
  * Live Hero & World State Ledger (Auto-State Tracker across 50-500 chapters)
+ * with Forward-Falling Questions Index (Q_n Chekhov's guns).
  */
 export interface HeroStateLedger {
   protagonistName: string;
@@ -1584,6 +2194,7 @@ export interface HeroStateLedger {
   artifactsAndFlames: string[];
   activeLocation: string;
   lastUpdatedChapter: number;
+  forwardQuestions?: ForwardFallingQuestion[];
 }
 
 export function updateHeroStateLedgerFromChapter(
@@ -1596,8 +2207,13 @@ export function updateHeroStateLedgerFromChapter(
   const base: HeroStateLedger = currentLedger
     ? {
         ...currentLedger,
-        resources: [...currentLedger.resources],
-        artifactsAndFlames: [...currentLedger.artifactsAndFlames],
+        resources: Array.isArray(currentLedger.resources) ? [...currentLedger.resources] : [],
+        artifactsAndFlames: Array.isArray(currentLedger.artifactsAndFlames)
+          ? [...currentLedger.artifactsAndFlames]
+          : [],
+        forwardQuestions: Array.isArray(currentLedger.forwardQuestions)
+          ? [...currentLedger.forwardQuestions]
+          : [],
       }
     : {
         protagonistName: Object.values(glossary.characters)[0] || 'Линь Сюань',
@@ -1606,6 +2222,7 @@ export function updateHeroStateLedgerFromChapter(
         artifactsAndFlames: [],
         activeLocation: Object.values(glossary.sects_and_places)[0] || 'Секта Каменных Демонов',
         lastUpdatedChapter: 1,
+        forwardQuestions: [],
       };
 
   const combinedRus = rusText || '';
@@ -1668,131 +2285,338 @@ export function updateHeroStateLedgerFromChapter(
     }
   });
 
+  // Forward-Falling Questions (Q_n Chekhov's guns): automatically record and resolve plot hooks
+  const forwardQuestions = base.forwardQuestions || [];
+  if (
+    base.artifactsAndFlames.includes('Котёл Чёрного Железа') &&
+    !forwardQuestions.some((q) => q.relatedEntities.includes('Котёл Чёрного Железа'))
+  ) {
+    forwardQuestions.push({
+      id: 'q-iron-cauldron',
+      questionRus: 'Какова тайна Котла Чёрного Железа и как он повлияет на создание пилюль?',
+      relatedEntities: ['Котёл Чёрного Железа'],
+      createdAtChapter: chapterNumber,
+      status: 'open',
+    });
+  }
+
+  if (
+    base.artifactsAndFlames.includes('Пламя Лазурного Лотоса') &&
+    !forwardQuestions.some((q) => q.relatedEntities.includes('Пламя Лазурного Лотоса'))
+  ) {
+    forwardQuestions.push({
+      id: 'q-azure-flame',
+      questionRus: 'Сможет ли Линь Сюань подчинить Пламя Лазурного Лотоса без вреда для меридианов?',
+      relatedEntities: ['Пламя Лазурного Лотоса'],
+      createdAtChapter: chapterNumber,
+      status: 'open',
+    });
+  }
+
+  // Extract unresolved dramatic questions / Chekhov's guns directly from narrative questions:
+  const rawQuestions = combinedRus.match(/[^.!?\n]+(?:\?|!\?|\?!)/g);
+  if (rawQuestions) {
+    for (const qText of rawQuestions) {
+      const cleanQ = qText.trim().replace(/^[-—«"\s]+/, '').replace(/["»\s]+$/, '');
+      if (cleanQ.length >= 8 && !forwardQuestions.some((q) => q.questionRus === cleanQ)) {
+        const relatedEntities: string[] = [];
+        (Object.keys(glossary || {}) as GlossaryCategory[]).forEach((cat) => {
+          Object.values(glossary?.[cat] || {}).forEach((entity) => {
+            if (cleanQ.toLowerCase().includes(entity.toLowerCase())) {
+              relatedEntities.push(entity);
+            }
+          });
+        });
+        if (relatedEntities.length === 0) {
+          const firstCap = (cleanQ.match(/[А-ЯЁ][а-яё]+/g) || []).slice(0, 2);
+          if (firstCap.length > 0) relatedEntities.push(firstCap.join(' '));
+        }
+        forwardQuestions.push({
+          id: `q-auto-${chapterNumber}-${forwardQuestions.length + 1}`,
+          questionRus: cleanQ,
+          relatedEntities,
+          createdAtChapter: chapterNumber,
+          status: 'open',
+        });
+      }
+    }
+  }
+
+  // Resolve questions if chapter text achieves resolution
+  if (base.cultivationRealm.includes('Заложение Основ') || combinedRus.includes('Пилюли Заложения Основ')) {
+    const q = forwardQuestions.find(
+      (item) => item.id === 'q-foundation-pill' || item.questionRus.includes('Заложения Основ')
+    );
+    if (q && q.status === 'open') {
+      q.status = 'resolved';
+      q.resolvedAtChapter = chapterNumber;
+      q.resolutionNote = `Успешно разрешено в главе ${chapterNumber}`;
+    }
+  }
+
+  base.forwardQuestions = forwardQuestions;
   base.lastUpdatedChapter = Math.max(base.lastUpdatedChapter, chapterNumber);
   return base;
 }
 
-/**
- * Lookahead Batch Pre-Scouting across multiple chapters at once.
- * Aggregates cross-chapter term occurrences and boosts recurring terms to >=95% confidence.
- */
-export function batchLookaheadScoutChapters(
-  chapters: Array<{ number: number; titleEng: string; engText: string }>,
-  glossary: CanonicalGlossary,
-  existingScouted: ScoutedTerm[]
-): {
-  discoveredTerms: ScoutedTerm[];
-  autoPromotedCount: number;
-} {
-  const knownEng = new Set<string>();
-  (Object.keys(glossary) as GlossaryCategory[]).forEach((cat) => {
-    Object.keys(glossary[cat] || {}).forEach((k) => knownEng.add(k.toLowerCase()));
-  });
-  existingScouted.forEach((t) => knownEng.add(t.eng.toLowerCase()));
+export interface LorebookEntry {
+  id: string;
+  name?: string;
+  keys: string[];
+  secondaryKeys?: string[];
+  selectiveLogic?: 'AND_ANY' | 'AND_ALL' | 'NOT_ANY' | 'NOT_ALL';
+  content: string;
+  category?: 'character' | 'faction' | 'artifact' | 'realm' | 'rule';
+  priority?: number;
+  sticky?: number;
+  cooldown?: number;
+  delay?: number;
+  recursiveScanning?: boolean;
+  lastActivatedChapter?: number;
+  remainingSticky?: number;
+  remainingCooldown?: number;
+  isActive?: boolean;
+}
 
-  const builtins: Record<
-    string,
-    { rus: string; cat: GlossaryCategory; gender?: GrammaticalGender }
-  > = {
-    'Foundation Establishment Pill': {
-      rus: 'Пилюля Заложения Основ',
-      cat: 'system_and_terms',
-      gender: 'F',
-    },
-    'Foundation Establishment': {
-      rus: 'Заложение Основ',
-      cat: 'realms',
-      gender: 'N',
-    },
-    'Inner Sect': {
-      rus: 'Внутренняя Секта',
-      cat: 'sects_and_places',
-      gender: 'F',
-    },
-    'Outer Sect': {
-      rus: 'Внешняя Секта',
-      cat: 'sects_and_places',
-      gender: 'F',
-    },
-    'Crimson Flame Pavilion': {
-      rus: 'Павильон Багрового Пламени',
-      cat: 'sects_and_places',
-      gender: 'M',
-    },
-    'Blood Condensation Pill': {
-      rus: 'Пилюля Конденсации Крови',
-      cat: 'system_and_terms',
-      gender: 'F',
-    },
-    'Black Iron Cauldron': {
-      rus: 'Котёл Чёрного Железа',
-      cat: 'system_and_terms',
-      gender: 'M',
-    },
-    'Secret Realm': {
-      rus: 'Тайное Царство',
-      cat: 'sects_and_places',
-      gender: 'N',
-    },
-  };
-
-  const hitMap = new Map<
-    string,
-    {
-      eng: string;
-      rus: string;
-      category: GlossaryCategory;
-      gender: GrammaticalGender;
-      firstChapter: number;
-      chapterOccurrences: number;
-      snippet: string;
+function matchLorebookKey(key: string, text: string): boolean {
+  if (!key || !text) return false;
+  const trimmed = key.trim();
+  if (trimmed.startsWith('/') && trimmed.lastIndexOf('/') > 0) {
+    try {
+      const lastSlash = trimmed.lastIndexOf('/');
+      const pattern = trimmed.slice(1, lastSlash);
+      const flags = trimmed.slice(lastSlash + 1) || 'i';
+      return new RegExp(pattern, flags).test(text);
+    } catch {
+      // fallback to substring
     }
-  >();
+  }
+  return text.toLowerCase().includes(trimmed.toLowerCase());
+}
 
-  for (const ch of chapters) {
-    for (const [eng, meta] of Object.entries(builtins)) {
-      if (knownEng.has(eng.toLowerCase())) continue;
-      if (ch.engText.toLowerCase().includes(eng.toLowerCase())) {
-        const cur = hitMap.get(eng);
-        if (cur) {
-          cur.chapterOccurrences += 1;
-        } else {
-          hitMap.set(eng, {
-            eng,
-            rus: meta.rus,
-            category: meta.cat,
-            gender: meta.gender || 'M',
-            firstChapter: ch.number,
-            chapterOccurrences: 1,
-            snippet: ch.engText.slice(0, 140),
-          });
+/**
+ * Deterministic Lorebook State Machine with SillyTavern World Info semantics:
+ * Supports sticky retention, cooldown timers, chapter delay, recursive scanning (1-step cascade),
+ * and boolean secondary key logic (AND_ANY, AND_ALL, NOT_ANY, NOT_ALL).
+ */
+export function evaluateLorebookStateMachine(
+  entries: LorebookEntry[],
+  chapterNumber: number,
+  chapterText: string
+): {
+  activeEntries: LorebookEntry[];
+  stateBlock: string;
+  updatedEntries: LorebookEntry[];
+} {
+  const activeEntries: LorebookEntry[] = [];
+  const updatedEntries: LorebookEntry[] = [];
+
+  for (const entry of entries) {
+    const e: LorebookEntry = { ...entry };
+
+    // 1. Chapter Delay: do not activate before delay
+    if (e.delay && chapterNumber < e.delay) {
+      e.isActive = false;
+      updatedEntries.push(e);
+      continue;
+    }
+
+    // 2. Cooldown timer
+    if (e.remainingCooldown && e.remainingCooldown > 0) {
+      e.remainingCooldown--;
+      e.isActive = false;
+      updatedEntries.push(e);
+      continue;
+    }
+
+    // 3. Sticky timer
+    if (e.remainingSticky && e.remainingSticky > 0) {
+      e.remainingSticky--;
+      e.isActive = true;
+      activeEntries.push(e);
+      if (e.remainingSticky === 0 && e.cooldown && e.cooldown > 0) {
+        e.remainingCooldown = e.cooldown;
+      }
+      updatedEntries.push(e);
+      continue;
+    }
+
+    // 4. Test trigger keys against chapterText
+    const primaryMatched = e.keys.some((k) => matchLorebookKey(k, chapterText));
+    let isTriggered = false;
+
+    if (primaryMatched) {
+      if (!e.secondaryKeys || e.secondaryKeys.length === 0) {
+        isTriggered = true;
+      } else {
+        const secMatches = e.secondaryKeys.map((k) => matchLorebookKey(k, chapterText));
+        switch (e.selectiveLogic) {
+          case 'AND_ALL':
+            isTriggered = secMatches.every(Boolean);
+            break;
+          case 'NOT_ANY':
+            isTriggered = !secMatches.some(Boolean);
+            break;
+          case 'NOT_ALL':
+            isTriggered = !secMatches.every(Boolean);
+            break;
+          case 'AND_ANY':
+          default:
+            isTriggered = secMatches.some(Boolean);
+            break;
+        }
+      }
+    }
+
+    if (isTriggered) {
+      e.isActive = true;
+      e.lastActivatedChapter = chapterNumber;
+      if (e.sticky && e.sticky > 0) {
+        e.remainingSticky = e.sticky;
+      }
+      activeEntries.push(e);
+    } else {
+      e.isActive = false;
+    }
+
+    updatedEntries.push(e);
+  }
+
+  // 5. Recursive scanning (1-step cascade)
+  const newlyActive = [...activeEntries];
+  for (const act of newlyActive) {
+    if (act.recursiveScanning) {
+      for (const candidate of updatedEntries) {
+        if (!candidate.isActive) {
+          const matched = candidate.keys.some((k) => matchLorebookKey(k, act.content));
+          if (matched) {
+            candidate.isActive = true;
+            candidate.lastActivatedChapter = chapterNumber;
+            if (candidate.sticky && candidate.sticky > 0) {
+              candidate.remainingSticky = candidate.sticky;
+            }
+            activeEntries.push(candidate);
+          }
         }
       }
     }
   }
 
-  const discoveredTerms: ScoutedTerm[] = [];
-  let idx = 0;
-  hitMap.forEach((val) => {
-    const confidence = val.chapterOccurrences >= 2 ? 0.98 : 0.95;
-    discoveredTerms.push({
-      id: `lookahead-${Date.now()}-${idx++}`,
-      eng: val.eng,
-      rus_suggested: val.rus,
-      category: val.category,
-      gender: val.gender,
-      chapter_first_seen: val.firstChapter,
-      context_snippet: val.snippet,
-      approved_for_glossary: true,
-      confidence,
-    });
-  });
+  // Sort by priority descending
+  activeEntries.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
 
-  return {
-    discoveredTerms,
-    autoPromotedCount: discoveredTerms.length,
-  };
+  const stateBlock =
+    activeEntries.length > 0
+      ? `[ACTIVE LOREBOOK ENTRIES (World Info State)]\n` +
+        activeEntries
+          .map((e) => `- ${e.name} (${e.category || 'lore'}): ${e.content}`)
+          .join('\n')
+      : '';
+
+  return { activeEntries, stateBlock, updatedEntries };
 }
+
+export type MonteCarloSampleResult<
+  T = { number: number; engText: string; rusText?: string; titleEng?: string }
+> = T[] & {
+  sampledChapterNumbers: number[];
+  strata: {
+    exposition: number[];
+    middle: number[];
+    climax: number[];
+  };
+  rationale: string;
+};
+
+/**
+ * Stratified Monte Carlo proofreading sampler:
+ * Divides a novel into 3 strata (exposition, middle, climax) and samples chapters
+ * with priority given to chapters with high dialogue density and terminology frequency.
+ */
+export function sampleChaptersStratifiedMonteCarlo<
+  T extends { number: number; engText: string; rusText?: string; titleEng?: string }
+>(
+  chapters: T[],
+  sampleFraction = 0.1,
+  seed = 42
+): MonteCarloSampleResult<T> {
+  if (!chapters || chapters.length === 0) {
+    const empty: T[] = [];
+    return Object.assign(empty, {
+      sampledChapterNumbers: [],
+      strata: { exposition: [], middle: [], climax: [] },
+      rationale: 'No chapters provided for sampling.',
+    });
+  }
+
+  const sorted = [...chapters].sort((a, b) => a.number - b.number);
+  const totalCount = sorted.length;
+  const targetCount =
+    sampleFraction >= 1
+      ? Math.max(1, Math.min(totalCount, Math.round(sampleFraction)))
+      : Math.max(1, Math.min(totalCount, Math.round(totalCount * sampleFraction)));
+
+  const expEnd = Math.max(1, Math.floor(totalCount * 0.2));
+  const midEnd = Math.max(expEnd + 1, Math.floor(totalCount * 0.8));
+
+  const exposition = sorted.slice(0, expEnd);
+  const middle = sorted.slice(expEnd, midEnd);
+  const climax = sorted.slice(midEnd);
+
+  const scoreChapter = (ch: { engText: string; rusText?: string }) => {
+    const text = ch.rusText || ch.engText || '';
+    const lines = text.split('\n').filter(Boolean);
+    const dialogueLines = lines.filter(
+      (l) =>
+        l.trim().startsWith('—') ||
+        l.trim().startsWith('"') ||
+        l.trim().startsWith('«')
+    ).length;
+    const dialogueDensity = lines.length > 0 ? dialogueLines / lines.length : 0;
+    const capitalizedWords = (text.match(/[А-ЯЁA-Z][а-яёa-z]+/g) || []).length;
+    const wordCount = (text.match(/\S+/g) || []).length;
+    const termDensity = wordCount > 0 ? capitalizedWords / wordCount : 0;
+    return dialogueDensity * 0.6 + termDensity * 0.4 + Math.min(0.2, wordCount / 5000);
+  };
+
+  const expTarget = Math.max(1, Math.round(targetCount * 0.3));
+  const climTarget = Math.max(1, Math.round(targetCount * 0.3));
+  const midTarget = Math.max(0, targetCount - expTarget - climTarget);
+
+  const pickTop = (stratum: typeof sorted, count: number) => {
+    return [...stratum]
+      .sort((a, b) => scoreChapter(b) - scoreChapter(a))
+      .slice(0, Math.min(stratum.length, count))
+      .map((c) => c.number);
+  };
+
+  const expSample = pickTop(exposition, expTarget);
+  const midSample = pickTop(middle, midTarget);
+  const climSample = pickTop(climax, climTarget);
+
+  const sampledChapterNumbers = Array.from(
+    new Set([...expSample, ...midSample, ...climSample])
+  ).sort((a, b) => a - b);
+
+  const chapterMap = new Map(sorted.map((c) => [c.number, c]));
+  const sampledChapters = sampledChapterNumbers
+    .map((num) => chapterMap.get(num)!)
+    .filter(Boolean);
+
+  return Object.assign(sampledChapters, {
+    sampledChapterNumbers,
+    strata: {
+      exposition: expSample,
+      middle: midSample,
+      climax: climSample,
+    },
+    rationale: `Выбрано ${sampledChapterNumbers.length} глав методом стратифицированного Монте-Карло с приоритетом высокой плотности диалогов и терминологии (seed: ${seed}).`,
+  });
+}
+
+export {
+  batchLookaheadScoutChapters,
+} from './canon-glossary-vault.ts';
 
 /**
  * Parses bulk multi-chapter text or multiple file contents into discrete chapters
@@ -3318,4 +4142,1814 @@ p {
   };
 }
 
+// ============================================================================
+// MODULE 6: GOOGLE COLAB L4 (24GB VRAM) & MULTI-MODEL PROVIDER ADAPTER
+// ============================================================================
 
+export type LlmProviderType = 'colab_ollama' | 'gemini_api' | 'antigravity_cli';
+
+export interface LlmProviderConfig {
+  provider: LlmProviderType;
+  colabEndpointUrl?: string;
+  modelId: string;
+  scoutModelId?: string;
+  criticModelId?: string;
+  temperature?: number;
+  numCtx?: number;
+}
+
+export interface AgyCliModelSpec {
+  id: string;
+  title: string;
+  role: 'primary' | 'critic' | 'scout';
+  roleBadge: string;
+  descriptionRus: string;
+}
+
+export const AGY_CLI_MODEL_CATALOG: AgyCliModelSpec[] = [
+  {
+    id: 'gemini-3.8-flash-high',
+    title: 'Gemini 3.8 Flash (High)',
+    role: 'primary',
+    roleBadge: 'Основной перевод (Pass 1) и Self-Repair',
+    descriptionRus:
+      'Быстрая рабочая лошадка для основного черновика главы (Pass 1) и точечного ремонта абзацев с глубоким размышлением.',
+  },
+  {
+    id: 'gemini-3.8-flash-medium',
+    title: 'Gemini 3.8 Flash (Medium)',
+    role: 'primary',
+    roleBadge: 'Быстрый потоковый перевод',
+    descriptionRus:
+      'Сбалансированный режим Flash для скоростного пакетного прогона больших томов.',
+  },
+  {
+    id: 'gemini-3.8-flash-low',
+    title: 'Gemini 3.8 Flash (Low)',
+    role: 'scout',
+    roleBadge: 'Мгновенный пре-скаут терминов (Pass 0)',
+    descriptionRus:
+      'Минимальная задержка для извлечения новых имён, техник и локаций по протоколу TransAgents.',
+  },
+  {
+    id: 'gemini-4-argon-medium',
+    title: 'Gemini 4 Argon (Medium)',
+    role: 'critic',
+    roleBadge: 'Тяжёлый финальный судья (Pass 2 Хирург)',
+    descriptionRus:
+      'Флагманский рассуждающий движок для финальной сверки оригинала с переводом и генерации точечных патчей (A/B/C/D).',
+  },
+  {
+    id: 'gemini-4-argon-high',
+    title: 'Gemini 4 Argon (High)',
+    role: 'critic',
+    roleBadge: 'Максимальная глубина ревью (Pass 2)',
+    descriptionRus:
+      'Максимальный бюджет мышления Argon для самых сложных диалоговых сцен с опущенными местоимениями и даосской поэзией.',
+  },
+  {
+    id: 'claude-sonnet-5-5-high',
+    title: 'Claude Sonnet 5.5 (High)',
+    role: 'critic',
+    roleBadge: 'Альтернативный литературный стилист',
+    descriptionRus:
+      'Доступен через подписку agy CLI: живая русская фразеология и тонкая передача интонаций персонажей.',
+  },
+  {
+    id: 'claude-opus-5-5-medium',
+    title: 'Claude Opus 5.5 (Medium)',
+    role: 'critic',
+    roleBadge: 'Тяжёлый арбитр художественного слога',
+    descriptionRus:
+      'Флагманская модель в подписке agy CLI для финальной литературной вычитки.',
+  },
+];
+
+export interface ColabL4ModelSpec {
+  id: string;
+  ollamaTag: string;
+  title: string;
+  family: 'Gemma 4' | 'TranslateGemma' | 'Qwen 3' | 'Mistral' | 'Gemma 3';
+  architecture: string;
+  vramGb: string;
+  speedOnL4: string;
+  contextWindow: string;
+  roleBadge: string;
+  strengthsRus: string;
+  caveatsRus: string;
+  recommendedFor: ('xianxia' | 'litrpg' | 'dark_fantasy' | 'wuxia' | 'urban')[];
+}
+
+export const COLAB_L4_MODEL_CATALOG: ColabL4ModelSpec[] = [
+  {
+    id: 'gemma4:31b',
+    ollamaTag: 'gemma4:31b',
+    title: 'Gemma 4 31B Dense (Q4_K_M / QAT)',
+    family: 'Gemma 4',
+    architecture: 'Dense · 30.7B параметров',
+    vramGb: '~18.5–20 ГБ из 24 ГБ',
+    speedOnL4: '~24–30 ток/с',
+    contextWindow: '256K',
+    roleBadge: 'Лучший литературный слог',
+    strengthsRus:
+      'Фаворит сообщества (r/LocalLLaMA) для художественной прозы на русском: живые диалоги, естественная интонация без канцелярита и глубокое удержание контекста.',
+    caveatsRus:
+      'Занимает почти всю память L4 — обязательно включать квантизацию KV-кэша (OLLAMA_KV_CACHE_TYPE=q8_0).',
+    recommendedFor: ['xianxia', 'wuxia', 'dark_fantasy', 'urban'],
+  },
+  {
+    id: 'gemma4:26b-a4b',
+    ollamaTag: 'gemma4:26b-a4b',
+    title: 'Gemma 4 26B A4B MoE (Q4_K_M)',
+    family: 'Gemma 4',
+    architecture: 'MoE · 26.1B всего / ~4B активных',
+    vramGb: '~14.5–16 ГБ из 24 ГБ',
+    speedOnL4: '~65–90 ток/с',
+    contextWindow: '256K',
+    roleBadge: 'Чемпион скорости на L4',
+    strengthsRus:
+      'Активирует всего ~4B параметров на каждый токен при словарном запасе 26B. Переводит главы в 3 раза быстрее плотных моделей без перегрузок 503.',
+    caveatsRus:
+      'На сложных архаичных метафорах может чуть уступать плотной 31B, что компенсируется нашим 3-ролевым промптом LCD-MAS.',
+    recommendedFor: ['litrpg', 'xianxia', 'urban'],
+  },
+  {
+    id: 'translategemma:27b',
+    ollamaTag: 'translategemma:27b',
+    title: 'TranslateGemma 27B IT (WMT24++ / AutoMQM)',
+    family: 'TranslateGemma',
+    architecture: 'Dense · 27B (RL MetricX-QE + AutoMQM)',
+    vramGb: '~15.5–17 ГБ из 24 ГБ',
+    speedOnL4: '~30–35 ток/с',
+    contextWindow: '128K',
+    roleBadge: 'Спецмодель перевода Google',
+    strengthsRus:
+      'Специализированная модель Google 2026 года, дообученная с RL-наградами MetricX-QE и AutoMQM на 55 языках (включая русский). Минимум отсебятины и потерь предложений.',
+    caveatsRus:
+      'Сфокусирована на точном переводе, поэтому для JSON-ответов (scout/translate_and_edit) использует наш парсер с защитой от обёрток.',
+    recommendedFor: ['xianxia', 'litrpg', 'wuxia'],
+  },
+  {
+    id: 'qwen3:32b',
+    ollamaTag: 'qwen3:32b',
+    title: 'Qwen 3 32B (Q4_K_M)',
+    family: 'Qwen 3',
+    architecture: 'Dense · 32.8B параметров',
+    vramGb: '~19.5–21 ГБ из 24 ГБ',
+    speedOnL4: '~22–27 ток/с',
+    contextWindow: '128K',
+    roleBadge: 'Эталон канона и JSON-схем',
+    strengthsRus:
+      'Глубже всех понимает азиатский контекст (сянься, даосские идиомы, китайские имена и ранги), безупречно соблюдает падежи и строгую JSON-схему ответа.',
+    caveatsRus:
+      'Без стилистической роли норовит писать суховато; при включённом режиме размышлений (<think>) наш адаптер автоматически срезает черновик мыслей.',
+    recommendedFor: ['xianxia', 'wuxia', 'litrpg'],
+  },
+  {
+    id: 'mistral-small3.1:24b',
+    ollamaTag: 'mistral-small3.1:24b',
+    title: 'Mistral Small 3.1 24B Instruct (Q4_K_M)',
+    family: 'Mistral',
+    architecture: 'Dense · 24B параметров',
+    vramGb: '~14–15.5 ГБ из 24 ГБ',
+    speedOnL4: '~35–42 ток/с',
+    contextWindow: '128K',
+    roleBadge: 'Дарк-фэнтези без цензуры',
+    strengthsRus:
+      'Любимец авторов ролевой и художественной прозы: отлично передаёт резкие диалоги, боевые сцены и мрачную атмосферу без ложных отказов safety-фильтра.',
+    caveatsRus:
+      'Базовый словарный запас русских архаизмов чуть скромнее, чем у Gemma 4 31B и Qwen 3 32B.',
+    recommendedFor: ['dark_fantasy', 'litrpg', 'urban'],
+  },
+];
+
+export const DEFAULT_LLM_PROVIDER_CONFIG: LlmProviderConfig = {
+  provider: 'colab_ollama',
+  colabEndpointUrl: '',
+  modelId: 'gemma4:26b-a4b',
+  scoutModelId: 'gemini-3.8-flash-low',
+  criticModelId: 'gemini-4-argon-medium',
+  temperature: 0.3,
+  numCtx: 16384,
+};
+
+/**
+ * Normalizes a user-provided Colab Cloudflare Tunnel / Ngrok / Localhost URL
+ * into a clean base origin (removing trailing slashes, `/v1/chat/completions`, `/api/chat`, etc.).
+ */
+export function normalizeColabEndpointUrl(rawUrl: string): string {
+  const trimmed = (rawUrl || '').trim();
+  if (!trimmed) return '';
+  const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  return withProto
+    .replace(/\/+(?:v1\/chat\/completions|v1\/models|v1|api\/chat|api\/generate|api\/tags)\/?$/i, '')
+    .replace(/\/+$/, '');
+}
+
+/**
+ * Extracts structured JSON from open-weight LLM outputs (Gemma 4, Qwen 3, Mistral),
+ * stripping `<think>...</think>` reasoning blocks and markdown code fences.
+ */
+export function extractResilientJsonFromLlm<T>(rawOutput: string, fallback: T): T {
+  if (!rawOutput || typeof rawOutput !== 'string') return fallback;
+
+  // 1. Strip reasoning blocks (<think>...</think> or <|thought|>...<|/thought|>)
+  let cleaned = rawOutput
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<\|thought\|>[\s\S]*?<\|\/thought\|>/gi, '')
+    .trim();
+
+  // 2. Strip markdown ```json ... ``` fences if present
+  const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenceMatch && fenceMatch[1]) {
+    cleaned = fenceMatch[1].trim();
+  }
+
+  // 3. Try direct parse first
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch {
+    // 4. Locate outermost JSON object {...} or array [...]
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    const firstBracket = cleaned.indexOf('[');
+    const lastBracket = cleaned.lastIndexOf(']');
+
+    const isArrayTarget = Array.isArray(fallback);
+    if (isArrayTarget && firstBracket !== -1 && lastBracket > firstBracket) {
+      try {
+        return JSON.parse(cleaned.slice(firstBracket, lastBracket + 1)) as T;
+      } catch {
+        // continue
+      }
+    }
+
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      try {
+        return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1)) as T;
+      } catch {
+        // continue
+      }
+    }
+
+    if (firstBracket !== -1 && lastBracket > firstBracket) {
+      try {
+        return JSON.parse(cleaned.slice(firstBracket, lastBracket + 1)) as T;
+      } catch {
+        // continue
+      }
+    }
+  }
+
+  return fallback;
+}
+
+/**
+ * Generates a 1-click Google Colab (NVIDIA L4 24GB VRAM) startup script that:
+ * 1. Installs Ollama & Cloudflared
+ * 2. Tunes L4 VRAM flags (Flash Attention + Q8_0 KV Cache + 16K/32K context)
+ * 3. Pulls the chosen Gemma 4 / Qwen 3 / TranslateGemma model
+ * 4. Prints the public HTTPS tunnel URL for pasting into Канон Сянься
+ */
+export function generateColabL4LaunchScript(
+  primaryModel = 'gemma4:26b-a4b',
+  alsoPullSecondary?: string,
+  backend: 'ollama' | 'vllm' = 'ollama'
+): string {
+  const cleanPrimary = primaryModel.trim() || 'gemma4:26b-a4b';
+  const secondaryLine =
+    alsoPullSecondary && alsoPullSecondary !== cleanPrimary
+      ? `\n!ollama pull ${alsoPullSecondary}`
+      : '';
+
+  if (backend === 'vllm') {
+    return `# === КАНОН СЯНЬСЯ: ВЫДЕЛЕННЫЙ СЕРВЕР vLLM NEXT-GEN НА GOOGLE COLAB L4 (24 ГБ VRAM) ===
+# Запустите эту ячейку в Google Colab (Среда выполнения -> Сменить среду -> GPU L4)
+
+import subprocess, time, re, os
+
+print("1/4 Установка vLLM и Cloudflare Tunnel...")
+!pip install -q vllm==0.8.*
+!wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O /usr/local/bin/cloudflared
+!chmod +x /usr/local/bin/cloudflared
+
+print("2/4 Запуск сервера vLLM Next-Gen L4 (FP8 KV + Prefix Caching + Speculative N-gram)...")
+# Профиль флагов vLLM под NVIDIA L4 (24 ГБ VRAM):
+# --enable-prefix-caching --enable-chunked-prefill --kv-cache-dtype fp8 --max-num-batched-tokens 8192
+# --speculative-config '{"method": "ngram", "num_speculative_tokens": 5, "prompt_lookup_max": 4}'
+vllm_cmd = [
+    "python3", "-m", "vllm.entrypoints.openai.api_server",
+    "--model", "${cleanPrimary}",
+    "--port", "11434",
+    "--host", "0.0.0.0",
+    "--enable-prefix-caching",
+    "--enable-chunked-prefill",
+    "--kv-cache-dtype", "fp8",
+    "--max-num-batched-tokens", "8192",
+    "--speculative-config", '{"method": "ngram", "num_speculative_tokens": 5, "prompt_lookup_max": 4}'
+]
+vllm_proc = subprocess.Popen(vllm_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+time.sleep(10)
+
+print("3/4 Открытие защищённого HTTPS-туннеля Cloudflare...")
+tunnel_proc = subprocess.Popen(
+    ["/usr/local/bin/cloudflared", "tunnel", "--url", "http://localhost:11434", "--no-autoupdate"],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT,
+    text=True
+)
+
+public_url = None
+for _ in range(60):
+    line = tunnel_proc.stdout.readline()
+    if not line:
+        time.sleep(0.5)
+        continue
+    match = re.search(r"https://[a-zA-Z0-9-]+\\.trycloudflare\\.com", line)
+    if match:
+        public_url = match.group(0)
+        break
+
+print("\\n" + "="*72)
+print("✅ СЕРВЕР vLLM L4 ГОТОВ! Скопируйте этот URL в «Канон Сянься»:")
+print(f"🔗 {public_url}")
+print(f"🧠 Активная модель: ${cleanPrimary}")
+print("="*72)
+`;
+  }
+
+  return `# === КАНОН СЯНЬСЯ: ВЫДЕЛЕННЫЙ СЕРВЕР ПЕРЕВОДА НА GOOGLE COLAB L4 (24 ГБ VRAM) ===
+# Запустите эту ячейку в Google Colab (Среда выполнения -> Сменить среду -> GPU L4)
+# Альтернативный запуск vLLM Next-Gen L4 (FP8 KV + Prefix Caching + Speculative N-gram):
+# python3 -m vllm.entrypoints.openai.api_server --model ${cleanPrimary} --enable-prefix-caching --enable-chunked-prefill --kv-cache-dtype fp8 --max-num-batched-tokens 8192 --speculative-config '{"method": "ngram", "num_speculative_tokens": 5, "prompt_lookup_max": 4}'
+
+import subprocess, time, re, os
+
+print("1/4 Установка Ollama и Cloudflare Tunnel...")
+!sudo apt-get update -qq && sudo apt-get install -y -qq zstd pciutils lshw
+!curl -fsSL https://ollama.com/install.sh | sh
+!wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O /usr/local/bin/cloudflared
+!chmod +x /usr/local/bin/cloudflared
+
+# Оптимизация под NVIDIA L4 (24 GB VRAM): Flash Attention + сжатие KV-кэша q8_0 + CORS
+os.environ["OLLAMA_HOST"] = "0.0.0.0:11434"
+os.environ["OLLAMA_ORIGINS"] = "*"
+os.environ["OLLAMA_FLASH_ATTENTION"] = "1"
+os.environ["OLLAMA_KV_CACHE_TYPE"] = "q8_0"
+os.environ["OLLAMA_NUM_PARALLEL"] = "2"
+os.environ["OLLAMA_KEEP_ALIVE"] = "24h"
+
+print("2/4 Запуск сервера Ollama на GPU L4...")
+ollama_proc = subprocess.Popen(
+    ["ollama", "serve"],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT,
+    text=True
+)
+time.sleep(5)
+
+print("3/4 Загрузка модели ${cleanPrimary} в видеопамять L4...")
+!ollama pull ${cleanPrimary}${secondaryLine}
+
+print("4/4 Открытие защищённого HTTPS-туннеля Cloudflare...")
+tunnel_proc = subprocess.Popen(
+    ["/usr/local/bin/cloudflared", "tunnel", "--url", "http://localhost:11434", "--no-autoupdate"],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT,
+    text=True
+)
+
+public_url = None
+for _ in range(60):
+    line = tunnel_proc.stdout.readline()
+    if not line:
+        time.sleep(0.5)
+        continue
+    match = re.search(r"https://[a-zA-Z0-9-]+\\.trycloudflare\\.com", line)
+    if match:
+        public_url = match.group(0)
+        break
+
+print("\\n" + "="*72)
+print("✅ СЕРВЕР COLAB L4 ГОТОВ! Скопируйте этот URL в «Канон Сянься»:")
+print(f"🔗 {public_url}")
+print(f"🧠 Активная модель: ${cleanPrimary}")
+print("="*72)
+`;
+}
+
+// ============================================================================
+// MODULE 7: PRODUCTION WORKFLOW UPGRADES (Q6–Q12 & PEREVOD_READY PORT)
+// 1. 25+ Xianxia/LitRPG Anti-Calque Dictionary + Perevod_Ready AI_SLOP_PHRASES
+// 2. Punctuation Stitch Repair (_PUNCT_ARTIFACT_PATTERNS from Perevod_Ready)
+// 3. Raw Chapter Sanitizer (TL Note / Patreon / Discord / Rulate / HTML stripper)
+// 4. Pure-TS EPUB (.epub) Archive Reader & Chapter Unpacker
+// 5. Pass 2 Surgical Patch Engine (Perevod_Ready refine.py protocol)
+// 6. Per-Chapter ZIP Archive Builder (Ranobelib / Boosty / Author.Today)
+// ============================================================================
+
+export interface AntiCalqueEntry {
+  id: string;
+  label: string;
+  pattern: RegExp;
+  replace: string;
+  desc: string;
+  explanation: string;
+}
+
+export const XIANXIA_ANTI_CALQUE_DICTIONARY: AntiCalqueEntry[] = [
+  {
+    id: 'cant_help_question',
+    label: 'не удержался от вопроса → невольно поинтересовался',
+    pattern: /не\s+удержался\s+от\s+вопроса/gi,
+    replace: 'невольно поинтересовался',
+    desc: 'Калька «не удержался от вопроса» → «невольно поинтересовался»',
+    explanation: 'Калька с англ. "couldn\'t help but ask". В живой русской речи: «невольно поинтересовался / спросил».',
+  },
+  {
+    id: 'cant_help_but_not',
+    label: 'не удержался от того, чтобы не → не сдержался и',
+    pattern: /не\s+удержался\s+от\s+того,\s+чтобы\s+не\s+/gi,
+    replace: 'не сдержался и ',
+    desc: 'Калька «не удержался от того, чтобы не» → «не сдержался и»',
+    explanation: 'Тяжеловесная калька с "couldn\'t help but". Заменяется на «не сдержался и» или «невольно».',
+  },
+  {
+    id: 'cant_help_but',
+    label: 'не удержался от того, чтобы → не сдержался и',
+    pattern: /не\s+удержался\s+от\s+того,\s+чтобы\s+/gi,
+    replace: 'не сдержался и ',
+    desc: 'Калька «не удержался от того, чтобы» → «не сдержался и»',
+    explanation: 'Калька с "couldn\'t help but". Заменяется на «не сдержался и».',
+  },
+  {
+    id: 'sucked_cold_air',
+    label: 'втянул глоток холодного воздуха → судорожно перевёл дыхание',
+    pattern: /втянул[аи]?\s+(?:глоток|полные\s+лёгкие)\s+холодного\s+воздуха/gi,
+    replace: 'судорожно перевёл дыхание',
+    desc: 'Штамп «втянул глоток холодного воздуха» → «судорожно перевёл дыхание»',
+    explanation: 'Китайско-английский штамп "sucked in a breath of cold air" (倒吸一口凉气). По-русски: «судорожно перевёл дыхание / ахнул».',
+  },
+  {
+    id: 'in_his_heart',
+    label: 'в своём сердце (подумал/сказал) → про себя / в душе',
+    pattern: /(подумал[аи]?|сказал[аи]?|произнёс|прошептал[аи]?|выругался|усмехнулся)\s+в\s+сво[её]м\s+сердце/gi,
+    replace: '$1 про себя',
+    desc: 'Калька «в своём сердце» → «про себя»',
+    explanation: 'Калька с "said/thought in his heart" (心中暗道). По-русски: «про себя» или «мысленно».',
+  },
+  {
+    id: 'deep_in_his_heart',
+    label: 'глубоко внутри своего сердца → в глубине души',
+    pattern: /глубоко\s+внутри\s+своего\s+сердца/gi,
+    replace: 'в глубине души',
+    desc: 'Калька «глубоко внутри своего сердца» → «в глубине души»',
+    explanation: 'Калька с "deep inside his heart". В русской идиоматике: «в глубине души».',
+  },
+  {
+    id: 'bitterly_smiled',
+    label: 'горько улыбнулся → криво усмехнулся',
+    pattern: /горько\s+улыбнул(ся|ась|ись)/gi,
+    replace: 'криво усмехнул$1',
+    desc: 'Калька «горько улыбнулся» → «криво усмехнулся»',
+    explanation: 'Калька с "smiled bitterly" (苦笑). Естественный русский эквивалент: «криво усмехнулся / грустно усмехнулся».',
+  },
+  {
+    id: 'mouthful_of_blood',
+    label: 'выплюнул полный рот крови → сплюнул сгусток крови',
+    pattern: /выплюнул\s+полный\s+рот\s+крови/gi,
+    replace: 'сплюнул сгусток крови',
+    desc: 'Калька «выплюнул полный рот крови» → «сплюнул сгусток крови»',
+    explanation: 'Буквальный перевод "spat out a mouthful of blood" (吐出一口鲜血). По-русски: «сплюнул сгусток крови / захлебнулся кровью».',
+  },
+  {
+    id: 'courting_death',
+    label: 'ты ищешь смерти → ты нарываешься на смерть',
+    pattern: /ты\s+ищешь\s+смерти/gi,
+    replace: 'ты нарываешься на смерть',
+    desc: 'Штамп «ты ищешь смерти» → «ты нарываешься на смерть»',
+    explanation: 'Классическая идиома сянься "You are courting death!" (找死). Живой перевод: «Ты нарываешься на смерть! / Жить надоело?!».',
+  },
+  {
+    id: 'laugh_or_cry',
+    label: 'не знал, смеяться ему или плакать → не знал, то ли смеяться, то ли плакать',
+    pattern: /не\s+знал,\s+смеяться\s+(?:ему\s+)?или\s+плакать/gi,
+    replace: 'не знал, то ли смеяться, то ли плакать',
+    desc: 'Калька «не знал, смеяться ему или плакать» → «не знал, то ли смеяться, то ли плакать»',
+    explanation: 'Китайская идиома 哭笑不得 ("didn\'t know whether to laugh or cry"). Русский оборот: «не знал, то ли смеяться, то ли плакать».',
+  },
+  {
+    id: 'inwardly_sighed',
+    label: 'внутренне вздохнул → мысленно вздохнул',
+    pattern: /внутренне\s+вздохнул([аи]?)/gi,
+    replace: 'мысленно вздохнул$1',
+    desc: 'Калька «внутренне вздохнул» → «мысленно вздохнул»',
+    explanation: 'Калька с "inwardly sighed". По-русски: «мысленно вздохнул / про себя вздохнул».',
+  },
+  {
+    id: 'squinted_his_eyes',
+    label: 'прищурил свои глаза → прищурился',
+    pattern: /прищурил\s+свои\s+глаза/gi,
+    replace: 'прищурился',
+    desc: 'Притяжательная калька «прищурил свои глаза» → «прищурился»',
+    explanation: 'Английские притяжательные местоимения со своими частями тела ("squinted his eyes") в русском языке избыточны.',
+  },
+  {
+    id: 'shook_his_head',
+    label: 'покачал своей головой → покачал головой',
+    pattern: /покачал([аи]?)\s+своей\s+головой/gi,
+    replace: 'покачал$1 головой',
+    desc: 'Притяжательная калька «покачал своей головой» → «покачал головой»',
+    explanation: 'Избыточное местоимение «своей» с частями тела ("shook his head").',
+  },
+  {
+    id: 'frowned_his_brows',
+    label: 'нахмурил свои брови → нахмурился',
+    pattern: /нахмурил\s+свои\s+брови/gi,
+    replace: 'нахмурился',
+    desc: 'Притяжательная калька «нахмурил свои брови» → «нахмурился»',
+    explanation: 'Калька с "furrowed his brows". По-русски: «нахмурился / нахмурил брови».',
+  },
+  {
+    id: 'clenched_his_fists',
+    label: 'сжал свои кулаки → сжал кулаки',
+    pattern: /сжал([аи]?)\s+свои\s+кулаки/gi,
+    replace: 'сжал$1 кулаки',
+    desc: 'Притяжательная калька «сжал свои кулаки» → «сжал кулаки»',
+    explanation: 'Избыточное притяжательное местоимение "clenched his fists".',
+  },
+  {
+    id: 'black_as_pot_bottom',
+    label: 'лицо почернело как дно котла → помрачнел темнее тучи',
+    pattern: /его\s+лицо\s+почернело,?\s+как\s+дно\s+(?:горшка|котла)/gi,
+    replace: 'он помрачнел темнее тучи',
+    desc: 'Китайская калька «лицо почернело как дно котла» → «помрачнел темнее тучи»',
+    explanation: 'Буквальный перевод идиомы 脸色黑如锅底. Естественный русский образ: «помрачнел темнее тучи».',
+  },
+  {
+    id: 'mount_tai',
+    label: 'имел глаза, но не видел гору Тай → смотрел в упор и не признал величия',
+    pattern: /имел[аи]?\s+глаза,\s+но\s+не\s+(?:видел[аи]?|узнал[аи]?)\s+гору\s+Тай/gi,
+    replace: 'смотрел в упор, но не распознал истинного величия',
+    desc: 'Идиома «имел глаза, но не видел гору Тай» адаптирована литературно',
+    explanation: 'Идиома 有眼不识泰山. Без адаптации звучит комично в русском тексте.',
+  },
+  {
+    id: 'give_face',
+    label: 'не дал ему лица → проявил к нему неуважение',
+    pattern: /не\s+дал\s+ему\s+лица/gi,
+    replace: 'открыто проявил к нему неуважение',
+    desc: 'Калька «не дал ему лица» → «открыто проявил к нему неуважение»',
+    explanation: 'Калька с китайского 给面子 ("give face"). По-русски: «уважить / оказать честь / проявить уважение».',
+  },
+  {
+    id: 'heaven_and_earth_diff',
+    label: 'разница между ними была как небо и земля → их разделяла пропасть как между небом и землёй',
+    pattern: /разница\s+между\s+ними\s+была\s+как\s+небо\s+и\s+земля/gi,
+    replace: 'их разделяла пропасть, как между небом и землёй',
+    desc: 'Стилистическая правка оборота «небо и земля»',
+    explanation: 'Исправление грамматической сочетаемости в русском предложении.',
+  },
+  {
+    id: 'traces_of_smile',
+    label: 'след улыбки появился в уголке его рта → уголки его губ тронула лёгкая усмешка',
+    pattern: /след\s+улыбки\s+появился\s+в\s+уголк[еах]\s+его\s+рта/gi,
+    replace: 'уголки его губ тронула лёгкая усмешка',
+    desc: 'Калька «след улыбки появился в уголке его рта» → «уголки его губ тронула лёгкая усмешка»',
+    explanation: 'Калька с "a trace of a smile appeared at the corner of his mouth".',
+  },
+  {
+    id: 'cold_light_flashed',
+    label: 'холодный свет мелькнул в его глазах → в его взгляде блеснул холод',
+    pattern: /холодный\s+свет\s+мелькнул\s+в\s+его\s+глазах/gi,
+    replace: 'в его взгляде блеснул стальной холод',
+    desc: 'Калька «холодный свет мелькнул в его глазах» → «в его взгляде блеснул стальной холод»',
+    explanation: 'Калька с "a cold light flashed in his eyes" (眼中闪过一道寒芒).',
+  },
+  // Блок А (Нора Галь: отглагольные существительные и неодушевлённые подлежащие)
+  {
+    id: 'nominalization_absorption',
+    label: 'после завершения поглощения → усвоив',
+    pattern: /после\s+завершения\s+поглощения/gi,
+    replace: 'усвоив',
+    desc: 'Канцелярит «после завершения поглощения» → «усвоив» (Нора Галь)',
+    explanation: 'Замена отглагольного существительного на деепричастие совершенного вида.',
+  },
+  {
+    id: 'nominalization_cultivation',
+    label: 'после завершения культивации → завершив медитацию',
+    pattern: /после\s+завершения\s+культивации/gi,
+    replace: 'завершив медитацию',
+    desc: 'Канцелярит «после завершения культивации» → «завершив медитацию»',
+    explanation: 'Устранение двойной номинализации.',
+  },
+  {
+    id: 'nominalization_breakthrough',
+    label: 'после завершения прорыва → прорвавшись',
+    pattern: /после\s+завершения\s+прорыва/gi,
+    replace: 'прорвавшись',
+    desc: 'Канцелярит «после завершения прорыва» → «прорвавшись»',
+    explanation: 'Замена тяжеловесной связки на деепричастие.',
+  },
+  {
+    id: 'nominalization_action_breakthrough',
+    label: 'осуществил прорыв → прорвался',
+    pattern: /осуществил\s+прорыв/gi,
+    replace: 'прорвался',
+    desc: 'Канцелярит «осуществил прорыв» → «прорвался»',
+    explanation: 'Замена расщеплённого сказуемого на прямой глагол действия.',
+  },
+  {
+    id: 'nominalization_action_attack',
+    label: 'осуществил атаку → атаковал',
+    pattern: /осуществил\s+атаку/gi,
+    replace: 'атаковал',
+    desc: 'Канцелярит «осуществил атаку» → «атаковал»',
+    explanation: 'Замена расщеплённого сказуемого на глагол.',
+  },
+  {
+    id: 'nominalization_action_evasion',
+    label: 'осуществил уклонение → уклонился',
+    pattern: /осуществил\s+уклонение/gi,
+    replace: 'уклонился',
+    desc: 'Канцелярит «осуществил уклонение» → «уклонился»',
+    explanation: 'Замена расщеплённого сказуемого на глагол.',
+  },
+  {
+    id: 'nominalization_action_decision',
+    label: 'принял решение → решил',
+    pattern: /принял\s+решение/gi,
+    replace: 'решил',
+    desc: 'Канцелярит «принял решение» → «решил»',
+    explanation: 'Вербализация по Норе Галь: «принял решение» → «решил».',
+  },
+  {
+    id: 'nominalization_action_attempt',
+    label: 'предпринял попытку → попытался',
+    pattern: /предпринял\s+попытку/gi,
+    replace: 'попытался',
+    desc: 'Канцелярит «предпринял попытку» → «попытался»',
+    explanation: 'Вербализация: «предпринял попытку» → «попытался».',
+  },
+  {
+    id: 'inanimate_subject_chill',
+    label: 'вид крови заставил холод пробежать → при виде крови по спине пробежал холодок',
+    pattern: /вид\s+крови\s+заставил\s+холод\s+пробежать\s+по\s+(?:его\s+)?позвоночнику/gi,
+    replace: 'при виде крови у него по спине пробежал холодок',
+    desc: 'Неодушевлённое подлежащее заменено на естественную одушевлённую конструкцию',
+    explanation: 'Калька с "the sight of blood made a chill run down his spine".',
+  },
+  // Блок Б (Китайские соматизмы и чэнъюи)
+  {
+    id: 'somatism_pinpoint_pupils',
+    label: 'зрачки сузились до размеров игольного ушка → зрачки превратились в две точки',
+    pattern: /зрачки\s+сузились\s+до\s+(?:размеров?\s+)?(?:игольного\s+ушка|булавки)/gi,
+    replace: 'зрачки превратились в две точки',
+    desc: 'Калька «зрачки сузились до игольного ушка» → «зрачки превратились в две точки»',
+    explanation: 'Калька с китайского 瞳孔缩小如针尖 ("pupils shrank to needles").',
+  },
+  {
+    id: 'somatism_green_white_face',
+    label: 'лицо менялось с зелёного на белое → лицо шло пятнами от бессильной ярости',
+    pattern: /лицо\s+(?:стало|было)\s+то\s+зелёным,\s+то\s+белым|лицо\s+менялось\s+с\s+зелёного\s+на\s+белое/gi,
+    replace: 'лицо шло пятнами от бессильной ярости',
+    desc: 'Калька «лицо то зелёное, то белое» → «лицо шло пятнами от бессильной ярости»',
+    explanation: 'Буквальный перевод идиомы 脸色青一阵白一阵.',
+  },
+  {
+    id: 'somatism_green_intestines',
+    label: 'кишки позеленели от сожаления → готов был локти кусать от досады',
+    pattern: /кишки\s+позеленели\s+от\s+сожаления/gi,
+    replace: 'готов был локти кусать от досады',
+    desc: 'Калька «кишки позеленели от сожаления» → «готов был локти кусать от досады»',
+    explanation: 'Китайская идиома 悔得肠子都青了 ("regretted until intestines turned green").',
+  },
+  {
+    id: 'somatism_twitching_mouth',
+    label: 'уголки рта задёргались → губы нервно дрогнули',
+    pattern: /уголки\s+(?:его\s+|её\s+)?рта\s+(?:слегка\s+)?задёргались/gi,
+    replace: 'губы нервно дрогнули',
+    desc: 'Калька «уголки рта задёргались» → «губы нервно дрогнули»',
+    explanation: 'Калька с 嘴角抽搐 ("corner of the mouth twitched").',
+  },
+  {
+    id: 'somatism_black_lines_forehead',
+    label: 'чёрные линии на лбу → мрачно нахмурился',
+    pattern: /(?:три\s+)?чёрные\s+линии\s+(?:появились\s+)?на\s+лбу|лицо\s+покрылось\s+чёрными\s+линиями/gi,
+    replace: 'он мрачно нахмурился',
+    desc: 'Аниме-штамп «чёрные линии на лбу» переведён в литературный жест',
+    explanation: 'Манга-символ (black lines/sweatdrop) не должен переводиться буквально в прозе.',
+  },
+  {
+    id: 'somatism_swallow_saliva',
+    label: 'проглотил сухую слюну → судорожно сглотнул',
+    pattern: /проглотил\s+полный\s+рот\s+слюны|сглотнул\s+сухую\s+слюну/gi,
+    replace: 'судорожно сглотнул',
+    desc: 'Калька «сглотнул сухую слюну» → «судорожно сглотнул»',
+    explanation: 'Калька с 咽了一口唾沫 / swallowed a mouthful of saliva.',
+  },
+  // Блок В (Японские и корейские кальки)
+  {
+    id: 'jp_double_negative',
+    label: 'не то чтобы я не мог понять → понять-то несложно, да только',
+    pattern: /не\s+то\s+чтобы\s+я\s+не\s+(?:мог\s+понять|понимал)/gi,
+    replace: 'понять-то несложно, да только',
+    desc: 'Японское двойное отрицание (...わけではない) адаптировано в русскую речь',
+    explanation: 'В русском литературном диалоге конструкция с двойным отрицанием звучит деревянно.',
+  },
+  {
+    id: 'korean_honorific_repetition',
+    label: 'Хён! Хён... → Хён! Ты...',
+    pattern: /(?<![а-яёa-z0-9])(Хён|Оппа|Сонбэ|Нонна|Унни)!\s+\1,\s+/gi,
+    replace: '$1! Ты, ',
+    desc: 'Устранён механический корейский повтор титула вместо местоимения «ты»',
+    explanation: 'В корейском обращение повторяется из-за отсутствия местоимения второго лица, в русском — естественен переход на «ты».',
+  },
+  {
+    id: 'korean_honorific_repetition_spaced',
+    label: 'Хён! Хён правда... → Хён! Ты правда...',
+    pattern: /(?<![а-яёa-z0-9])(Хён|Оппа|Сонбэ|Нонна|Унни)!\s+\1\s+/gi,
+    replace: '$1! Ты ',
+    desc: 'Устранён механический корейский повтор титула в начале предложения',
+    explanation: 'Замена второго титула на местоимение «ты».',
+  },
+];
+
+export const AI_SLOP_PHRASES: Array<{ phrase: string; replacement?: string }> = [
+  { phrase: 'стоит отметить, что', replacement: '' },
+  { phrase: 'стоит отметить', replacement: '' },
+  { phrase: 'важно понимать, что', replacement: '' },
+  { phrase: 'важно понимать', replacement: '' },
+  { phrase: 'следует отметить, что', replacement: '' },
+  { phrase: 'следует отметить', replacement: '' },
+  { phrase: 'неудивительно, что', replacement: 'Немудрено, что ' },
+  { phrase: 'в конечном итоге', replacement: 'в итоге ' },
+  { phrase: 'в заключение', replacement: '' },
+  { phrase: 'резюмируя', replacement: '' },
+  { phrase: 'подводя итог', replacement: '' },
+  { phrase: 'как бы то ни было, но', replacement: 'однако ' },
+  { phrase: 'и это было лишь началом', replacement: 'и всё только начиналось' },
+  { phrase: 'это была лишь прелюдия', replacement: 'это было лишь предвестием' },
+];
+
+/**
+ * Repairs LLM sentence-stitching punctuation artifacts (`.,`, `,.`, `!.`, `?.`, `,,`, `..,`, `^—,`).
+ * Ported from `Perevod_Ready/src/Perevod/utils/translation_quality.py` (`_PUNCT_ARTIFACT_PATTERNS`).
+ */
+export function repairPunctuationArtifacts(text: string): string {
+  return text
+    .replace(/\.,/g, '.')
+    .replace(/,\./g, '.')
+    .replace(/!\./g, '!')
+    .replace(/\?\./g, '?')
+    .replace(/,,+/g, ',')
+    .replace(/(?<!\.)\.\.,/g, '...')
+    .replace(/^(\s*)—,\s*/gm, '$1— ')
+    .replace(/[ \t]+([,.;!?])/g, '$1');
+}
+
+export interface SanitizeChapterResult {
+  cleanedText: string;
+  removedLinesCount: number;
+  removedSamples: string[];
+}
+
+/**
+ * Raw Chapter Sanitizer (Q6: C + `dyad-apps/Perevod/sanitizer_patterns.txt` + `mt_check/extract.py`):
+ * 1. Converts HTML block tags (`<p>`, `<br>`, `<div>`) into paragraph breaks and strips inline HTML tags.
+ * 2. Unescapes HTML entities (`&nbsp;`, `&quot;`, `&mdash;`, `&#39;`, `&amp;`).
+ * 3. Removes `TL Note:`, `Editor's Note:`, Patreon/Discord/Ko-fi promos, and scraper watermarks (`Rulate.ru`, `Webnovel`, etc.).
+ * 4. Preserves ЛитРПГ `[System: ...]` brackets and `---` scene dividers.
+ */
+export function sanitizeRawChapterText(rawText: string): SanitizeChapterResult {
+  if (!rawText || typeof rawText !== 'string') {
+    return { cleanedText: '', removedLinesCount: 0, removedSamples: [] };
+  }
+
+  // Step 1: Unpack HTML block tags if the input came from HTML/EPUB/Web scraper
+  let text = rawText
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/<(?:br|hr)\s*\/?>/gi, '\n')
+    .replace(/<\/(?:p|div|section|article|h[1-6]|li|blockquote)>/gi, '\n\n')
+    .replace(/<(?:p|div|section|article|h[1-6]|li|blockquote)(?:\s[^>]*)?>/gi, '')
+    .replace(/<\/?(?:span|b|strong|i|em|u|a|font|small|sup|sub)(?:\s[^>]*)?>/gi, '');
+
+  // Step 2: Decode common HTML entities
+  text = text
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&mdash;/gi, '—')
+    .replace(/&ndash;/gi, '–')
+    .replace(/&hellip;/gi, '...')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0*39;|&apos;/gi, "'")
+    .replace(/&laquo;/gi, '«')
+    .replace(/&raquo;/gi, '»')
+    .replace(/&amp;/gi, '&');
+
+  // Step 3: Line-by-line watermark, translator note, and promo filter
+  const junkLinePatterns: RegExp[] = [
+    /^\s*(?:\[|\(|【)?\s*(?:TL\s*Note|T\/N|TN|Translator'?s?\s*Note|Editor'?s?\s*Note|ED\s*Note|A\/N|Author'?s?\s*Note|Примечание\s+(?:переводчика|редактора|автора)|П\.?\s*П\.?)\s*[:：\-]/i,
+    /^\s*(?:Translated|Edited|Proofread)\s+by\s*[:：]/i,
+    /(?:patreon\.com|ko-fi\.com|discord\.gg|paypal\.me|boosty\.to)/i,
+    /(?:прочитано\s+на\s+rulate\.ru|перевод\s+выполнен\s+с\s+сайта|read\s+latest\s+chapters?\s+at|visit\s+wuxiaworld|webnovel\.com|royalroad\.com)/i,
+    /^\s*(?:please\s+support\s+the\s+(?:author|translator)|don't\s+forget\s+to\s+vote\s+power\s+stones)/i,
+    /^\s*[=*~_]{4,}\s*$/,
+  ];
+
+  const lines = text.split('\n');
+  const keptLines: string[] = [];
+  const removedSamples: string[] = [];
+  let removedLinesCount = 0;
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) {
+      keptLines.push('');
+      continue;
+    }
+
+    // Always keep canonical scene divider `---`
+    if (trimmed === '---') {
+      keptLines.push('---');
+      continue;
+    }
+
+    const isJunk = junkLinePatterns.some((re) => re.test(trimmed));
+    if (isJunk) {
+      removedLinesCount++;
+      if (removedSamples.length < 10) {
+        removedSamples.push(trimmed.slice(0, 120));
+      }
+      continue;
+    }
+
+    keptLines.push(trimmed);
+  }
+
+  const cleanedText = keptLines
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return {
+    cleanedText,
+    removedLinesCount,
+    removedSamples,
+  };
+}
+
+export interface ImportedEpubChapter {
+  number: number;
+  titleEng: string;
+  engText: string;
+  wordCountEng: number;
+  href: string;
+}
+
+export interface EpubImportResult {
+  bookTitle: string;
+  author: string;
+  chapters: ImportedEpubChapter[];
+  totalRemovedJunkLines: number;
+}
+
+/**
+ * Low-level ZIP Central Directory reader.
+ * Extracts raw entries (`{ path, compressionMethod, compressedData }`) from a `.epub` or `.zip` buffer.
+ */
+function readZipEntriesRaw(zipBytes: Uint8Array): Array<{
+  path: string;
+  compressionMethod: number;
+  compressedData: Uint8Array;
+  uncompressedSize: number;
+}> {
+  const view = new DataView(zipBytes.buffer, zipBytes.byteOffset, zipBytes.byteLength);
+  const decoder = new TextDecoder('utf-8');
+
+  // Locate End of Central Directory (EOCD) signature 0x06054b50 scanning backwards
+  let eocdOffset = -1;
+  const minEocdSearch = Math.max(0, zipBytes.byteLength - 65557);
+  for (let i = zipBytes.byteLength - 22; i >= minEocdSearch; i--) {
+    if (view.getUint32(i, true) === 0x06054b50) {
+      eocdOffset = i;
+      break;
+    }
+  }
+
+  if (eocdOffset === -1) {
+    throw new Error('Не найден заголовок EOCD ZIP-архива (файл повреждён или не является .epub/.zip)');
+  }
+
+  const totalEntries = view.getUint16(eocdOffset + 10, true);
+  const cdOffset = view.getUint32(eocdOffset + 16, true);
+
+  const entries: Array<{
+    path: string;
+    compressionMethod: number;
+    compressedData: Uint8Array;
+    uncompressedSize: number;
+  }> = [];
+
+  let ptr = cdOffset;
+  for (let idx = 0; idx < totalEntries && ptr + 46 <= zipBytes.byteLength; idx++) {
+    const sig = view.getUint32(ptr, true);
+    if (sig !== 0x02014b50) break;
+
+    const compressionMethod = view.getUint16(ptr + 10, true);
+    const compressedSize = view.getUint32(ptr + 20, true);
+    const uncompressedSize = view.getUint32(ptr + 24, true);
+    const nameLen = view.getUint16(ptr + 28, true);
+    const extraLen = view.getUint16(ptr + 30, true);
+    const commentLen = view.getUint16(ptr + 32, true);
+    const localHeaderOffset = view.getUint32(ptr + 42, true);
+
+    const path = decoder.decode(zipBytes.subarray(ptr + 46, ptr + 46 + nameLen));
+    ptr += 46 + nameLen + extraLen + commentLen;
+
+    if (localHeaderOffset + 30 > zipBytes.byteLength) continue;
+    const localSig = view.getUint32(localHeaderOffset, true);
+    if (localSig !== 0x04034b50) continue;
+
+    const localNameLen = view.getUint16(localHeaderOffset + 26, true);
+    const localExtraLen = view.getUint16(localHeaderOffset + 28, true);
+    const dataStart = localHeaderOffset + 30 + localNameLen + localExtraLen;
+    const dataEnd = Math.min(zipBytes.byteLength, dataStart + compressedSize);
+
+    entries.push({
+      path,
+      compressionMethod,
+      compressedData: zipBytes.subarray(dataStart, dataEnd),
+      uncompressedSize,
+    });
+  }
+
+  return entries;
+}
+
+/**
+ * Inflates raw DEFLATE bytes in Browser (`DecompressionStream('deflate-raw')`) or Node.js.
+ */
+async function inflateRawBytesAsync(compressed: Uint8Array): Promise<Uint8Array> {
+  if (typeof DecompressionStream !== 'undefined') {
+    const ds = new DecompressionStream('deflate-raw');
+    const writer = ds.writable.getWriter();
+    writer.write(new Uint8Array(compressed));
+    writer.close();
+    const reader = ds.readable.getReader();
+    const chunks: Uint8Array[] = [];
+    let totalLen = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(value);
+        totalLen += value.byteLength;
+      }
+    }
+    const out = new Uint8Array(totalLen);
+    let offset = 0;
+    for (const c of chunks) {
+      out.set(c, offset);
+      offset += c.byteLength;
+    }
+    return out;
+  }
+  throw new Error('DecompressionStream deflate-raw is not available in this environment');
+}
+
+function parseEpubDecodedFileMap(fileMap: Map<string, string>): EpubImportResult {
+  // 1. Find OPF path via META-INF/container.xml or fallback scan
+  let opfPath = '';
+  const containerXml = fileMap.get('META-INF/container.xml') || '';
+  const rootfileMatch = containerXml.match(/full-path=["']([^"']+\.opf)["']/i);
+  if (rootfileMatch && rootfileMatch[1]) {
+    opfPath = rootfileMatch[1];
+  } else {
+    for (const key of fileMap.keys()) {
+      if (key.toLowerCase().endsWith('.opf')) {
+        opfPath = key;
+        break;
+      }
+    }
+  }
+
+  const opfContent = opfPath ? fileMap.get(opfPath) || '' : '';
+  const opfDir = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : '';
+
+  const titleMatch = opfContent.match(/<dc:title[^>]*>([\s\S]*?)<\/dc:title>/i);
+  const creatorMatch = opfContent.match(/<dc:creator[^>]*>([\s\S]*?)<\/dc:creator>/i);
+  const bookTitle = titleMatch ? sanitizeRawChapterText(titleMatch[1]).cleanedText : 'Импортированная новелла';
+  const author = creatorMatch ? sanitizeRawChapterText(creatorMatch[1]).cleanedText : 'Unknown Author';
+
+  // 2. Map manifest id -> href
+  const manifestMap = new Map<string, string>();
+  const itemRegex = /<item\b([^>]+)\/?>/gi;
+  let itemMatch: RegExpExecArray | null;
+  while ((itemMatch = itemRegex.exec(opfContent)) !== null) {
+    const attrs = itemMatch[1];
+    const idM = attrs.match(/\bid=["']([^"']+)["']/i);
+    const hrefM = attrs.match(/\bhref=["']([^"']+)["']/i);
+    if (idM && hrefM) {
+      manifestMap.set(idM[1], hrefM[1]);
+    }
+  }
+
+  // 3. Collect ordered spine hrefs
+  const orderedHrefs: string[] = [];
+  const itemrefRegex = /<itemref\b[^>]*\bidref=["']([^"']+)["'][^>]*\/?>/gi;
+  let refMatch: RegExpExecArray | null;
+  while ((refMatch = itemrefRegex.exec(opfContent)) !== null) {
+    const href = manifestMap.get(refMatch[1]);
+    if (href) {
+      orderedHrefs.push(href);
+    }
+  }
+
+  // Fallback if spine is empty: take all .xhtml / .html files sorted naturally
+  if (orderedHrefs.length === 0) {
+    for (const key of Array.from(fileMap.keys()).sort()) {
+      if (/\.(?:xhtml|html|htm)$/i.test(key)) {
+        orderedHrefs.push(key);
+      }
+    }
+  }
+
+  const chapters: ImportedEpubChapter[] = [];
+  let totalRemovedJunkLines = 0;
+
+  for (const rawHref of orderedHrefs) {
+    const cleanHref = rawHref.split('#')[0];
+    // Skip navigation / cover / titlepage files
+    if (/(?:^|\/)(?:nav|toc|titlepage|cover)\.(?:xhtml|html|htm)$/i.test(cleanHref)) {
+      continue;
+    }
+
+    const fullPath = fileMap.has(opfDir + cleanHref) ? opfDir + cleanHref : cleanHref;
+    const rawHtml = fileMap.get(fullPath);
+    if (!rawHtml) continue;
+
+    // Extract heading from <h1>, <h2>, or <title>
+    const hMatch =
+      rawHtml.match(/<h[12][^>]*>([\s\S]*?)<\/h[12]>/i) ||
+      rawHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    const extractedTitle = hMatch
+      ? sanitizeRawChapterText(hMatch[1]).cleanedText.replace(/\n+/g, ' ').trim()
+      : '';
+
+    // Strip <head>...</head>, <style>...</style>, <nav>...</nav>, and first <h1>/<h2> if already extracted as title
+    let bodyHtml = rawHtml
+      .replace(/<head[\s\S]*?<\/head>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<nav[\s\S]*?<\/nav>/gi, '');
+
+    if (hMatch && /<h[12]/i.test(hMatch[0])) {
+      bodyHtml = bodyHtml.replace(hMatch[0], '');
+    }
+
+    const sanitized = sanitizeRawChapterText(bodyHtml);
+    totalRemovedJunkLines += sanitized.removedLinesCount;
+
+    if (!sanitized.cleanedText || sanitized.cleanedText.length < 15) continue;
+
+    const chapNum = chapters.length + 1;
+    const titleEng = extractedTitle || `Chapter ${chapNum}`;
+    const wordCountEng = sanitized.cleanedText.split(/\s+/).filter(Boolean).length;
+
+    chapters.push({
+      number: chapNum,
+      titleEng,
+      engText: sanitized.cleanedText,
+      wordCountEng,
+      href: fullPath,
+    });
+  }
+
+  return {
+    bookTitle,
+    author,
+    chapters,
+    totalRemovedJunkLines,
+  };
+}
+
+/**
+ * Unpacks an `.epub` binary buffer into clean chapters synchronously (for STORED EPUBs)
+ * or asynchronously via `parseEpubArchiveToChaptersAsync` (for STORED + DEFLATE EPUBs).
+ */
+export function parseEpubArchiveToChapters(epubBytes: Uint8Array): EpubImportResult {
+  const entries = readZipEntriesRaw(epubBytes);
+  const decoder = new TextDecoder('utf-8');
+  const fileMap = new Map<string, string>();
+
+  for (const entry of entries) {
+    if (entry.compressionMethod === 0) {
+      fileMap.set(entry.path, decoder.decode(entry.compressedData));
+    }
+  }
+
+  return parseEpubDecodedFileMap(fileMap);
+}
+
+export async function parseEpubArchiveToChaptersAsync(epubBytes: Uint8Array): Promise<EpubImportResult> {
+  const entries = readZipEntriesRaw(epubBytes);
+  const decoder = new TextDecoder('utf-8');
+  const fileMap = new Map<string, string>();
+
+  for (const entry of entries) {
+    if (entry.compressionMethod === 0) {
+      fileMap.set(entry.path, decoder.decode(entry.compressedData));
+    } else if (entry.compressionMethod === 8) {
+      try {
+        const inflated = await inflateRawBytesAsync(entry.compressedData);
+        fileMap.set(entry.path, decoder.decode(inflated));
+      } catch {
+        // Skip unreadable entry
+      }
+    }
+  }
+
+  return parseEpubDecodedFileMap(fileMap);
+}
+
+/**
+ * Pass 2 Surgical Patch Item (`Perevod_Ready/src/Perevod/prompts/refine_system.txt` & `refine.py`).
+ */
+export interface SurgicalPatchItem {
+  find: string;
+  replace: string;
+  reason?: string;
+  kind?: 'glossary' | 'number' | 'calque' | 'grammar' | 'style' | string;
+  all?: boolean;
+  patchClass?: 'A_mistranslation' | 'B_omission_or_defect' | 'C_calque_or_slop' | 'D_inconsistency';
+  provenance?: {
+    source: 'pass2_critic' | 'self_repair' | 'manual_editor' | 'auto_repair';
+    timestamp?: number;
+    ruleId?: string;
+  };
+}
+
+export interface SurgicalPatchResult {
+  patchedText: string;
+  appliedCount: number;
+  skippedCount: number;
+  appliedLog: Array<{
+    find: string;
+    replace: string;
+    reason: string;
+    count: number;
+    patchClass?: 'A_mistranslation' | 'B_omission_or_defect' | 'C_calque_or_slop' | 'D_inconsistency';
+    provenance?: unknown;
+  }>;
+  skippedLog: Array<{
+    find: string;
+    status:
+      | 'noop'
+      | 'not_found'
+      | 'ambiguous_match'
+      | 'unsafe_number_drop'
+      | 'unsafe_glossary_erasure'
+      | 'unsafe_tag_imbalance';
+  }>;
+}
+
+/**
+ * Mechanical Gate: Applies Pass 2 Literary Critic surgical patches
+ * in reverse offset order (`b.start - a.start`) with multi-layer verification:
+ * 1. Number preservation guard (`unsafe_number_drop`)
+ * 2. Add-Only Canon Protection guard (`unsafe_glossary_erasure`)
+ * 3. Tag and bracket balance guard (`unsafe_tag_imbalance`)
+ * 4. Provenance and Patch Classification (A/B/C/D).
+ */
+export function applySurgicalPatches(
+  text: string,
+  patches: SurgicalPatchItem[],
+  glossary?: CanonicalGlossary
+): SurgicalPatchResult {
+  if (!text || !Array.isArray(patches) || patches.length === 0) {
+    return {
+      patchedText: text || '',
+      appliedCount: 0,
+      skippedCount: 0,
+      appliedLog: [],
+      skippedLog: [],
+    };
+  }
+
+  // Pre-collect Russian canonical terms for Add-Only Canon Protection (with inflected forms)
+  const canonTermGroups: Array<{ base: string; forms: string[] }> = [];
+  if (glossary) {
+    (Object.keys(glossary) as GlossaryCategory[]).forEach((cat) => {
+      Object.entries(glossary[cat] || {}).forEach(([eng, rus]) => {
+        const raw = (rus || '').trim();
+        const unquoted = raw.replace(/^[«"]|[»"]$/g, '').trim();
+        if (unquoted.length >= 3) {
+          const formsSet = new Set<string>();
+          formsSet.add(raw.toLowerCase());
+          formsSet.add(unquoted.toLowerCase());
+          try {
+            const inflected = buildInflectedRussianForms(unquoted, { category: cat });
+            for (const f of inflected) {
+              const cf = f.form.replace(/^[«"]|[»"]$/g, '').trim().toLowerCase();
+              if (cf.length >= 3) {
+                formsSet.add(cf);
+              }
+            }
+          } catch {
+            // fallback to base terms
+          }
+          canonTermGroups.push({ base: unquoted, forms: Array.from(formsSet) });
+        }
+      });
+    });
+  }
+
+  let currentText = text;
+  const appliedLog: Array<{
+    find: string;
+    replace: string;
+    reason: string;
+    count: number;
+    patchClass?: 'A_mistranslation' | 'B_omission_or_defect' | 'C_calque_or_slop' | 'D_inconsistency';
+    provenance?: unknown;
+  }> = [];
+  const skippedLog: Array<{
+    find: string;
+    status:
+      | 'noop'
+      | 'not_found'
+      | 'ambiguous_match'
+      | 'unsafe_number_drop'
+      | 'unsafe_glossary_erasure'
+      | 'unsafe_tag_imbalance';
+  }> = [];
+
+  for (const patch of patches) {
+    const findStr = (patch.find || '').trim();
+    const replaceStr = (patch.replace ?? '').trim();
+    if (!findStr || findStr === replaceStr) {
+      skippedLog.push({ find: findStr, status: 'noop' });
+      continue;
+    }
+
+    // Safety guard 1: never allow a style patch to silently delete an Arabic number present in `find`
+    const numsInFind = findStr.match(/(?<!\d)\d+(?:\.\d+)?(?!\d)/g) || [];
+    const numsInReplace = new Set(replaceStr.match(/(?<!\d)\d+(?:\.\d+)?(?!\d)/g) || []);
+    if (numsInFind.some((n) => !numsInReplace.has(n))) {
+      skippedLog.push({ find: findStr, status: 'unsafe_number_drop' });
+      continue;
+    }
+
+    // Safety guard 2: Add-Only Canon Protection (unsafe_glossary_erasure)
+    if (canonTermGroups.length > 0) {
+      const findLower = findStr.toLowerCase();
+      const replaceLower = replaceStr.toLowerCase();
+      let hasErasedCanon = false;
+
+      for (const group of canonTermGroups) {
+        const matchedFormInFind = group.forms.find((form) => {
+          const esc = form.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const re = new RegExp(`(?<![а-яёА-ЯЁa-zA-Z0-9])${esc}(?![а-яёА-ЯЁa-zA-Z0-9])`, 'i');
+          return re.test(findLower);
+        });
+
+        if (matchedFormInFind) {
+          const matchedFormInReplace = group.forms.some((form) => {
+            const esc = form.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const re = new RegExp(`(?<![а-яёА-ЯЁa-zA-Z0-9])${esc}(?![а-яёА-ЯЁa-zA-Z0-9])`, 'i');
+            return re.test(replaceLower);
+          });
+
+          if (!matchedFormInReplace) {
+            hasErasedCanon = true;
+            break;
+          }
+        }
+      }
+
+      if (hasErasedCanon) {
+        skippedLog.push({ find: findStr, status: 'unsafe_glossary_erasure' });
+        continue;
+      }
+    }
+
+    // Safety guard 3: Tag and bracket balance guard (unsafe_tag_imbalance)
+    const openSq = (replaceStr.match(/\[/g) || []).length;
+    const closeSq = (replaceStr.match(/\]/g) || []).length;
+    const openGui = (replaceStr.match(/«/g) || []).length;
+    const closeGui = (replaceStr.match(/»/g) || []).length;
+    const openParen = (replaceStr.match(/\(/g) || []).length;
+    const closeParen = (replaceStr.match(/\)/g) || []).length;
+    const openI = (replaceStr.match(/<i>/gi) || []).length;
+    const closeI = (replaceStr.match(/<\/i>/gi) || []).length;
+    const openB = (replaceStr.match(/<b>/gi) || []).length;
+    const closeB = (replaceStr.match(/<\/b>/gi) || []).length;
+
+    if (
+      openSq !== closeSq ||
+      openGui !== closeGui ||
+      openParen !== closeParen ||
+      openI !== closeI ||
+      openB !== closeB
+    ) {
+      skippedLog.push({ find: findStr, status: 'unsafe_tag_imbalance' });
+      continue;
+    }
+
+    // Locate all occurrences in `currentText`
+    const spans: Array<{ start: number; end: number }> = [];
+    let searchFrom = 0;
+    while (searchFrom <= currentText.length - findStr.length) {
+      const idx = currentText.indexOf(findStr, searchFrom);
+      if (idx === -1) break;
+      spans.push({ start: idx, end: idx + findStr.length });
+      searchFrom = idx + findStr.length;
+    }
+
+    if (spans.length === 0) {
+      skippedLog.push({ find: findStr, status: 'not_found' });
+      continue;
+    }
+
+    if (spans.length > 1 && !patch.all) {
+      skippedLog.push({ find: findStr, status: 'ambiguous_match' });
+      continue;
+    }
+
+    // Apply in reverse offset order so earlier indices never shift
+    const sortedSpans = [...spans].sort((a, b) => b.start - a.start);
+    for (const span of sortedSpans) {
+      currentText =
+        currentText.slice(0, span.start) + replaceStr + currentText.slice(span.end);
+    }
+
+    const patchClass =
+      patch.patchClass ||
+      (/mistranslation|неверн|ошибк/i.test(patch.reason || patch.kind || '')
+        ? 'A_mistranslation'
+        : /omission|defect|пропуск|потер/i.test(patch.reason || patch.kind || '')
+        ? 'B_omission_or_defect'
+        : /inconsistency|противореч|термин/i.test(patch.reason || patch.kind || '')
+        ? 'D_inconsistency'
+        : 'C_calque_or_slop');
+
+    appliedLog.push({
+      find: findStr,
+      replace: replaceStr,
+      reason: patch.reason || patch.kind || 'Литературная правка Pass 2',
+      count: sortedSpans.length,
+      patchClass,
+      provenance: patch.provenance || { source: 'pass2_critic', timestamp: Date.now() },
+    });
+  }
+
+  return {
+    patchedText: currentText,
+    appliedCount: appliedLog.length,
+    skippedCount: skippedLog.length,
+    appliedLog,
+    skippedLog,
+  };
+}
+
+export interface ChaptersZipArchivePackage {
+  filename: string;
+  bytes: Uint8Array;
+  byteSize: number;
+  chapterCount: number;
+  fileList: string[];
+}
+
+/**
+ * Compiles translated chapters into a `.zip` archive where each chapter is a standalone
+ * UTF-8 LF `.txt` or `.md` file (`Chapter_0001.txt`, `Chapter_0002.txt`, ...) for Ranobelib / Author.Today / Boosty (`Q11: B`).
+ */
+export function buildChaptersZipArchive(
+  novelName: string,
+  chapters: Array<{ number: number; titleRus: string; contentRus: string }>,
+  format: 'txt' | 'md' = 'txt'
+): ChaptersZipArchivePackage {
+  const encoder = new TextEncoder();
+  const sorted = [...chapters].sort((a, b) => a.number - b.number);
+  const ext = format === 'md' ? 'md' : 'txt';
+  const files: Array<{ path: string; data: Uint8Array }> = [];
+  const fileList: string[] = [];
+
+  for (const ch of sorted) {
+    const padded = String(ch.number).padStart(4, '0');
+    const cleanHeading = (ch.titleRus || `Глава ${ch.number}`).replace(/\r\n/g, '\n').trim();
+    const cleanBody = (ch.contentRus || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+    const fileContent =
+      format === 'md'
+        ? `# ${cleanHeading}\n\n${cleanBody}\n`
+        : `${cleanHeading}\n\n${cleanBody}\n`;
+
+    const filePath = `Chapter_${padded}.${ext}`;
+    fileList.push(filePath);
+    files.push({
+      path: filePath,
+      data: encoder.encode(fileContent),
+    });
+  }
+
+  const manifestJson = JSON.stringify(
+    {
+      novelName,
+      exportedAt: new Date().toISOString(),
+      chapterCount: sorted.length,
+      format: ext,
+      files: fileList,
+    },
+    null,
+    2
+  );
+  files.push({
+    path: '00_MANIFEST.json',
+    data: encoder.encode(manifestJson),
+  });
+
+  const bytes = createStoredZipArchive(files);
+  const firstNum = sorted[0]?.number ?? 1;
+  const lastNum = sorted[sorted.length - 1]?.number ?? 1;
+  const slug = novelName
+    .replace(/[^a-zA-Z0-9а-яА-ЯёЁ]+/g, '_')
+    .replace(/^_|_$/g, '');
+
+  return {
+    filename: `${slug || 'Novel'}_Chapters_${firstNum}_${lastNum}_${ext.toUpperCase()}.zip`,
+    bytes,
+    byteSize: bytes.byteLength,
+    chapterCount: sorted.length,
+    fileList,
+  };
+}
+
+export type GikunCategory =
+  | 'reading_aid'
+  | 'bouten'
+  | 'nomenclature'
+  | 'litrpg_term'
+  | 'deictic'
+  | 'subtext';
+
+export interface RubyGikunParseItem {
+  base: string;
+  ruby: string;
+  category: GikunCategory;
+  renderedTag: string;
+}
+
+export interface RubyGikunParseResult {
+  parsedText: string;
+  foundCount: number;
+  items: RubyGikunParseItem[];
+}
+
+/**
+ * Step 0.1: Deterministic Japanese Furigana, Gikun, and Bouten AST Pre-Parser.
+ * Classifies Japanese ruby annotations into 6 linguistic types before Pass 1 translation
+ * to eliminate bracketed artifacts in dialogue and enable natural Russian stylistic fusion.
+ */
+export function parseRubyAndGikunMarkup(sourceText: string): RubyGikunParseResult {
+  if (!sourceText || typeof sourceText !== 'string') {
+    return { parsedText: '', foundCount: 0, items: [] };
+  }
+
+  const items: RubyGikunParseItem[] = [];
+  let working = sourceText;
+
+  // 1. Bouten standalone notation: 《《text》》
+  working = working.replace(/《《([^》\n]+)》》/g, (_, emphText) => {
+    const renderedTag = `<emph text="${emphText}"/>`;
+    items.push({
+      base: emphText,
+      ruby: 'bouten',
+      category: 'bouten',
+      renderedTag,
+    });
+    return renderedTag;
+  });
+
+  // 2. HTML <ruby> tags: <ruby><rb>Base</rb><rt>Ruby</rt></ruby> or <ruby>Base<rt>Ruby</rt></ruby>
+  working = working.replace(
+    /<ruby>(?:<rb>)?([^<]+)(?:<\/rb>)?<rt>([^<]+)<\/rt><\/ruby>/gi,
+    (_, base, ruby) => {
+      const parsed = classifyRubyItem(base.trim(), ruby.trim());
+      items.push(parsed);
+      return parsed.renderedTag;
+    }
+  );
+
+  // 3. Syosetu / Kakuyomu ruby: ｜Base《Ruby》 or Base《Ruby》
+  working = working.replace(
+    /(?:｜([^\s《\n]+)|([一-龯々〆ヵヶa-zA-Z0-9]+))《([^》\n]+)》/g,
+    (_, base1, base2, ruby) => {
+      const base = (base1 || base2 || '').trim();
+      const parsed = classifyRubyItem(base, (ruby || '').trim());
+      items.push(parsed);
+      return parsed.renderedTag;
+    }
+  );
+
+  // 4. Kanji + Parentheses notation: 漢字(ふりがな/カタカナ)
+  working = working.replace(
+    /([一-龯々〆ヵヶ]{1,8})\(([ぁ-んァ-ヶーa-zA-Z0-9・•●]+)\)/g,
+    (_, base, ruby) => {
+      const parsed = classifyRubyItem(base.trim(), ruby.trim());
+      items.push(parsed);
+      return parsed.renderedTag;
+    }
+  );
+
+  return {
+    parsedText: working,
+    foundCount: items.length,
+    items,
+  };
+}
+
+function classifyRubyItem(base: string, ruby: string): RubyGikunParseItem {
+  // A. Bouten: ruby is a bullet/dot (・, •, ●)
+  if (/^[・•●]+$/.test(ruby)) {
+    const renderedTag = `<emph text="${base}"/>`;
+    return { base, ruby, category: 'bouten', renderedTag };
+  }
+
+  // B. Deictic / Alias Gikun: pronoun in ruby refering to noun in base
+  const deicticPattern = /^(?:ここ|ぼくたち|僕たち|わたし|私|あいつ|そこ|あれ|オレたち|俺たち|あんた|お前|きみ|君)$/;
+  if (deicticPattern.test(ruby)) {
+    const renderedTag = `<gikun type="deictic" spoken="${ruby}" referent="${base}"/>`;
+    return { base, ruby, category: 'deictic', renderedTag };
+  }
+
+  // C. LitRPG Game Gikun: terms like クラス, スキル, ステータス, レベル, 職業, 技能
+  const litrpgPattern = /クラス|スキル|ステータス|レベル|職業|技能|魔法|属性|ダンジョン/;
+  if (litrpgPattern.test(ruby) || litrpgPattern.test(base)) {
+    const renderedTag = `<gikun type="litrpg_term" spoken="${ruby}" meaning="${base}"/>`;
+    return { base, ruby, category: 'litrpg_term', renderedTag };
+  }
+
+  // C2. Subtext Slang Gikun: terms like 本気《マジ》, 強敵《とも》, リアル, ガチ, ウソ
+  const subtextSlangPattern = /^(?:マジ|ガチ|リアル|ウソ|とも|やつ|ヤツ|オトコ|オンナ)$/;
+  if (subtextSlangPattern.test(ruby)) {
+    const renderedTag = `<gikun type="subtext" spoken="${ruby}" hidden="${base}"/>`;
+    return { base, ruby, category: 'subtext', renderedTag };
+  }
+
+  // D. Nomenclature / Chuunibyou Gikun: Kanji base + Katakana loanword
+  const hasKanji = /[一-龯々〆ヵヶ]/.test(base);
+  const isKatakana = /^[ァ-ヶー・\s]+$/.test(ruby);
+  if (hasKanji && isKatakana) {
+    const renderedTag = `<gikun type="nomenclature" spoken="${ruby}" meaning="${base}"/>`;
+    return { base, ruby, category: 'nomenclature', renderedTag };
+  }
+
+  // E. Standard phonetic reading aid: pure Hiragana matching phonetic helper
+  const isHiragana = /^[ぁ-んー\s]+$/.test(ruby);
+  if (hasKanji && isHiragana && ruby.length <= base.length * 4) {
+    return { base, ruby, category: 'reading_aid', renderedTag: base };
+  }
+
+  // F. Synonymous / Subtext Gikun: oxymoronic or contextual subtext
+  const renderedTag = `<gikun type="subtext" spoken="${ruby}" hidden="${base}"/>`;
+  return { base, ruby, category: 'subtext', renderedTag };
+}
+
+export interface KoreanParagraphNormalizeResult {
+  normalizedText: string;
+  groupedParagraphCount: number;
+  originalLineCount: number;
+  paragraphIndexMap: number[]; // maps each new paragraph index to original line index
+}
+
+/**
+ * Normalizes fragmented Korean single-sentence mobile web-novel paragraphs into cohesive narrative units.
+ * Preserves Dialogue lines (—, ", 「), scene dividers (---, ***), and system status boxes ([...]).
+ */
+export function normalizeKoreanOneLineParagraphs(rawText: string): KoreanParagraphNormalizeResult {
+  if (!rawText || typeof rawText !== 'string') {
+    return { normalizedText: '', groupedParagraphCount: 0, originalLineCount: 0, paragraphIndexMap: [] };
+  }
+
+  const lines = rawText.replace(/\r\n/g, '\n').split('\n');
+  const normalizedParagraphs: string[] = [];
+  const paragraphIndexMap: number[] = [];
+
+  let pendingNarrative: string[] = [];
+  let pendingStartIndex = -1;
+
+  const flushNarrative = () => {
+    if (pendingNarrative.length > 0) {
+      normalizedParagraphs.push(pendingNarrative.join(' '));
+      paragraphIndexMap.push(pendingStartIndex >= 0 ? pendingStartIndex : 0);
+      pendingNarrative = [];
+      pendingStartIndex = -1;
+    }
+  };
+
+  for (let idx = 0; idx < lines.length; idx++) {
+    const line = lines[idx].trim();
+    if (!line) {
+      flushNarrative();
+      continue;
+    }
+
+    const isDivider = line === '---' || line === '***' || line === '◇◇◇';
+    const isSystemFrame =
+      (line.startsWith('[') && line.endsWith(']')) ||
+      (line.startsWith('【') && line.endsWith('】'));
+    const isDialogue =
+      /^[—\-"“'«‘「『]/.test(line) ||
+      (line.endsWith('다."') || line.endsWith('다.’') || line.endsWith('요."'));
+
+    if (isDivider || isSystemFrame || isDialogue) {
+      flushNarrative();
+      normalizedParagraphs.push(line);
+      paragraphIndexMap.push(idx);
+    } else {
+      if (pendingStartIndex === -1) {
+        pendingStartIndex = idx;
+      }
+      pendingNarrative.push(line);
+      // Group up to 3 sentences or ~220 characters
+      if (pendingNarrative.length >= 3 || pendingNarrative.join(' ').length >= 220) {
+        flushNarrative();
+      }
+    }
+  }
+
+  flushNarrative();
+
+  return {
+    normalizedText: normalizedParagraphs.join('\n\n'),
+    groupedParagraphCount: normalizedParagraphs.length,
+    originalLineCount: lines.length,
+    paragraphIndexMap,
+  };
+}
+
+export interface ChapterChunkItem {
+  chunkIndex: number;
+  totalChunks: number;
+  text: string;
+  readOnlyPrecedingContext: string;
+  readOnlyLookahead: string;
+  startParagraphIndex: number;
+  endParagraphIndex: number;
+}
+
+/**
+ * Dialogue- and Scene-Aware Sliding Window Chunker (SceneDialogueChunker).
+ * Enforces Dialogue Lock (never split mid-conversation), Frame Lock (never split [...] or dividers),
+ * and provisions read-only preceding context + lookahead sentences.
+ */
+export function chunkChapterWithSceneAndDialogueLocks(
+  chapterText: string,
+  options?: {
+    maxTokens?: number; // default ~1800 words/tokens
+    precedingContextParagraphs?: number; // default 3
+    lookaheadSentences?: number; // default 2
+  }
+): ChapterChunkItem[] {
+  if (!chapterText || !chapterText.trim()) {
+    return [];
+  }
+
+  const maxTokens = options?.maxTokens || 1800;
+  const contextCount = options?.precedingContextParagraphs || 3;
+  const lookaheadCount = options?.lookaheadSentences || 2;
+
+  const paragraphs = chapterText
+    .replace(/\r\n/g, '\n')
+    .split(/\n\n+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  if (paragraphs.length === 0) return [];
+
+  // Approximate tokens by word count
+  const estimateTokens = (text: string) => Math.ceil((text.match(/\S+/g) || []).length * 1.3);
+
+  const chunks: Array<{
+    paragraphs: string[];
+    startIdx: number;
+    endIdx: number;
+  }> = [];
+
+  let currentChunk: string[] = [];
+  let currentTokens = 0;
+  let currentStart = 0;
+
+  for (let i = 0; i < paragraphs.length; i++) {
+    const p = paragraphs[i];
+    const pTokens = estimateTokens(p);
+
+    const isDialogue = /^[—\-"“'«‘「『]/.test(p);
+    const nextP = i + 1 < paragraphs.length ? paragraphs[i + 1] : undefined;
+    const nextIsDialogue = nextP ? /^[—\-"“'«‘「『]/.test(nextP) : false;
+    const isDivider = p === '---' || p === '***' || p === '◇◇◇';
+    const isSystemFrame =
+      (p.startsWith('[') && p.endsWith(']')) ||
+      (p.startsWith('【') && p.endsWith('】'));
+
+    currentChunk.push(p);
+    currentTokens += pTokens;
+
+    // Check if we should split:
+    // 1. Exceeded maxTokens
+    // 2. NOT in Dialogue Lock (if this is dialogue and next is dialogue, keep together)
+    // 3. NOT in Frame Lock
+    const canSplit = !(isDialogue && nextIsDialogue) && !isSystemFrame && !isDivider;
+
+    if (currentTokens >= maxTokens && canSplit && i < paragraphs.length - 1) {
+      chunks.push({
+        paragraphs: [...currentChunk],
+        startIdx: currentStart,
+        endIdx: i,
+      });
+      currentChunk = [];
+      currentTokens = 0;
+      currentStart = i + 1;
+    }
+  }
+
+  if (currentChunk.length > 0) {
+    chunks.push({
+      paragraphs: [...currentChunk],
+      startIdx: currentStart,
+      endIdx: paragraphs.length - 1,
+    });
+  }
+
+  // Build final ChapterChunkItem with preceding context & lookahead
+  return chunks.map((c, cIdx) => {
+    // Preceding context from previous chunk
+    let precedingContext = '';
+    if (cIdx > 0) {
+      const prevChunkParas = chunks[cIdx - 1].paragraphs;
+      const sliceCount = Math.min(contextCount, prevChunkParas.length);
+      precedingContext = prevChunkParas.slice(-sliceCount).join('\n\n');
+    }
+
+    // Lookahead sentences from next chunk
+    let lookahead = '';
+    if (cIdx < chunks.length - 1) {
+      const nextChunkFirstParas = chunks[cIdx + 1].paragraphs.slice(0, 2).join(' ');
+      const sentences = nextChunkFirstParas
+        .split(/(?<=[.!?。！？])\s+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      lookahead = sentences.slice(0, lookaheadCount).join(' ');
+    }
+
+    return {
+      chunkIndex: cIdx + 1,
+      totalChunks: chunks.length,
+      text: c.paragraphs.join('\n\n'),
+      readOnlyPrecedingContext: precedingContext
+        ? `[READ_ONLY_PRECEDING_CONTEXT - DO NOT TRANSLATE]:\n${precedingContext}`
+        : '',
+      readOnlyLookahead: lookahead
+        ? `[READ_ONLY_LOOKAHEAD - DO NOT TRANSLATE]:\n${lookahead}`
+        : '',
+      startParagraphIndex: c.startIdx,
+      endParagraphIndex: c.endIdx,
+    };
+  });
+}
+
+// Stage 1: Deep Chapter Postprocessing & Verification Pipeline
+export * from './chapter-verifier.ts';
+
+// Stage 2: Universal LLM Inference Port & Adapters
+export * from './llm-inference-port.ts';
+
+// Stage 3: Morphological Canon Glossary Vault
+export {
+  buildInflectedRussianForms,
+  splitCompoundRussianTerm,
+  buildSocialRegisterPromptBlock,
+  deriveDefaultSpeechVector,
+  buildCharacterVoicePromptBlock,
+  lintGlossaryVault,
+  computeChapterGlossaryCoverage,
+  approveScoutedTermInVault,
+  autoApprovePendingTermsInVault,
+  upsertCanonTermInVault,
+  removeCanonTermFromVault,
+  applyCanonRippleToNovel,
+  type InflectedFormItem,
+  type SplitCompoundResult,
+  type SocialRegisterEdge,
+  type CharacterVoiceCardV3,
+  type GlossaryLintIssue,
+  type CanonVaultState,
+  type ChapterGlossaryCoverageResult,
+} from './canon-glossary-vault.ts';
+
+// Stage 4: 5-Phase Batch Pipeline Orchestration Engine
+export * from './pipeline-run-engine.ts';
+
+// Stage 5: Project Repository, Hydration Guard & Bundle Serialization
+export * from './storage-idb.ts';

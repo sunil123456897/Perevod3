@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import { BarChart3 } from 'lucide-react';
 import {
-  filterGlossaryForChapter,
+  computeChapterGlossaryCoverage,
   type CanonicalGlossary,
   type ScoutedTerm,
 } from '@/lib/qa-linter';
@@ -49,70 +49,12 @@ export default function TranslationAnalyticsChart({
     });
 
     return sorted.map((ch) => {
-      // Count canonical terms present in the chapter's source text
-      const { filteredGlossary, matchedCount: canonInSource } = filterGlossaryForChapter(
-        ch.engText,
-        glossary
-      );
-
-      // Count how many of those canonical terms are actually represented in Russian translation
-      let canonMatchedInRus = 0;
-      const lowerRus = (ch.rusText || '').toLowerCase().replace(/ё/g, 'е');
-
-      if (ch.rusText.trim()) {
-        Object.values(filteredGlossary).forEach((bucket) => {
-          Object.values(bucket || {}).forEach((rusTerm) => {
-            const rusStr = String(rusTerm || '');
-            const stems = rusStr
-              .toLowerCase()
-              .replace(/ё/g, 'е')
-              .split(/\s+/)
-              .filter((w) => w.length >= 2)
-              .map((w) => {
-                if (w.startsWith('камен')) return 'кам';
-                if (w.startsWith('корен')) return 'кор';
-                return w.slice(0, Math.min(4, Math.max(2, w.length - 2)));
-              });
-
-            const matched =
-              stems.length === 0 || stems.every((stem) => lowerRus.includes(stem));
-            if (matched) {
-              canonMatchedInRus++;
-            }
-          });
-        });
-      }
-
-      // Count unapproved scouted candidate terms present in this chapter
-      let unapprovedInChapter = 0;
-      scoutedTerms.forEach((st) => {
-        if (!st.approved_for_glossary) {
-          const escaped = st.eng.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          if (new RegExp(`\\b${escaped}s?\\b`, 'i').test(ch.engText)) {
-            unapprovedInChapter++;
-          }
-        }
-      });
-
-      const totalDetectedTerms = canonInSource + unapprovedInChapter;
-      let glossaryCoveragePct = 0;
-
-      if (ch.translated && ch.rusText.trim()) {
-        if (totalDetectedTerms === 0) {
-          glossaryCoveragePct = 100;
-        } else {
-          glossaryCoveragePct = Math.min(
-            100,
-            Math.round((canonMatchedInRus / totalDetectedTerms) * 100)
-          );
-        }
-      } else if (totalDetectedTerms > 0) {
-        // For untranslated chapters, show how much of its terminology is already in Canon vs Pending Scout
-        glossaryCoveragePct = Math.min(
-          100,
-          Math.round((canonInSource / totalDetectedTerms) * 100)
-        );
-      }
+      const {
+        canonInSource,
+        canonMatchedInRus,
+        totalDetectedTerms,
+        glossaryCoveragePct,
+      } = computeChapterGlossaryCoverage(ch, glossary, scoutedTerms);
 
       const numLabel = `Гл. ${ch.subPart || ch.number}`;
       const shortDate = ch.lastUpdated
