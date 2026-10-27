@@ -1,5 +1,10 @@
+import { ToastProvider } from '@/components/ToastProvider';
 import PipelineStudioApp from '@/components/PipelineStudioApp';
 
 export default function HomePage() {
-  return <PipelineStudioApp />;
+  return (
+    <ToastProvider>
+      <PipelineStudioApp />
+    </ToastProvider>
+  );
 }

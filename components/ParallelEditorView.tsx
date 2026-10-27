@@ -19,7 +19,13 @@ import {
   GitCompare,
   Undo2,
   Clock,
+  Maximize2,
+  Minimize2,
+  Type,
+  BookmarkPlus,
+  SlidersHorizontal,
 } from 'lucide-react';
+import { useToast } from './ToastProvider';
 import {
   finalizeAndVerifyChapter,
   runQaLinter,
@@ -116,6 +122,27 @@ export default function ParallelEditorView({
   const [quickTermCategory, setQuickTermCategory] = useState<keyof CanonicalGlossary>('system_and_terms');
   const [quickTermRipple, setQuickTermRipple] = useState(true);
 
+  const toast = useToast();
+
+  // Typography Preferences
+  const [fontSize, setFontSize] = useState<'sm' | 'base' | 'lg' | 'xl'>('base');
+  const [fontFamily, setFontFamily] = useState<'serif' | 'sans' | 'mono'>('serif');
+  const [lineHeight, setLineHeight] = useState<'normal' | 'relaxed' | 'loose'>('relaxed');
+  const [columnWidth, setColumnWidth] = useState<'prose' | 'full'>('prose');
+  const [showTypoMenu, setShowTypoMenu] = useState(false);
+
+  // Zen / Focus Fullscreen Mode
+  const [isZenMode, setIsZenMode] = useState(false);
+
+  // Floating Selection Action Pill
+  const [selectedTextSnippet, setSelectedTextSnippet] = useState<{
+    text: string;
+    isEnglish: boolean;
+  } | null>(null);
+
+  // Stylist View Mode
+  const [stylistViewMode, setStylistViewMode] = useState<'final' | 'pre_stylist' | 'stylist_diff'>('final');
+
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'M' || e.key === 'm')) {
@@ -131,11 +158,13 @@ export default function ParallelEditorView({
           }
         }
         setShowQuickTermModal(true);
+      } else if (e.key === 'Escape' && isZenMode) {
+        setIsZenMode(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [isZenMode]);
 
   if (syncedChapterId !== chapter.id) {
     setSyncedChapterId(chapter.id);
@@ -233,11 +262,71 @@ export default function ParallelEditorView({
       setDraftRus((prev) => prev.replace(re, quickTermRus.trim()));
     }
     setShowQuickTermModal(false);
+    toast.success(`«${quickTermEng}» → «${quickTermRus}» добавлен в канон`, 'Канонический термин');
     setRepairNotice(
       `Термин «${quickTermEng}» → «${quickTermRus}» добавлен в канон${
         quickTermRipple ? ' с Canon Ripple' : ''
       }.`
     );
+  };
+
+  // Typography Class computation for reading panes
+  const typoClass = useMemo(() => {
+    const sizeCls =
+      fontSize === 'sm'
+        ? 'text-sm'
+        : fontSize === 'base'
+        ? 'text-base'
+        : fontSize === 'lg'
+        ? 'text-lg'
+        : 'text-xl';
+
+    const fontCls =
+      fontFamily === 'serif'
+        ? 'font-serif'
+        : fontFamily === 'mono'
+        ? 'font-mono'
+        : 'font-sans';
+
+    const leadingCls =
+      lineHeight === 'loose'
+        ? 'leading-[2]'
+        : lineHeight === 'normal'
+        ? 'leading-[1.5]'
+        : 'leading-[1.75]';
+
+    const widthCls = columnWidth === 'prose' ? 'max-w-[68ch]' : 'max-w-none';
+
+    return `${sizeCls} ${fontCls} ${leadingCls} ${widthCls}`;
+  }, [fontSize, fontFamily, lineHeight, columnWidth]);
+
+  // Pre-Stylist Snapshot for Pass 2 vs Pass 3 comparison
+  const preStylistSnapshot = useMemo(() => {
+    const found = (chapter.versionHistory || []).find(
+      (v) =>
+        v.stageLabel.includes('Pass 2') ||
+        v.stageLabel.includes('Черновик') ||
+        v.stageLabel.includes('черновик') ||
+        v.stageLabel.includes('до авто-ремонта') ||
+        v.stageLabel.includes('Фаза 2')
+    );
+    return found ? found.rusText : lastPreRepairSnapshot;
+  }, [chapter.versionHistory, lastPreRepairSnapshot]);
+
+  const stylistDiffSegments = useMemo(() => {
+    if (!preStylistSnapshot) return [];
+    return computeWordDiff(preStylistSnapshot, draftRus);
+  }, [preStylistSnapshot, draftRus]);
+
+  const handleEditorMouseUp = () => {
+    const selection = window.getSelection();
+    const selText = selection?.toString().trim() || '';
+    if (selText.length >= 2 && selText.length <= 60 && !selText.includes('\n')) {
+      const isEnglish = /[a-zA-Z]/.test(selText);
+      setSelectedTextSnippet({ text: selText, isEnglish });
+    } else {
+      setSelectedTextSnippet(null);
+    }
   };
 
   // Tautology & Repetition Radar
@@ -376,8 +465,10 @@ export default function ParallelEditorView({
     setEditorMode('inline_diff');
     if (combinedFixes.length > 0) {
       setRepairNotice(`Исправлено автоматически: ${combinedFixes.join(' · ')}`);
+      toast.info(`Авто-ремонт QA: ${combinedFixes.length} исправлений`, 'Канон QA');
     } else {
       setRepairNotice('Все 100% проверок QA пройдены.');
+      toast.success('Все 100% проверок QA пройдены', 'Канон QA');
     }
     onSaveChapter({
       ...chapter,
@@ -580,6 +671,7 @@ export default function ParallelEditorView({
       lastUpdated: nowStr,
     });
     setRepairNotice('Глава, версия в истории и память сюжета сохранены.');
+    toast.success(`Глава ${chapter.subPart || chapter.number} сохранена`, 'Сохранено');
   };
 
   const renderHighlightedEnglish = (text: string) => {
@@ -641,7 +733,43 @@ export default function ParallelEditorView({
     (lintReport.errorCount > 0 || lintReport.warningCount > 0);
 
   return (
-    <div className="space-y-4">
+    <div
+      className={
+        isZenMode
+          ? 'fixed inset-0 z-50 bg-[#090A0F] p-4 sm:p-6 overflow-y-auto flex flex-col space-y-4'
+          : 'space-y-4'
+      }
+    >
+      {/* Zen Mode Quick Status Bar */}
+      {isZenMode && (
+        <div className="flex items-center justify-between p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs shrink-0 backdrop-blur-md">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+            <span className="font-semibold text-amber-300">Zen-режим (Focus)</span>
+            <span className="text-slate-400 hidden sm:inline">
+              · Глава {chapter.subPart || chapter.number}: {draftTitleRus || chapter.titleEng}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleManualSave}
+              className="inline-flex items-center gap-1 px-3 py-1 rounded-md bg-amber-500 text-black font-semibold hover:bg-amber-400 transition"
+            >
+              <Save className="w-3.5 h-3.5" />
+              Сохранить (Ctrl+S)
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsZenMode(false)}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white transition font-medium"
+            >
+              <Minimize2 className="w-3.5 h-3.5" />
+              Выход (Esc)
+            </button>
+          </div>
+        </div>
+      )}
       {/* Minimalist Editor Toolbar: Ghost Utilities + Single Primary Action */}
       <div className="flex flex-col gap-3 pb-4 border-b border-white/[0.06] lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-2.5">
@@ -727,6 +855,137 @@ export default function ParallelEditorView({
 
         {/* Single-Line Ghost Utilities + Primary Action */}
         <div className="flex flex-wrap lg:flex-nowrap items-center gap-1 shrink-0">
+          {/* Typography Controls Popover */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowTypoMenu((prev) => !prev)}
+              className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition whitespace-nowrap ${
+                showTypoMenu
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  : 'text-[#94A3B8] hover:bg-white/[0.04] hover:text-[#F1F5F9]'
+              }`}
+              title="Настройки книжной типографики"
+            >
+              <Type className="h-3.5 w-3.5 text-amber-400" />
+              Шрифт
+            </button>
+
+            {showTypoMenu && (
+              <div className="absolute top-full right-0 mt-1.5 z-40 w-72 rounded-xl border border-white/10 bg-[#0c1017] p-3.5 shadow-2xl space-y-3 animate-in fade-in">
+                <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                  <span className="text-xs font-semibold text-slate-200">Книжная типографика</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowTypoMenu(false)}
+                    className="text-slate-400 hover:text-white text-xs px-1"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Гарнитура */}
+                <div className="space-y-1">
+                  <label className="text-[11px] text-slate-400">Гарнитура</label>
+                  <div className="grid grid-cols-3 gap-1">
+                    {(['serif', 'sans', 'mono'] as const).map((f) => (
+                      <button
+                        key={f}
+                        type="button"
+                        onClick={() => setFontFamily(f)}
+                        className={`py-1 text-xs rounded border text-center transition ${
+                          fontFamily === f
+                            ? 'border-amber-500 bg-amber-500/20 text-amber-200 font-semibold'
+                            : 'border-white/5 bg-white/[0.02] text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {f === 'serif' ? 'Роман (Serif)' : f === 'sans' ? 'Гротеск' : 'Моно'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Размер шрифта */}
+                <div className="space-y-1">
+                  <label className="text-[11px] text-slate-400">Размер кегля</label>
+                  <div className="grid grid-cols-4 gap-1">
+                    {(['sm', 'base', 'lg', 'xl'] as const).map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setFontSize(s)}
+                        className={`py-1 text-xs rounded border text-center font-mono transition ${
+                          fontSize === s
+                            ? 'border-amber-500 bg-amber-500/20 text-amber-200 font-bold'
+                            : 'border-white/5 bg-white/[0.02] text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {s === 'sm' ? '14px' : s === 'base' ? '16px' : s === 'lg' ? '18px' : '20px'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Интервал */}
+                <div className="space-y-1">
+                  <label className="text-[11px] text-slate-400">Интерлиньяж</label>
+                  <div className="grid grid-cols-3 gap-1">
+                    {(['normal', 'relaxed', 'loose'] as const).map((l) => (
+                      <button
+                        key={l}
+                        type="button"
+                        onClick={() => setLineHeight(l)}
+                        className={`py-1 text-[11px] rounded border text-center transition ${
+                          lineHeight === l
+                            ? 'border-amber-500 bg-amber-500/20 text-amber-200 font-semibold'
+                            : 'border-white/5 bg-white/[0.02] text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {l === 'normal' ? '1.5' : l === 'relaxed' ? '1.75' : '2.0'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Ширина колонки */}
+                <div className="space-y-1">
+                  <label className="text-[11px] text-slate-400">Ширина полосы текста</label>
+                  <div className="grid grid-cols-2 gap-1">
+                    {(['prose', 'full'] as const).map((w) => (
+                      <button
+                        key={w}
+                        type="button"
+                        onClick={() => setColumnWidth(w)}
+                        className={`py-1 text-[11px] rounded border text-center transition ${
+                          columnWidth === w
+                            ? 'border-amber-500 bg-amber-500/20 text-amber-200 font-semibold'
+                            : 'border-white/5 bg-white/[0.02] text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {w === 'prose' ? 'Книжная (68ch)' : 'Во всю ширину'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Zen / Focus Mode Toggle */}
+          <button
+            type="button"
+            onClick={() => setIsZenMode((prev) => !prev)}
+            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition whitespace-nowrap ${
+              isZenMode
+                ? 'bg-amber-500/25 text-amber-300 border border-amber-500/40'
+                : 'text-[#94A3B8] hover:bg-white/[0.04] hover:text-[#F1F5F9]'
+            }`}
+            title={isZenMode ? 'Выйти из Zen-режима (Esc)' : 'Включить полноэкранный Zen-режим (Focus)'}
+          >
+            {isZenMode ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5 text-amber-400" />}
+            Zen
+          </button>
+
           <button
             type="button"
             onClick={() => setHighlightTerms((prev) => !prev)}
@@ -1318,22 +1577,70 @@ export default function ParallelEditorView({
                 {draftEng.trim().split(/\s+/).filter(Boolean).length} слов
               </span>
             </div>
-            <div className="p-6 sm:p-8 text-base leading-[1.75] text-[#F1F5F9]/90 max-w-[65ch] min-h-[440px]">
+            <div
+              onMouseUp={handleEditorMouseUp}
+              className={`p-6 sm:p-8 text-[#F1F5F9]/90 min-h-[440px] ${typoClass}`}
+            >
               {renderHighlightedEnglish(draftEng)}
             </div>
           </div>
 
           {/* Right Pane: Russian Translation */}
           <div className="flex flex-col">
-            <div className="flex items-center justify-between border-b border-white/[0.06] px-6 py-3 gap-2">
+            <div className="flex flex-wrap items-center justify-between border-b border-white/[0.06] px-6 py-2.5 gap-2">
               <input
                 type="text"
                 aria-label="Заголовок главы на русском"
                 value={draftTitleRus}
                 onChange={(e) => setDraftTitleRus(e.target.value)}
                 placeholder="Название главы на русском..."
-                className="w-full bg-transparent text-xs font-medium text-[#F1F5F9] focus:outline-none"
+                className="w-full sm:w-auto flex-1 bg-transparent text-xs font-medium text-[#F1F5F9] focus:outline-none"
               />
+
+              {/* Pass 2 vs Pass 3 Stylist Switcher */}
+              <div className="flex items-center gap-1 bg-black/40 p-0.5 rounded-lg border border-white/5">
+                <button
+                  type="button"
+                  onClick={() => setStylistViewMode('final')}
+                  className={`px-2 py-0.5 text-[10px] rounded transition ${
+                    stylistViewMode === 'final'
+                      ? 'bg-emerald-500/20 text-emerald-300 font-semibold'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Финальный текст после прохода слепого стилиста Норы Галь и шлюза отката"
+                >
+                  Финал (Pass 3)
+                </button>
+                {preStylistSnapshot && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setStylistViewMode('pre_stylist')}
+                      className={`px-2 py-0.5 text-[10px] rounded transition ${
+                        stylistViewMode === 'pre_stylist'
+                          ? 'bg-amber-500/20 text-amber-300 font-semibold'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                      title="Черновик до прохода стилиста"
+                    >
+                      Черновик (Pass 2)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStylistViewMode('stylist_diff')}
+                      className={`px-2 py-0.5 text-[10px] rounded transition ${
+                        stylistViewMode === 'stylist_diff'
+                          ? 'bg-cyan-500/20 text-cyan-300 font-semibold'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                      title="Дифф правок стилиста"
+                    >
+                      Дифф стилиста
+                    </button>
+                  </>
+                )}
+              </div>
+
               <div className="flex items-center gap-2 shrink-0">
                 <span className="font-mono text-xs tabular-nums text-[#64748B]">
                   {draftRus.trim() ? draftRus.trim().split(/\s+/).length : 0} слов
@@ -1352,13 +1659,52 @@ export default function ParallelEditorView({
               </div>
             </div>
 
-            <textarea
-              aria-label="Текст перевода на русском"
-              value={draftRus}
-              onChange={(e) => setDraftRus(e.target.value)}
-              placeholder="Нажмите «Перевести главу» или введите литературный перевод..."
-              className="w-full max-w-[65ch] flex-1 min-h-[440px] resize-y bg-transparent p-6 sm:p-8 text-base leading-[1.75] text-[#F1F5F9] placeholder:text-[#64748B] focus:outline-none"
-            />
+            {stylistViewMode === 'final' ? (
+              <textarea
+                aria-label="Текст перевода на русском"
+                value={draftRus}
+                onChange={(e) => setDraftRus(e.target.value)}
+                onMouseUp={handleEditorMouseUp}
+                onKeyUp={handleEditorMouseUp}
+                placeholder="Нажмите «Перевести главу» или введите литературный перевод..."
+                className={`w-full flex-1 min-h-[440px] resize-y bg-transparent p-6 sm:p-8 text-[#F1F5F9] placeholder:text-[#64748B] focus:outline-none ${typoClass}`}
+              />
+            ) : stylistViewMode === 'pre_stylist' ? (
+              <div
+                onMouseUp={handleEditorMouseUp}
+                className={`p-6 sm:p-8 text-amber-200/90 whitespace-pre-wrap ${typoClass}`}
+              >
+                <div className="text-xs font-mono text-amber-400 mb-3 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
+                  Редакция черновика Pass 2 (до вмешательства «слепого стилиста» Норы Галь)
+                </div>
+                {preStylistSnapshot}
+              </div>
+            ) : (
+              <div className={`p-6 sm:p-8 whitespace-pre-wrap ${typoClass}`}>
+                <div className="text-xs font-mono text-cyan-400 mb-3 bg-cyan-500/10 p-2 rounded-lg border border-cyan-500/20">
+                  Пословный дифф: красный — черновик Pass 2; зелёный — правки стилиста Норы Галь (Pass 3)
+                </div>
+                {stylistDiffSegments.map((seg, i) =>
+                  seg.type === 'removed' ? (
+                    <span
+                      key={i}
+                      className="bg-rose-500/20 text-rose-300 line-through decoration-rose-400 px-1 py-0.5 rounded mx-0.5"
+                    >
+                      {seg.text}
+                    </span>
+                  ) : seg.type === 'added' ? (
+                    <span
+                      key={i}
+                      className="bg-emerald-500/20 text-emerald-300 font-semibold px-1 py-0.5 rounded mx-0.5"
+                    >
+                      {seg.text}
+                    </span>
+                  ) : (
+                    <span key={i}>{seg.text}</span>
+                  )
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1601,6 +1947,35 @@ export default function ParallelEditorView({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Floating Selection Action Pill */}
+      {selectedTextSnippet && (
+        <div className="fixed bottom-7 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <button
+            type="button"
+            onClick={() => {
+              if (selectedTextSnippet.isEnglish) {
+                setQuickTermEng(selectedTextSnippet.text);
+                setQuickTermRus('');
+              } else {
+                setQuickTermRus(selectedTextSnippet.text);
+                setQuickTermEng('');
+              }
+              setShowQuickTermModal(true);
+              setSelectedTextSnippet(null);
+            }}
+            className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 text-black font-semibold text-xs shadow-2xl shadow-amber-500/40 hover:from-amber-400 hover:to-amber-500 transition-all border border-amber-300 active:scale-95"
+          >
+            <BookmarkPlus className="w-4 h-4 shrink-0" />
+            <span className="max-w-[200px] truncate">
+              + В Канон: «<strong>{selectedTextSnippet.text}</strong>»
+            </span>
+            <span className="font-mono text-[10px] bg-black/20 px-1.5 py-0.5 rounded text-black/80 font-bold hidden sm:inline">
+              Ctrl+Shift+M
+            </span>
+          </button>
         </div>
       )}
     </div>

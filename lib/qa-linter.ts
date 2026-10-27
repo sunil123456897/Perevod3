@@ -5953,3 +5953,6 @@ export * from './pipeline-run-engine.ts';
 
 // Stage 5: Project Repository, Hydration Guard & Bundle Serialization
 export * from './storage-idb.ts';
+
+// Stage 2 & Wave 3: LLM Inference Port & Pacing Classifier
+export * from './llm-inference-port.ts';

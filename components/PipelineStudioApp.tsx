@@ -86,6 +86,9 @@ import ParallelEditorView from './ParallelEditorView';
 import GlossaryVaultView from './GlossaryVaultView';
 import RulateExportView from './RulateExportView';
 import TranslationAnalyticsChart from './TranslationAnalyticsChart';
+import QuickStartWizard from './QuickStartWizard';
+import { useToast } from './ToastProvider';
+import { classifyScenePacingMode } from '@/lib/qa-linter';
 
 type StudioTab = 'pipeline' | 'editor' | 'glossary' | 'export';
 type PipelineMode = 'full_5_phase' | 'scout_only' | 'verify_and_repair';
@@ -102,6 +105,7 @@ interface PipelineLogEntry {
 const STORAGE_KEY = 'xianxia_pipeline_studio_v3';
 
 export default function PipelineStudioApp() {
+  const toast = useToast();
   const [novels, setNovels] = useState<NovelProject[]>(INITIAL_NOVELS);
   const [activeNovelId, setActiveNovelId] = useState<string>(INITIAL_NOVELS[0].id);
   const [activeTab, setActiveTab] = useState<StudioTab>('pipeline');
@@ -524,6 +528,24 @@ export default function PipelineStudioApp() {
       (c) => c.number >= startChapter && c.number <= endChapter
     );
     executePipelineOnChapters(targets, pipelineMode);
+  };
+
+  const handleQuickTranslateChapter = (targetChapter: ChapterRecord) => {
+    executePipelineOnChapters([targetChapter], 'full_5_phase');
+    toast.info(
+      `Запуск 4-проходного перевода Главы ${targetChapter.subPart || targetChapter.number}`,
+      'Старт перевода'
+    );
+  };
+
+  const handleTranslateNextBatch = (count = 3) => {
+    const untranslated = activeNovel.chapters.filter((c) => !c.translated).slice(0, count);
+    if (untranslated.length === 0) {
+      toast.info('Все главы в новелле уже переведены!', 'Очередь пуста');
+      return;
+    }
+    executePipelineOnChapters(untranslated, 'full_5_phase');
+    toast.info(`Запущен пакетный перевод ${untranslated.length} глав...`, 'Пакетный запуск');
   };
 
   /**
@@ -1516,7 +1538,22 @@ export default function PipelineStudioApp() {
         )}
 
         {activeTab === 'pipeline' && (
-          <div className="space-y-7">
+          <div className="space-y-6">
+            {/* QuickStartWizard Component */}
+            <QuickStartWizard
+              novels={novels}
+              activeNovel={activeNovel}
+              onSelectNovel={(id) => setActiveNovelId(id)}
+              llmConfig={llmConfig}
+              onOpenLlmSettings={() => setShowColabModal(true)}
+              onQuickTranslateChapter={handleQuickTranslateChapter}
+              isPipelineRunning={isRunningPipeline}
+              onOpenImportModal={() => {
+                setImportMode('bulk');
+                setShowAddChapterModal(true);
+              }}
+            />
+
             {/* Serene Single-Line Batch Pipeline Bar */}
             <section className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-[#11131C]/80 px-4 pt-3 pb-3.5">
               <div className="flex flex-wrap lg:flex-nowrap items-center gap-3">
@@ -1580,6 +1617,17 @@ export default function PipelineStudioApp() {
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  disabled={isRunningPipeline}
+                  onClick={() => handleTranslateNextBatch(3)}
+                  title="Найти следующие 3 непереведённые главы и запустить 4-проходный конвейер"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-amber-500/15 border border-amber-500/40 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/25 disabled:opacity-50 transition-colors whitespace-nowrap shrink-0"
+                >
+                  <Zap className="h-3.5 w-3.5 text-amber-400" />
+                  След. 3 гл. (1 клик)
+                </button>
+
                 <button
                   type="button"
                   disabled={isRunningPipeline}
@@ -1756,8 +1804,29 @@ export default function PipelineStudioApp() {
                           {ch.subPart || ch.number}
                         </td>
                         <td className="px-4 pt-3.5 pb-4">
-                          <div className="font-medium text-[#F1F5F9] text-sm">
-                            {ch.titleRus || ch.titleEng}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium text-[#F1F5F9] text-sm">
+                              {ch.titleRus || ch.titleEng}
+                            </span>
+                            {/* Pacing Badge */}
+                            {(() => {
+                              const mode = classifyScenePacingMode(ch.rusText || ch.engText);
+                              const badge =
+                                mode === 'combat_action'
+                                  ? { label: '⚔️ Бой', cls: 'text-rose-300 bg-rose-500/10 border-rose-500/25' }
+                                  : mode === 'cultivation_epiphany'
+                                  ? { label: '🧘 Озарение', cls: 'text-amber-300 bg-amber-500/10 border-amber-500/25' }
+                                  : mode === 'comedy_banter'
+                                  ? { label: '🎭 Пикировка', cls: 'text-cyan-300 bg-cyan-500/10 border-cyan-500/25' }
+                                  : mode === 'solemn_pathos'
+                                  ? { label: '🏛️ Пафос', cls: 'text-purple-300 bg-purple-500/10 border-purple-500/25' }
+                                  : { label: '🌸 Романтика', cls: 'text-pink-300 bg-pink-500/10 border-pink-500/25' };
+                              return (
+                                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full border ${badge.cls}`}>
+                                  {badge.label}
+                                </span>
+                              );
+                            })()}
                           </div>
                           {ch.summary ? (
                             <div className="text-[#64748B] mt-0.5 line-clamp-1">
@@ -1777,33 +1846,46 @@ export default function PipelineStudioApp() {
                         <td className="px-4 pt-3.5 pb-4 text-right whitespace-nowrap">
                           <div
                             title={progress.tooltip}
-                            className="inline-flex items-center justify-end gap-2.5 min-w-[148px]"
+                            className="inline-flex flex-col items-end gap-1.5 min-w-[148px]"
                           >
-                            <div
-                              role="progressbar"
-                              aria-label={`Прогресс конвейера главы ${ch.subPart || ch.number}: ${progress.percent}%`}
-                              aria-valuenow={progress.percent}
-                              aria-valuemin={0}
-                              aria-valuemax={100}
-                              className="relative h-1.5 w-24 sm:w-28 overflow-hidden rounded-[3px] bg-white/[0.06]"
-                            >
+                            <div className="flex items-center justify-end gap-2.5">
                               <div
-                                className={`h-full rounded-[3px] transition-all duration-300 ${fillBarClass}`}
-                                style={{ width: `${progress.percent}%` }}
-                              />
-                              <div className="pointer-events-none absolute inset-0 grid grid-cols-5 divide-x divide-[#090A0F]/70">
-                                <span />
-                                <span />
-                                <span />
-                                <span />
-                                <span />
+                                role="progressbar"
+                                aria-label={`Прогресс конвейера главы ${ch.subPart || ch.number}: ${progress.percent}%`}
+                                aria-valuenow={progress.percent}
+                                aria-valuemin={0}
+                                aria-valuemax={100}
+                                className="relative h-1.5 w-24 sm:w-28 overflow-hidden rounded-[3px] bg-white/[0.06]"
+                              >
+                                <div
+                                  className={`h-full rounded-[3px] transition-all duration-300 ${fillBarClass}`}
+                                  style={{ width: `${progress.percent}%` }}
+                                />
+                                <div className="pointer-events-none absolute inset-0 grid grid-cols-5 divide-x divide-[#090A0F]/70">
+                                  <span />
+                                  <span />
+                                  <span />
+                                  <span />
+                                  <span />
+                                </div>
                               </div>
+                              <span
+                                className={`w-9 text-right font-mono text-[11px] tabular-nums ${pctTextClass}`}
+                              >
+                                {progress.percent}%
+                              </span>
                             </div>
-                            <span
-                              className={`w-9 text-right font-mono text-[11px] tabular-nums ${pctTextClass}`}
-                            >
-                              {progress.percent}%
-                            </span>
+
+                            {/* 4-Pass Timeline Indicator */}
+                            <div className="flex items-center gap-1 text-[9px] font-mono text-slate-500">
+                              <span className={`px-1 py-0.2 rounded border ${ch.translated ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300 font-semibold' : 'border-white/5'}`}>AST</span>
+                              <span>·</span>
+                              <span className={`px-1 py-0.2 rounded border ${ch.translated ? 'border-amber-500/30 bg-amber-500/10 text-amber-300 font-semibold' : 'border-white/5'}`}>Flash</span>
+                              <span>·</span>
+                              <span className={`px-1 py-0.2 rounded border ${ch.translated ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 font-semibold' : 'border-white/5'}`}>Argon</span>
+                              <span>·</span>
+                              <span className={`px-1 py-0.2 rounded border ${ch.verified ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 font-bold' : 'border-white/5'}`}>Stylist</span>
+                            </div>
                           </div>
                         </td>
                         <td className="px-4 pt-3.5 pb-4 text-right whitespace-nowrap">
