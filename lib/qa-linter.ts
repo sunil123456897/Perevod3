@@ -365,7 +365,11 @@ const WRITTEN_NUMERAL_PATTERNS: Array<{ regex: RegExp; replacement: string; labe
 ];
 
 const COMMON_PAST_VERBS =
-  'сказал|подумал|ответил|спросил|воскликнул|прошептал|пробормотал|посмотрел|взглянул|шагнул|улыбнулся|нахмурился|кивнул|почувствовал|ощутил|решил|понял|заметил';
+  'сказал|подумал|ответил|спросил|воскликнул|прошептал|пробормотал|посмотрел|взглянул|шагнул|улыбнулся|нахмурился|кивнул|почувствовал|ощутил|решил|понял|заметил|качнул|вздохнул|усмехнулся|замер|обернулся|повернулся|поднял|опустил|взял|открыл|закрыл|произнес|произнёс|добавил|продолжил|возразил|бросил|выдохнул|сделал';
+
+const INDECLINABLE_FEM_NAMES = ['Айрам', 'Эстер', 'Фейт', 'Мей'];
+const MASC_GENITIVE_GOVERNORS =
+  '(?:[Вв]згляд|[Гг]олос|[Сс]вет|[Рр]от|[Оо]твет|[Ии]нтерес|[Сс]лучай|[Сс]мысл|[Тт]анец|[Сс]тоицизм|[Пп]очерк|[Вв]ид|[Оо]браз|Ульриха\\s+и|[Уу]|[Сс])';
 
 const RUSSIAN_STOP_STEMS = new Set([
   'котор',
@@ -409,6 +413,139 @@ export interface AlignedParagraphPair {
   missingNumbers: string[];
 }
 
+const RUS_NUMBER_WORD_PATTERNS: Array<{ digit: string; regex: RegExp }> = [
+  {
+    digit: '1',
+    regex:
+      /(?<![а-яёa-z])(?:один|одна|одно|одну|одного|одной|одним|одних|перв(?:ый|ого|ому|ым|ом|ая|ой|ую|ое|ые|ых|ыми))(?![а-яёa-z])/i,
+  },
+  {
+    digit: '2',
+    regex:
+      /(?<![а-яёa-z])(?:два|две|двух|двум|двумя|двое|двоих|двоим|двоими|втор(?:ой|ого|ому|ым|ом|ая|ую|ое|ые|ых|ыми)|дважды|оба|обе|обоих|обеих)(?![а-яёa-z])/i,
+  },
+  {
+    digit: '3',
+    regex:
+      /(?<![а-яёa-z])(?:три|трёх|трех|трём|трем|тремя|трое|троих|троим|троими|трет(?:ий|ьего|ьему|ьим|ьем|ья|ьей|ью|ье|ьи|ьих|ьими)|трижды)(?![а-яёa-z])/i,
+  },
+  {
+    digit: '4',
+    regex:
+      /(?<![а-яёa-z])(?:четыре|четырёх|четырех|четырём|четырем|четырьмя|четверо|четверых|четверым|четверыми|четв[её]рт(?:ый|ого|ому|ым|ом|ая|ой|ую|ое|ые|ых|ыми))(?![а-яёa-z])/i,
+  },
+  {
+    digit: '5',
+    regex:
+      /(?<![а-яёa-z])(?:пять|пяти|пятью|пятеро|пятерых|пятерым|пятерыми|пят(?:ый|ого|ому|ым|ом|ая|ой|ую|ое|ые|ых|ыми))(?![а-яёa-z])/i,
+  },
+  {
+    digit: '6',
+    regex:
+      /(?<![а-яёa-z])(?:шесть|шести|шестью|шестеро|шестерых|шест(?:ой|ого|ому|ым|ом|ая|ую|ое|ые|ых|ыми))(?![а-яёa-z])/i,
+  },
+  {
+    digit: '7',
+    regex:
+      /(?<![а-яёa-z])(?:семь|семи|семью|семеро|семерых|седьм(?:ой|ого|ому|ым|ом|ая|ую|ое|ые|ых|ыми))(?![а-яёa-z])/i,
+  },
+  {
+    digit: '8',
+    regex:
+      /(?<![а-яёa-z])(?:восемь|восьми|восемью|восьмеро|восьмерых|восьм(?:ой|ого|ому|ым|ом|ая|ую|ое|ые|ых|ыми))(?![а-яёa-z])/i,
+  },
+  {
+    digit: '9',
+    regex:
+      /(?<![а-яёa-z])(?:девять|девяти|девятью|девятеро|девятерых|девят(?:ый|ого|ому|ым|ом|ая|ой|ую|ое|ые|ых|ыми))(?![а-яёa-z])/i,
+  },
+  {
+    digit: '10',
+    regex:
+      /(?<![а-яёa-z])(?:десять|десяти|десятью|десятеро|десятерых|десят(?:ый|ого|ому|ым|ом|ая|ой|ую|ое|ые|ых|ыми))(?![а-яёa-z])/i,
+  },
+];
+
+export function extractNormalizedRussianNumbers(text: string): Set<string> {
+  const nums = new Set<string>(text.match(/(?<!\d)\d+(?:\.\d+)?(?!\d)/g) || []);
+  for (const entry of RUS_NUMBER_WORD_PATTERNS) {
+    if (entry.regex.test(text)) {
+      nums.add(entry.digit);
+    }
+  }
+  return nums;
+}
+
+export function joinParagraphsPreservingSystemBoxes(paragraphs: string[]): string {
+  const cleaned = paragraphs
+    .flatMap((p) => (p || '').replace(/\r\n/g, '\n').split('\n'))
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (cleaned.length === 0) return '';
+
+  let result = cleaned[0];
+  let inSystemBox = cleaned[0] === '---';
+
+  for (let i = 1; i < cleaned.length; i++) {
+    const prev = cleaned[i - 1];
+    const curr = cleaned[i];
+    const prevIsBracket = prev.startsWith('[') && prev.endsWith(']');
+    const currIsBracket = curr.startsWith('[') && curr.endsWith(']');
+
+    if (curr === '---') {
+      if (inSystemBox) {
+        result += '\n' + curr;
+        inSystemBox = false;
+      } else {
+        result += '\n\n' + curr;
+        inSystemBox = true;
+      }
+      continue;
+    }
+
+    if (inSystemBox || (prevIsBracket && currIsBracket)) {
+      result += '\n' + curr;
+    } else {
+      result += '\n\n' + curr;
+    }
+  }
+
+  return result;
+}
+
+export function normalizeRussianChapterTitle(title: string): string {
+  return (title || '')
+    .trim()
+    .replace(/^(Глава\s+\d+(?:\.\d+)?)\s*[:.—–-]?\s+(?=\S)/i, '$1. ')
+    .replace(/(?<!\.\.)\.$/, '')
+    .trim();
+}
+
+export function normalizeRussianBookLayout(text: string): string {
+  if (!text || !text.trim()) return text;
+  const rawLines = text
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const normalizedLines = rawLines.map((line) => {
+    let working = line.replace(/(\d+)\s+цзиней(?![а-яёa-z])/gi, '$1 цзинь');
+    if (working.startsWith('[') && working.endsWith(']')) {
+      working = working
+        .replace(/\(([^()]+?)\s+—\s+([^()]+?)\)/g, '($1, $2)')
+        .replace(/^\[([^:]+:\s*[^(\]\n]+?)\s+—\s+([^()\]\n]+)\]$/, '[$1 ($2)]')
+        .replace(
+          /\[Бонус к скорости:\s*([+–-]?\d+%?)\s+к\s+скорости\s+передвижения\]/gi,
+          '[Бонус к скорости: $1 (передвижение)]'
+        );
+    }
+    return working;
+  });
+
+  return joinParagraphsPreservingSystemBoxes(normalizedLines);
+}
+
 export function alignChapterParagraphs(
   engText: string,
   rusText: string
@@ -441,7 +578,7 @@ export function alignChapterParagraphs(
       (rusP.startsWith('[') && rusP.endsWith(']'));
 
     const engNums = Array.from(new Set(engP.match(/(?<!\d)\d+(?:\.\d+)?(?!\d)/g) || []));
-    const rusNums = new Set(rusP.match(/(?<!\d)\d+(?:\.\d+)?(?!\d)/g) || []);
+    const rusNums = extractNormalizedRussianNumbers(rusP);
     const missingNumbers = rusP ? engNums.filter((n) => !rusNums.has(n)) : [];
 
     const isDrifted =
@@ -665,13 +802,23 @@ export function runQaLinter(
   const issues: LintIssue[] = [];
   const lines = rusText.split(/\r?\n/);
 
-  const femaleCharacters: string[] = [];
+  const femaleCharacterSet = new Set<string>(INDECLINABLE_FEM_NAMES);
+  const MASC_A_YA_EXCEPTIONS = new Set(['илья', 'никита', 'лука', 'фома', 'савва', 'кузьма', 'данила']);
   Object.entries(glossary.characters || {}).forEach(([eng, rus]) => {
     const meta = glossaryMeta[eng];
-    if (meta?.gender === 'F') {
-      femaleCharacters.push(rus);
+    const cleanRus = rus.trim();
+    const firstToken = cleanRus.split(/\s+/)[0] || '';
+    if (
+      meta?.gender === 'F' ||
+      (!meta?.gender &&
+        firstToken.length >= 3 &&
+        /[ая]$/i.test(firstToken) &&
+        !MASC_A_YA_EXCEPTIONS.has(firstToken.toLowerCase()))
+    ) {
+      femaleCharacterSet.add(cleanRus);
     }
   });
+  const femaleCharacters = Array.from(femaleCharacterSet);
 
   lines.forEach((rawLine, idx) => {
     const lineNum = idx + 1;
@@ -803,20 +950,22 @@ export function runQaLinter(
     // 7. WEIGHT_UNITS
     if (
       activeRules.has('WEIGHT_UNITS') &&
-      /(?<![а-яёa-z])(?:фунт(?:ов|а|ы|е|ам)?|килограмм(?:ов|а|ы|е)?)(?![а-яёa-z])/i.test(line)
+      (/(?<![а-яёa-z])(?:фунт(?:ов|а|ы|е|ам)?|килограмм(?:ов|а|ы|е)?)(?![а-яёa-z])/i.test(line) ||
+        /\d+\s+цзиней(?![а-яёa-z])/i.test(line))
     ) {
       issues.push({
         id: `lint-${lineNum}-weight`,
         ruleId: 'WEIGHT_UNITS',
-        ruleTitle: 'Западные/метрические меры веса',
+        ruleTitle: 'Западные/метрические меры веса или склонение «цзиней»',
         severity: 'error',
         line: lineNum,
         snippet: line,
         suggestion: line
           .replace(/(?<![а-яёa-z])фунт(?:ов|а|ы|е|ам)?(?![а-яёa-z])/gi, 'цзинь')
-          .replace(/(?<![а-яёa-z])килограмм(?:ов|а|ы|е)?(?![а-яёa-z])/gi, 'цзинь'),
+          .replace(/(?<![а-яёa-z])килограмм(?:ов|а|ы|е)?(?![а-яёa-z])/gi, 'цзинь')
+          .replace(/(\d+)\s+цзиней(?![а-яёa-z])/gi, '$1 цзинь'),
         explanation:
-          'В мире сянься используются традиционные меры веса: «цзинь» (jin) и «лян» (liang).',
+          'В мире сянься используются традиционные меры веса: неизменяемое в Р.п. мн.ч. «цзинь» (jin) и «лян» (liang).',
       });
     }
 
@@ -900,7 +1049,7 @@ export function runQaLinter(
         }
       }
 
-      if (/(?:\.,|,\.|!\.|\?\.|,,|\.\.,|^\s*—,)/.test(line)) {
+      if (/(?:\.,|,\.|!\.(?!\.)|\?\.(?!\.)|,,|\.\.,|^\s*—,)/.test(line)) {
         issues.push({
           id: `lint-${lineNum}-punct-stitch`,
           ruleId: 'MACHINE_CALQUES',
@@ -916,14 +1065,36 @@ export function runQaLinter(
 
     // 13. CHARACTER_GENDER_MISMATCH
     if (activeRules.has('CHARACTER_GENDER_MISMATCH')) {
+      for (const indeclName of INDECLINABLE_FEM_NAMES) {
+        const reDecl = new RegExp(
+          `(?<![а-яё])${indeclName}(?:а|у|ом|е|ой|ы|ам|ами|ах)(?![а-яё])`,
+          'i'
+        );
+        if (reDecl.test(line)) {
+          issues.push({
+            id: `lint-${lineNum}-indecl-${indeclName}`,
+            ruleId: 'CHARACTER_GENDER_MISMATCH',
+            ruleTitle: `Ошибочное склонение несклоняемого женского имени («${indeclName}»)`,
+            severity: 'error',
+            line: lineNum,
+            snippet: line,
+            suggestion: line.replace(
+              new RegExp(`(?<![а-яё])${indeclName}(?:а|у|ом|е|ой|ы|ам|ами|ах)(?![а-яё])`, 'gi'),
+              indeclName
+            ),
+            explanation: `Женское имя «${indeclName}» на согласную (и «Мей») по правилам русского языка не склоняется.`,
+          });
+        }
+      }
+
       for (const femName of femaleCharacters) {
         const escapedName = femName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const femPattern = new RegExp(
-          `(${escapedName}\\s+(?:\\S+\\s+)?)(${COMMON_PAST_VERBS})(?![а-яё])`,
+          `(?<!${MASC_GENITIVE_GOVERNORS}\\s+)(?<![а-яё])(${escapedName}\\s+(?:(?:не|уже|снова|лишь|только|тут\\s+же|просто|даже|тихо|мягко|медленно)\\s+)?)(${COMMON_PAST_VERBS})(?![а-яё])`,
           'i'
         );
         const revFemPattern = new RegExp(
-          `(?<![а-яё])(${COMMON_PAST_VERBS})(\\s+${escapedName})`,
+          `(?<![а-яё])(${COMMON_PAST_VERBS})(\\s+${escapedName})(?![а-яё])`,
           'i'
         );
         if (femPattern.test(line) || revFemPattern.test(line)) {
@@ -1034,7 +1205,7 @@ export function runQaLinter(
 
   // 11. NUMBER_MISMATCH
   const engNumbers = Array.from(new Set(engText.match(/(?<!\d)\d+(?:\.\d+)?(?!\d)/g) || []));
-  const rusNumbers = new Set(rusText.match(/(?<!\d)\d+(?:\.\d+)?(?!\d)/g) || []);
+  const rusNumbers = extractNormalizedRussianNumbers(rusText);
   if (activeRules.has('NUMBER_MISMATCH')) {
     for (const num of engNumbers) {
       if (!rusNumbers.has(num)) {
@@ -1068,12 +1239,15 @@ export function runQaLinter(
   for (const entry of allGlossaryEntries) {
     if (entry.eng.length < 2) continue;
     const escapedEng = entry.eng.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const engWordRegex = new RegExp(`\\b${escapedEng}s?\\b`, 'i');
+    const isProperNoun =
+      (entry.category === 'characters' || entry.category === 'sects_and_places') &&
+      /^[A-Z]/.test(entry.eng);
+    const engWordRegex = new RegExp(`\\b${escapedEng}s?\\b`, isProperNoun ? '' : 'i');
     if (engWordRegex.test(engText)) {
       const significantWords = entry.rus
         .toLowerCase()
         .replace(/ё/g, 'е')
-        .split(/\s+/)
+        .split(/[\s-]+/)
         .filter((w) => w.length >= 2)
         .map((w) => {
           if (w.startsWith('камен')) return 'кам';
@@ -1108,10 +1282,10 @@ export function runQaLinter(
     alignment.pairs.forEach((pair) => {
       const pRus = pair.rusParagraph.trim();
       const pEng = pair.engParagraph.trim();
-      if (!pRus) return;
-      const isDialogue = pRus.startsWith('—') || pRus.startsWith('"') || pRus.startsWith('«');
+      if (!pRus || pRus === '---' || (pRus.startsWith('[') && pRus.endsWith(']'))) return;
+
       const copulaMatch = pRus.match(
-        /\s+(?:—|–)\s+(?:это|был|была|было|были|являлся|являлась|являлись|представлял)\b/i
+        /\s+(?:—|–|-)\s+(?:это|был|была|было|были|являлся|являлась|являлись|представлял)\b/i
       );
       if (copulaMatch) {
         issues.push({
@@ -1127,22 +1301,55 @@ export function runQaLinter(
         });
       }
 
-      if (!isDialogue && pEng) {
-        const rusDashes = (pRus.match(/—|–/g) || []).length;
-        const engDashes = (pEng.match(/—|–|--/g) || []).length;
-        if (rusDashes - engDashes >= 3) {
-          issues.push({
-            id: `lint-${pair.index + 1}-dash-inflation`,
-            ruleId: 'DASH_AND_COMMA_INFLATION',
-            ruleTitle: `Избыточная инфляция тире (ΔDash = +${rusDashes - engDashes})`,
-            severity: 'warning',
-            line: pair.index + 1,
-            snippet: pRus,
-            suggestion: 'Сократите избыточные вводные тире внутри повествовательных абзацев.',
-            explanation:
-              'Инфляция тире на 3 и более знака по сравнению с оригиналом указывает на механический слоп генератора.',
-          });
-        }
+      // Check for medial spaced hyphen (" - ") or en-dash (" – ") inside sentence
+      if (/\S\s+(?:-|\u2013)\s+\S/.test(pRus)) {
+        issues.push({
+          id: `lint-${pair.index + 1}-spaced-hyphen-or-endash`,
+          ruleId: 'DASH_AND_COMMA_INFLATION',
+          ruleTitle: 'Дефис с пробелами (« - ») или среднее тире (« – ») внутри фразы',
+          severity: 'warning',
+          line: pair.index + 1,
+          snippet: pRus,
+          suggestion: 'Замените « - » / « – » на запятую, союз или (в атрибуции диалога) на длинное тире « — ».',
+          explanation:
+            'Обычный дефис с пробелами или среднее тире посреди русского предложения — типичный след необработанной генерации.',
+        });
+      }
+
+      // Strip leading dialogue dash, speech/thought attribution tags (", — сказал" / ". — Она посмотрела"),
+      // and standard Russian split-dialogue resumptions (". — Продолжение" / ", — продолжение")
+      // so we measure purely narrative medial dashes.
+      const isDialogueLine = /^—\s+/.test(pRus);
+      const hasAttributionDash =
+        /^«[^»]+»[,!?…]?\s*—\s+/.test(pRus) ||
+        (isDialogueLine && /[,!?….]\s*—\s+/i.test(pRus.replace(/^—\s+/, '')));
+      let narrativePart = pRus
+        .replace(/^—\s+/, '')
+        .replace(/^«[^»]+»[,!?…]?\s*—\s+/, '');
+      if (isDialogueLine) {
+        // In dialogue lines, strip all standard attribution/resumption dashes after [,!?….]
+        narrativePart = narrativePart.replace(/[,!?….]\s*—\s+/g, ', ');
+      }
+
+      const rusNarrativeDashes = (narrativePart.match(/\s+(?:—|–)\s+/g) || []).length;
+      const engDashes = (pEng.match(/—|–|--/g) || []).length;
+      if (
+        rusNarrativeDashes - engDashes >= 2 ||
+        (rusNarrativeDashes >= 1 &&
+          engDashes === 0 &&
+          ((!isDialogueLine && hasAttributionDash) || /\s+—\s+и\s+/i.test(narrativePart)))
+      ) {
+        issues.push({
+          id: `lint-${pair.index + 1}-dash-inflation`,
+          ruleId: 'DASH_AND_COMMA_INFLATION',
+          ruleTitle: `Избыточная инфляция ИИ-тире в повествовании (ΔDash = +${rusNarrativeDashes - engDashes})`,
+          severity: 'warning',
+          line: pair.index + 1,
+          snippet: pRus,
+          suggestion: 'Замените лишние повествовательные тире («—») на запятые, союзы или придаточные предложения.',
+          explanation:
+            'Нагромождение длинных тире в авторском повествовании или повторное тире в словах автора после реплики — характерный синтаксический штамп ИИ.',
+        });
       }
     });
   }
@@ -1518,7 +1725,7 @@ export function autoRepairRussianText(
     },
     {
       ruleId: 'DIALOGUE_DASH',
-      pattern: /:\s*—/g,
+      pattern: /:[ \t]*—/g,
       replace: ', —',
       desc: 'Убрано двоеточие перед тире внутри реплики',
     },
@@ -1545,6 +1752,12 @@ export function autoRepairRussianText(
       pattern: /(?<![а-яёa-z])килограмм(?:ов|а|ы|е)?(?![а-яёa-z])/gi,
       replace: 'цзинь',
       desc: 'Мера веса «килограмм» заменена на канонический «цзинь»',
+    },
+    {
+      ruleId: 'WEIGHT_UNITS',
+      pattern: /(\d+)\s+цзиней(?![а-яёa-z])/gi,
+      replace: '$1 цзинь',
+      desc: 'Исправлено склонение «цзиней» → неизменяемое «цзинь»',
     },
     {
       ruleId: 'ALCHEMY_CALQUES',
@@ -1648,21 +1861,84 @@ export function autoRepairRussianText(
     const lines = text.split('\n');
     let relaxedDashes = false;
     const fixedLines = lines.map((line) => {
-      const isDialogue = /^\s*—\s+/.test(line);
-      const medialDashes = (isDialogue ? line.slice(2) : line).match(/\s+—\s+/g) || [];
-      if (medialDashes.length >= 3) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed === '---' || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        return line;
+      }
+
+      let updated = line;
+
+      // 1. Convert spaced hyphen/en-dash after quote/exclamation/question into proper dialogue attribution em-dash
+      const afterQuoteFixed = updated.replace(/([,!?»"])\s+(?:-|\u2013)\s+/g, '$1 — ');
+      if (afterQuoteFixed !== updated) {
+        updated = afterQuoteFixed;
+        relaxedDashes = true;
+      }
+
+      // 2. Replace remaining medial spaced hyphens (" - ") and en-dashes (" – ") with comma
+      const medialHyphenFixed = updated.replace(/(\S)\s+(?:-|\u2013)\s+(\S)/g, '$1, $2');
+      if (medialHyphenFixed !== updated) {
+        updated = medialHyphenFixed;
+        relaxedDashes = true;
+      }
+
+      // 3. Replace AI connector " — и " inside narrative with ", и "
+      const isDialogue = /^\s*—\s+/.test(updated);
+      const isThought = /^\s*«[^»]+»\s*,?\s*—\s+/.test(updated);
+      if (!isDialogue) {
+        const andDashFixed = updated.replace(/(\S)\s+—\s+и\s+/g, '$1, и ');
+        if (andDashFixed !== updated) {
+          updated = andDashFixed;
+          relaxedDashes = true;
+        }
+      }
+
+      // 4. Relax excess medial em-dashes in narrative (preserving dialogue attribution/resumption dashes after [,!?….])
+      const bodyAfterLead = isDialogue
+        ? updated.replace(/^\s*—\s+/, '')
+        : isThought
+          ? updated.replace(/^\s*«[^»]+»[,!?…]?\s*—\s+/, '')
+          : updated;
+      const nonAttributionBody = isDialogue
+        ? bodyAfterLead.replace(/[,!?….]\s*—\s+/g, ', ')
+        : bodyAfterLead;
+      const medialDashes = nonAttributionBody.match(/\s+—\s+/g) || [];
+      if (isThought && medialDashes.length >= 1) {
+        relaxedDashes = true;
+        let seenFirstAttribution = false;
+        updated = updated.replace(/(\s+)—(\s+)/g, (m, _b, a) => {
+          if (!seenFirstAttribution) {
+            seenFirstAttribution = true;
+            return m;
+          }
+          return `,${a}`;
+        });
+      } else if (!isDialogue && medialDashes.length >= 2) {
         relaxedDashes = true;
         let count = 0;
-        return line.replace(/(\s+)—(\s+)/g, (m, b, a) => {
+        updated = updated.replace(/(\s+)—(\s+)/g, (m, _b, a, offset) => {
+          if (offset === 0 || /^\s*$/.test(updated.slice(0, offset))) {
+            return m;
+          }
           count++;
-          return count > 2 ? `,${a}` : m;
+          return count > 1 ? `,${a}` : m;
+        });
+      } else if (isDialogue && medialDashes.length >= 2) {
+        relaxedDashes = true;
+        let nonAttrCount = 0;
+        updated = updated.replace(/(\S)(\s+)—(\s+)/g, (m, prevChar, _b, a) => {
+          if (/[,!?….]/.test(prevChar)) {
+            return m;
+          }
+          nonAttrCount++;
+          return nonAttrCount > 1 ? `${prevChar},${a}` : m;
         });
       }
-      return line;
+      return updated;
     });
     if (relaxedDashes) {
       text = fixedLines.join('\n');
-      appliedFixes.push('Устранена инфляция тире: избыточные тире в предложении заменены на запятые');
+      appliedFixes.push('Устранена инфляция ИИ-тире: дефисы с пробелами и избыточные тире заменены на запятые');
     }
   }
 
@@ -1722,53 +1998,135 @@ export function autoRepairRussianText(
     }
   }
 
-  // Character gender auto-repair
-  if (
-    activeRules.has('CHARACTER_GENDER_MISMATCH') &&
-    options?.glossary?.characters &&
-    options?.glossaryMeta
-  ) {
-    Object.entries(options.glossary.characters).forEach(([eng, rus]) => {
-      if (options.glossaryMeta?.[eng]?.gender === 'F') {
-        const escapedName = rus.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const femPattern = new RegExp(
-          `(${escapedName}\\s+(?:\\S+\\s+)?)(${COMMON_PAST_VERBS})(?![а-яё])`,
-          'gi'
-        );
-        const revFemPattern = new RegExp(
-          `(?<![а-яё])(${COMMON_PAST_VERBS})(\\s+${escapedName})`,
-          'gi'
-        );
-        if (femPattern.test(text) || revFemPattern.test(text)) {
-          text = text
-            .replace(femPattern, (_, prefix, verb: string) => {
-              const femVerb = verb.endsWith('ся')
-                ? `${verb.slice(0, -2)}ась`
-                : `${verb}а`;
-              return `${prefix}${femVerb}`;
-            })
-            .replace(revFemPattern, (_, verb: string, suffix) => {
-              const femVerb = verb.endsWith('ся')
-                ? `${verb.slice(0, -2)}ась`
-                : `${verb}а`;
-              return `${femVerb}${suffix}`;
-            })
-            .replace(
-              new RegExp(
-                `(${escapedName}[^.\\n]*?\\s+и\\s+)(${COMMON_PAST_VERBS})(?![а-яё])`,
-                'gi'
-              ),
-              (_, prefix, verb2: string) => {
-                const femVerb2 = verb2.endsWith('ся')
-                  ? `${verb2.slice(0, -2)}ась`
-                  : `${verb2}а`;
-                return `${prefix}${femVerb2}`;
-              }
-            );
-          appliedFixes.push(`Согласован женский род глаголов для персонажа «${rus}»`);
-        }
+  // Character gender & indeclinable feminine name auto-repair
+  if (activeRules.has('CHARACTER_GENDER_MISMATCH')) {
+    for (const indeclName of INDECLINABLE_FEM_NAMES) {
+      const reDecl = new RegExp(
+        `(?<![а-яё])${indeclName}(?:а|у|ом|е|ой|ы|ам|ами|ах)(?![а-яё])`,
+        'gi'
+      );
+      if (reDecl.test(text)) {
+        text = text.replace(reDecl, indeclName);
+        appliedFixes.push(`Восстановлена несклоняемая форма женского имени «${indeclName}»`);
       }
-    });
+    }
+
+    const femSet = new Set<string>(INDECLINABLE_FEM_NAMES);
+    const MASC_A_YA_EXCEPTIONS = new Set(['илья', 'никита', 'лука', 'фома', 'савва', 'кузьма', 'данила']);
+    if (options?.glossary?.characters) {
+      Object.entries(options.glossary.characters).forEach(([eng, rus]) => {
+        const cleanRus = rus.trim();
+        const firstToken = cleanRus.split(/\s+/)[0] || '';
+        if (
+          options.glossaryMeta?.[eng]?.gender === 'F' ||
+          (!options.glossaryMeta?.[eng]?.gender &&
+            firstToken.length >= 3 &&
+            /[ая]$/i.test(firstToken) &&
+            !MASC_A_YA_EXCEPTIONS.has(firstToken.toLowerCase()))
+        ) {
+          femSet.add(cleanRus);
+        }
+      });
+    }
+
+    for (const rus of femSet) {
+      const escapedName = rus.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const femPattern = new RegExp(
+        `(?<!${MASC_GENITIVE_GOVERNORS}\\s+)(?<![а-яё])(${escapedName}\\s+(?:\\S+\\s+)?)(${COMMON_PAST_VERBS})(?![а-яё])`,
+        'gi'
+      );
+      const revFemPattern = new RegExp(
+        `(?<![а-яё])(${COMMON_PAST_VERBS})(\\s+${escapedName})(?![а-яё])`,
+        'gi'
+      );
+      if (femPattern.test(text) || revFemPattern.test(text)) {
+        text = text
+          .replace(femPattern, (_, prefix, verb: string) => {
+            const femVerb = verb.endsWith('ся')
+              ? `${verb.slice(0, -2)}ась`
+              : `${verb}а`;
+            return `${prefix}${femVerb}`;
+          })
+          .replace(revFemPattern, (_, verb: string, suffix) => {
+            const femVerb = verb.endsWith('ся')
+              ? `${verb.slice(0, -2)}ась`
+              : `${verb}а`;
+            return `${femVerb}${suffix}`;
+          })
+          .replace(
+            new RegExp(
+              `(${escapedName}[^.\\n]*?\\s+и\\s+)(${COMMON_PAST_VERBS})(?![а-яё])`,
+              'gi'
+            ),
+            (_, prefix, verb2: string) => {
+              const femVerb2 = verb2.endsWith('ся')
+                ? `${verb2.slice(0, -2)}ась`
+                : `${verb2}а`;
+              return `${prefix}${femVerb2}`;
+            }
+          );
+        appliedFixes.push(`Согласован женский род глаголов для персонажа «${rus}»`);
+      }
+    }
+  }
+
+  // Nora Gal Anti-Bureaucracy (verbal-noun chains -> active Russian verbs)
+  const noraGalBureaucracyRules: Array<{ re: RegExp; rep: string; label: string }> = [
+    {
+      re: /Осуществление\s+перемещения\s+([а-яё\s]+?)\s+производилось\s+с\s+обеспечением\s+выполнения\s+предписания\s+([а-яё\s]+?)\./gi,
+      rep: 'Отряд $1 двигался вперёд строго по приказу $2.',
+      label: 'Устранён канцелярский штамп («осуществление перемещения... производилось с обеспечением»)',
+    },
+    {
+      re: /Выполнение\s+задержания\s+([а-яё\s]+?)\s+сопровождалось\s+составлением\s+описания\s+([а-яё\s]+?)\s+и\s+принятием\s+решения\./gi,
+      rep: 'Схватив $1, стража тут же описала $2 и решила, как поступить дальше.',
+      label: 'Устранён канцелярский штамп («выполнение задержания... сопровождалось составлением»)',
+    },
+    {
+      re: /(?<![а-яё])осуществил(а|и|)\s+перемещение(?![а-яё])/gi,
+      rep: 'переместил$1ся',
+      label: 'Канцелярит Норы Галь: «осуществил перемещение» → живой глагол',
+    },
+    {
+      re: /(?<![а-яё])осуществил(а|и|)\s+атаку(?![а-яё])/gi,
+      rep: 'атаковал$1',
+      label: 'Канцелярит Норы Галь: «осуществил атаку» → «атаковал»',
+    },
+    {
+      re: /(?<![а-яё])осуществил(а|и|)\s+прорыв(?![а-яё])/gi,
+      rep: 'прорвал$1ся',
+      label: 'Канцелярит Норы Галь: «осуществил прорыв» → «прорвался»',
+    },
+    {
+      re: /(?<![а-яё])принял(а|и|)\s+решение(?![а-яё])/gi,
+      rep: 'решил$1',
+      label: 'Канцелярит Норы Галь: «принял решение» → «решил»',
+    },
+    {
+      re: /(?<![а-яё])предпринял(а|и|)\s+попытку(?![а-яё])/gi,
+      rep: 'попытал$1ся',
+      label: 'Канцелярит Норы Галь: «предпринял попытку» → «попытался»',
+    },
+  ];
+  for (const ng of noraGalBureaucracyRules) {
+    if (ng.re.test(text)) {
+      text = text.replace(ng.re, (_, g1, g2) => {
+        if (ng.rep.includes('$1') && ng.rep.includes('$2')) {
+          return ng.rep.replace('$1', g1).replace('$2', g2);
+        }
+        if (ng.rep.includes('переместил$1ся')) {
+          return g1 === 'а' ? 'переместилась' : g1 === 'и' ? 'переместились' : 'переместился';
+        }
+        if (ng.rep.includes('прорвал$1ся')) {
+          return g1 === 'а' ? 'прорвалась' : g1 === 'и' ? 'прорвались' : 'прорвался';
+        }
+        if (ng.rep.includes('попытал$1ся')) {
+          return g1 === 'а' ? 'попыталась' : g1 === 'и' ? 'попытались' : 'попытался';
+        }
+        return ng.rep.replace('$1', g1 || '');
+      });
+      appliedFixes.push(ng.label);
+    }
   }
 
   // Zero-Leakage Latin & Unclosed Bracket Auto-Repair
@@ -1975,7 +2333,7 @@ export function surgicalRepairDriftedParagraphs(
   }
 
   return {
-    repairedRusText: repairedParagraphs.join('\n\n'),
+    repairedRusText: joinParagraphsPreservingSystemBoxes(repairedParagraphs),
     surgicallyFixedIndices,
     details,
   };
@@ -2263,16 +2621,55 @@ export function updateHeroStateLedgerFromChapter(
     ];
   }
 
-  // Detect acquired artifacts & flames from glossary.system_and_terms
+  // Detect acquired named artifacts, techniques, pills & flames from glossary.system_and_terms
+  const NON_ARTIFACT_GENERIC_TERMS = new Set([
+    'origin points',
+    'spirit stone',
+    'spirit stones',
+    'spirit root',
+    'spiritual root',
+    'magical artifact',
+    'spiritual artifact',
+    'perfection',
+    'rogue cultivators',
+    'очки истока',
+    'духовный камень',
+    'духовные камни',
+    'духовный корень',
+    'магический артефакт',
+    'духовный артефакт',
+    'совершенство',
+    'вольные совершенствующиеся',
+  ]);
+  const NAMED_ARTIFACT_OR_TECHNIQUE_RE =
+    /Cauldron|Fire|Flame|Pill|Grass|Herb|Lotus|Sword|Blade|Scripture|Technique|Manual|Art|Bell|Mirror|Seal|Ring|Pagoda|Talisman|Spear|Bow|Armor|котёл|плам|огн|пилюл|трав|лотос|меч|клинок|канон|техник|искусств|колокол|зеркал|печат|кольц|пагод|талисман|копь/i;
+
+  base.artifactsAndFlames = base.artifactsAndFlames.filter(
+    (item) =>
+      /[а-яёА-ЯЁ]/.test(item) &&
+      !NON_ARTIFACT_GENERIC_TERMS.has(item.trim().toLowerCase()) &&
+      !/ярус|ранг/i.test(item)
+  );
   Object.entries(glossary.system_and_terms || {}).forEach(([eng, rus]) => {
-    if (eng === 'Origin Points' || eng === 'Spirit Stones' || eng === 'Spiritual Root') return;
-    const escapedEng = eng.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const cleanEng = eng.trim();
+    const cleanRus = (rus || '').trim();
+    if (!cleanRus || !/[а-яёА-ЯЁ]/.test(cleanRus)) return;
+    if (
+      NON_ARTIFACT_GENERIC_TERMS.has(cleanEng.toLowerCase()) ||
+      NON_ARTIFACT_GENERIC_TERMS.has(cleanRus.toLowerCase())
+    ) {
+      return;
+    }
+    if (!NAMED_ARTIFACT_OR_TECHNIQUE_RE.test(cleanEng) && !NAMED_ARTIFACT_OR_TECHNIQUE_RE.test(cleanRus)) {
+      return;
+    }
+    const escapedEng = cleanEng.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     if (
       new RegExp(`\\b${escapedEng}\\b`, 'i').test(engText) ||
-      combinedRus.toLowerCase().includes(rus.toLowerCase().slice(0, 6))
+      combinedRus.toLowerCase().includes(cleanRus.toLowerCase().slice(0, 6))
     ) {
-      if (!base.artifactsAndFlames.includes(rus)) {
-        base.artifactsAndFlames.push(rus);
+      if (!base.artifactsAndFlames.includes(cleanRus)) {
+        base.artifactsAndFlames.push(cleanRus);
       }
     }
   });
@@ -2321,14 +2718,27 @@ export function updateHeroStateLedgerFromChapter(
       if (cleanQ.length >= 8 && !forwardQuestions.some((q) => q.questionRus === cleanQ)) {
         const relatedEntities: string[] = [];
         (Object.keys(glossary || {}) as GlossaryCategory[]).forEach((cat) => {
+          if (cat === 'units') return;
           Object.values(glossary?.[cat] || {}).forEach((entity) => {
-            if (cleanQ.toLowerCase().includes(entity.toLowerCase())) {
+            if (!entity || entity.length < 3 || !/[а-яёА-ЯЁ]/.test(entity)) return;
+            const esc = entity.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const wordBoundaryRe = new RegExp(`(?<![а-яёa-z0-9])${esc}(?![а-яёa-z0-9])`, 'i');
+            if (wordBoundaryRe.test(cleanQ)) {
               relatedEntities.push(entity);
             }
           });
         });
         if (relatedEntities.length === 0) {
-          const firstCap = (cleanQ.match(/[А-ЯЁ][а-яё]+/g) || []).slice(0, 2);
+          const questionStopwords = new Set([
+            'что', 'кто', 'где', 'куда', 'откуда', 'когда', 'почему', 'зачем',
+            'как', 'какой', 'какая', 'какое', 'какие', 'чей', 'чья', 'чьё', 'чьи',
+            'неужели', 'разве', 'или', 'если', 'хотя', 'это', 'этот', 'эта', 'эти',
+            'тот', 'та', 'те', 'он', 'она', 'они', 'мы', 'вы', 'ты', 'ли', 'же', 'ведь',
+            'сможет', 'может', 'будет', 'есть', 'нет',
+          ]);
+          const firstCap = (cleanQ.match(/[А-ЯЁ][а-яё]{2,}/g) || [])
+            .filter((w) => !questionStopwords.has(w.toLowerCase()))
+            .slice(0, 2);
           if (firstCap.length > 0) relatedEntities.push(firstCap.join(' '));
         }
         forwardQuestions.push({
@@ -3097,1050 +3507,84 @@ export function runAdditionBySubtractionScout(
   };
 }
 
-// ============================================================================
-// MODULE 2: DelTA 4-Component Document-to-Sentence Context Engine
-// ============================================================================
-
-export interface DelTAShortTermPair {
-  index: number;
-  engParagraph: string;
-  rusParagraph: string;
-}
-
-export interface DelTABilingualSummary {
-  eng: string;
-  rus: string;
-  summaryEng: string;
-  summaryRus: string;
-}
-
-export interface DelTALongTermMatch {
-  chapterNumber: number;
-  engSnippet: string;
-  rusSnippet: string;
-  matchedEntity: string;
-}
-
-export interface DelTAContextPacket {
-  properNounCount: number; // \hat{R}^{(i)}
-  bilingualSummary: DelTABilingualSummary; // A_s^{(i)}, A_t^{(i)}
-  shortTermWindow: DelTAShortTermPair[]; // M^{(i)} — last 3 aligned ENG-RUS paragraphs
-  longTermMemories: DelTALongTermMatch[]; // \hat{N}^{(i)} — relevant past chapter sentences
-}
-
-export function generateBilingualChapterSummary(
-  chapterNumber: number,
-  titleEng: string,
-  engText: string,
-  titleRus: string,
-  rusText: string
-): DelTABilingualSummary {
-  const cleanEngLines = engText
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 15 && !l.startsWith('---') && !l.startsWith('['));
-
-  const firstEng = cleanEngLines[0]?.split(/(?<=[.!?])\s+/)[0] || titleEng;
-  const lastEng =
-    cleanEngLines[cleanEngLines.length - 1]?.split(/(?<=[.!?])\s+/).slice(-1)[0] || '';
-  const engSummary =
-    firstEng && lastEng && firstEng !== lastEng
-      ? `Ch.${chapterNumber} (${titleEng}): ${firstEng} Outcome: ${lastEng}`
-      : `Ch.${chapterNumber} (${titleEng}): ${firstEng}`;
-
-  const rusSummary = generateChapterMemorySummary(
-    chapterNumber,
-    titleRus || `Глава ${chapterNumber}`,
-    rusText
-  );
-
-  return {
-    eng: engSummary,
-    rus: rusSummary,
-    summaryEng: engSummary,
-    summaryRus: rusSummary,
-  };
-}
-
 /**
- * Builds the 4-component DelTA memory context for a chapter:
- * 1. \hat{R}^{(i)} — Proper Noun Records count (sliced glossary)
- * 2. A_s^{(i)}, A_t^{(i)} — Bilingual Summary (ENG + RUS)
- * 3. M^{(i)} — Short-Term Sliding Window of the last 3 non-divider ENG↔RUS paragraphs from the preceding chapter
- * 4. \hat{N}^{(i)} — Long-Term Memory retrieval of relevant translated sentences from earlier chapters
+ * Post-filters LLM Scout candidate terms through Agent S (Subtraction) and Number-Parity rules:
+ * - Blocks system rank/grade/level formulas (`Tier 1 High Grade`, `Mastery`, `Perfection`, `Chapter 5`)
+ *   that are governed by `TIER_VS_GRADE` and `WRITTEN_NUMERALS`.
+ * - Blocks terms where `eng` has Arabic digits (`1`) that were converted to words (`первый`) in `rus_suggested`.
+ * - Blocks lowercase common nouns (`rogue cultivators`) and untranslated Latin strings.
  */
-export function buildDelTAContextPacket(
-  currentChapterEng: string,
-  previousChapter: {
-    number: number;
-    titleEng: string;
-    titleRus: string;
-    engText: string;
-    rusText: string;
-    summary?: string;
-    summaryEng?: string;
-  } | null,
-  earlierChapters: Array<{
-    number: number;
-    engText: string;
-    rusText: string;
-  }>,
-  glossary: CanonicalGlossary,
-  windowSize = 3
-): DelTAContextPacket {
-  const { filteredGlossary, matchedCount } = filterGlossaryForChapter(
-    currentChapterEng,
-    glossary
-  );
+export function filterScoutedTermsWithAgentS<
+  T extends {
+    eng: string;
+    rus_suggested: string;
+    category: GlossaryCategory;
+    gender?: GrammaticalGender;
+    context_snippet?: string;
+    confidence?: number;
+  },
+>(
+  candidates: T[],
+  existingGlossary?: CanonicalGlossary,
+  existingScouted?: ScoutedTerm[]
+): T[] {
+  if (!Array.isArray(candidates)) return [];
 
-  let bilingualSummary: DelTABilingualSummary = {
-    eng: 'Opening chapter of the translation stream.',
-    rus: 'Первая переводимая глава в потоке.',
-    summaryEng: 'Opening chapter of the translation stream.',
-    summaryRus: 'Первая переводимая глава в потоке.',
-  };
-  const shortTermWindow: DelTAShortTermPair[] = [];
-
-  if (previousChapter) {
-    const autoBi = generateBilingualChapterSummary(
-      previousChapter.number,
-      previousChapter.titleEng,
-      previousChapter.engText,
-      previousChapter.titleRus,
-      previousChapter.rusText
-    );
-    const finalEng = previousChapter.summaryEng || autoBi.eng;
-    const finalRus = previousChapter.summary || autoBi.rus;
-    bilingualSummary = {
-      eng: finalEng,
-      rus: finalRus,
-      summaryEng: finalEng,
-      summaryRus: finalRus,
-    };
-
-    if (previousChapter.rusText.trim()) {
-      const aligned = alignChapterParagraphs(
-        previousChapter.engText,
-        previousChapter.rusText
+  const knownAll = new Set<string>();
+  if (existingGlossary) {
+    (Object.keys(existingGlossary) as GlossaryCategory[]).forEach((cat) => {
+      Object.keys(existingGlossary[cat] || {}).forEach((k) =>
+        knownAll.add(k.trim().toLowerCase())
       );
-      const validPairs = aligned.pairs.filter(
-        (p) =>
-          p.engParagraph.trim().length > 0 &&
-          p.rusParagraph.trim().length > 0 &&
-          !p.isSystemDivider
-      );
-      const tail = validPairs.slice(-Math.max(1, windowSize));
-      tail.forEach((p, idx) => {
-        shortTermWindow.push({
-          index: idx + 1,
-          engParagraph: p.engParagraph,
-          rusParagraph: p.rusParagraph,
-        });
-      });
-    }
-  }
-
-  // Long-Term Memory (\hat{N}^{(i)}): retrieve up to 3 past translated paragraphs that share active proper nouns
-  const activeEntities = [
-    ...Object.entries(filteredGlossary.characters || {}),
-    ...Object.entries(filteredGlossary.sects_and_places || {}),
-    ...Object.entries(filteredGlossary.system_and_terms || {}),
-  ];
-
-  const longTermMemories: DelTALongTermMatch[] = [];
-  for (const pastCh of earlierChapters) {
-    if (!pastCh.rusText.trim()) continue;
-    if (previousChapter && pastCh.number === previousChapter.number) continue;
-
-    const aligned = alignChapterParagraphs(pastCh.engText, pastCh.rusText);
-    for (const pair of aligned.pairs) {
-      if (!pair.engParagraph || !pair.rusParagraph || pair.isSystemDivider) continue;
-      for (const [engTerm, rusTerm] of activeEntities) {
-        if (
-          pair.engParagraph.toLowerCase().includes(engTerm.toLowerCase()) &&
-          longTermMemories.length < 3 &&
-          !longTermMemories.some((m) => m.matchedEntity === `${engTerm} → ${rusTerm}`)
-        ) {
-          longTermMemories.push({
-            chapterNumber: pastCh.number,
-            engSnippet: pair.engParagraph,
-            rusSnippet: pair.rusParagraph,
-            matchedEntity: `${engTerm} → ${rusTerm}`,
-          });
-          break;
-        }
-      }
-      if (longTermMemories.length >= 3) break;
-    }
-    if (longTermMemories.length >= 3) break;
-  }
-
-  return {
-    properNounCount: matchedCount,
-    bilingualSummary,
-    shortTermWindow,
-    longTermMemories,
-  };
-}
-
-// ============================================================================
-// MODULE 3: LCD-MAS + CHORUS CSI Cultural Footnotes & DITING 6D Judge
-// ============================================================================
-
-export type CsiCategory = 'idiom' | 'honorific' | 'daoist_term' | 'system_formula';
-
-export interface CsiCulturalNote {
-  id: string;
-  sourcePhrase: string;
-  category: CsiCategory;
-  categoryLabel: string;
-  adaptedRus: string;
-  rationale: string;
-}
-
-export interface DitingQualityReport {
-  idiomAccuracy: number; // Точность передачи идиоматики
-  referentialCohesion: number; // Временная и референциальная связность
-  characterVoiceFidelity: number; // Сохранение индивидуальных голосов героев
-  culturalAdaptation: number; // Культурная достоверность (CSI)
-  literaryRhythm: number; // Ритмика и отсутствие канцелярита
-  terminologyPrecision: number; // Соблюдение канона и числительных
-  overallScore: number;
-  mqmGrade: 'Эталон (DITING 95+)' | 'Высокий (85–94)' | 'Требует правки (<85)';
-}
-
-/**
- * Extracts Culture-Specific Items (CSI) and generates structured CHORUS C3 rationales
- * explaining why specific Daoist idioms, honorifics, units, and cultivation ranks were adapted as they were.
- */
-export function extractCsiCulturalNotes(
-  engText: string,
-  rusText: string,
-  glossary: CanonicalGlossary
-): CsiCulturalNote[] {
-  const notes: CsiCulturalNote[] = [];
-  const lowerEng = engText.toLowerCase();
-
-  const csiPatterns: Array<{
-    key: string;
-    testEng: RegExp;
-    sourcePhrase: string;
-    category: CsiCategory;
-    categoryLabel: string;
-    adaptedRus: string;
-    rationale: string;
-  }> = [
-    {
-      key: 'senior-brother',
-      testEng: /\bSenior\s+Brother\s+([A-Z][a-z]+)\b/i,
-      sourcePhrase: 'Senior Brother (Шисюн / 师兄)',
-      category: 'honorific',
-      categoryLabel: 'Сектантский гоноратив',
-      adaptedRus: 'старший брат (со строчной буквы при имени)',
-      rationale:
-        'По правилам русской литературной адаптации уся/сянься обращения «старший брат / старейшина / дьякон» перед именем пишутся со строчной буквы, передавая иерархию учеников одной секты.',
-    },
-    {
-      key: 'elder-deacon',
-      testEng: /\b(?:Elder|Deacon)\s+[A-Z][a-z]+\b/i,
-      sourcePhrase: 'Elder / Deacon (Чжанлао / Чжиши)',
-      category: 'honorific',
-      categoryLabel: 'Должностной титул секты',
-      adaptedRus: 'старейшина / дьякон + фамилия',
-      rationale:
-        'Сохраняет даосскую клановую субординацию: ученики обращаются к старейшинам строго на «вы», тогда как старейшины к внешним ученикам — на «ты».',
-    },
-    {
-      key: 'jin-unit',
-      testEng: /\b\d+\s+jin\b/i,
-      sourcePhrase: 'Jin (Цзинь / 斤 ≈ 500 г)',
-      category: 'daoist_term',
-      categoryLabel: 'Традиционная мера веса',
-      adaptedRus: 'цзинь (без перевода в фунты или килограммы)',
-      rationale:
-        'Замена «jin» на западные «фунты» или метрические «килограммы» разрушает атмосферу древнего мира культивации (правило WEIGHT_UNITS).',
-    },
-    {
-      key: 'tier-grade',
-      testEng: /\bTier\s+\d+\s+(?:Low|Mid|High)\s+Grade\b/i,
-      sourcePhrase: 'Tier X Low/Mid/High Grade',
-      category: 'system_formula',
-      categoryLabel: 'Двухуровневая классификация рангов',
-      adaptedRus: 'X-го яруса низшего/среднего/высшего ранга',
-      rationale:
-        'Разводит понятия Tier (ярус) и Grade (ранг), предотвращая тавтологию «1-го ранга низшего ранга» и канцелярит «низшего сорта».',
-    },
-    {
-      key: 'qi-refining-dantian',
-      testEng: /\b(?:Qi\s+Refining|dantian|meridians|Spirit\s+Root)\b/i,
-      sourcePhrase: 'Qi Refining / Dantian / Spirit Root',
-      category: 'daoist_term',
-      categoryLabel: 'Даосская внутренняя алхимия',
-      adaptedRus: 'Очищение Ци / даньтянь / духовный корень',
-      rationale:
-        'Используется устоявшийся в русскоязычном фэндоме сянься канон внутренней алхимии вместо буквальных калек («переработка пневмы»).',
-    },
-    {
-      key: 'cold-air-idiom',
-      testEng: /gasp|cold\s+air|chose\s+the\s+wrong\s+target|crystal\s+clear/i,
-      sourcePhrase: 'Образная идиоматика и боевые клише (Чэнъюй)',
-      category: 'idiom',
-      categoryLabel: 'Идиома / Чэнъюй',
-      adaptedRus: rusText.includes('как на ладони')
-        ? '«видно как на ладони»'
-        : rusText.includes('судорожно перевёл дыхание')
-          ? '«судорожно перевёл дыхание»'
-          : '«растворился тенью / словно призрак»',
-      rationale:
-        'Агент локализации CSI заменил буквальную английскую/китайскую конструкцию на естественный русский фразеологизм с сохранением динамики боевой сцены.',
-    },
-  ];
-
-  for (const item of csiPatterns) {
-    if (item.testEng.test(engText)) {
-      notes.push({
-        id: `csi-${item.key}`,
-        sourcePhrase: item.sourcePhrase,
-        category: item.category,
-        categoryLabel: item.categoryLabel,
-        adaptedRus: item.adaptedRus,
-        rationale: item.rationale,
-      });
-    }
-  }
-
-  if (notes.length === 0 && lowerEng.length > 0) {
-    const firstCanon = Object.entries(glossary.realms || {})[0];
-    if (firstCanon) {
-      notes.push({
-        id: 'csi-canon-realm',
-        sourcePhrase: firstCanon[0],
-        category: 'daoist_term',
-        categoryLabel: 'Канон ступени культивации',
-        adaptedRus: firstCanon[1],
-        rationale:
-          'Применено утверждённое соответствие из реестра имен собственных DelTA для сквозного единства терминологии.',
-      });
-    }
-  }
-
-  return notes;
-}
-
-/**
- * Evaluates a translated chapter across the 6 narrative & cultural dimensions of the DITING framework.
- */
-export function evaluateDitingQuality(
-  engText: string,
-  rusText: string,
-  glossary: CanonicalGlossary,
-  glossaryMeta?: Record<string, GlossaryTermMeta>,
-  enabledRuleIds?: LintRuleId[]
-): DitingQualityReport {
-  if (!rusText.trim()) {
-    return {
-      idiomAccuracy: 0,
-      referentialCohesion: 0,
-      characterVoiceFidelity: 0,
-      culturalAdaptation: 0,
-      literaryRhythm: 0,
-      terminologyPrecision: 0,
-      overallScore: 0,
-      mqmGrade: 'Требует правки (<85)',
-    };
-  }
-
-  const lint = runQaLinter(engText, rusText, glossary, {
-    enabledRuleIds,
-    glossaryMeta,
-  });
-
-  const hasCalque = lint.issues.some(
-    (i) => i.ruleId === 'MACHINE_CALQUES' || i.ruleId === 'ALCHEMY_CALQUES'
-  );
-  const hasGenderError = lint.issues.some((i) => i.ruleId === 'CHARACTER_GENDER_MISMATCH');
-  const hasDrift = lint.issues.some((i) => i.ruleId === 'PARAGRAPH_DRIFT');
-  const hasTautology = lint.issues.some((i) => i.ruleId === 'TAUTOLOGY_RADAR');
-  const hasTermViolation = lint.issues.some(
-    (i) =>
-      i.ruleId === 'GLOSSARY_CANON_VIOLATION' ||
-      i.ruleId === 'NUMBER_MISMATCH' ||
-      i.ruleId === 'TIER_VS_GRADE' ||
-      i.ruleId === 'ARTIFACT_RANKING'
-  );
-  const hasUnitOrSectError = lint.issues.some(
-    (i) => i.ruleId === 'WEIGHT_UNITS' || i.ruleId === 'SECT_SINGULAR'
-  );
-
-  const idiomAccuracy = hasCalque ? 76 : 98;
-  const referentialCohesion = hasDrift ? 78 : hasGenderError ? 80 : 99;
-  const characterVoiceFidelity = hasGenderError ? 72 : 97;
-  const culturalAdaptation = hasUnitOrSectError ? 79 : 98;
-  const literaryRhythm = hasTautology ? 82 : hasCalque ? 80 : 97;
-  const terminologyPrecision = hasTermViolation ? 74 : 100;
-
-  const overallScore = Math.round(
-    (idiomAccuracy +
-      referentialCohesion +
-      characterVoiceFidelity +
-      culturalAdaptation +
-      literaryRhythm +
-      terminologyPrecision) /
-      6
-  );
-
-  const mqmGrade: DitingQualityReport['mqmGrade'] =
-    overallScore >= 95
-      ? 'Эталон (DITING 95+)'
-      : overallScore >= 85
-        ? 'Высокий (85–94)'
-        : 'Требует правки (<85)';
-
-  return {
-    idiomAccuracy,
-    referentialCohesion,
-    characterVoiceFidelity,
-    culturalAdaptation,
-    literaryRhythm,
-    terminologyPrecision,
-    overallScore,
-    mqmGrade,
-  };
-}
-
-// ============================================================================
-// MODULE 4: Reactive Sliding Window Priority Queue Scheduler (Anti-HTTP 429)
-// ============================================================================
-
-export interface QueueTelemetrySnapshot {
-  queuedCount: number;
-  activeCount: number;
-  windowUsedSlots: number;
-  requestsInCurrentWindow: number;
-  intervalCap: number;
-  intervalMs: number;
-  isSaturated: boolean;
-  completedCount: number;
-}
-
-export type SlidingWindowQueueTelemetry = QueueTelemetrySnapshot;
-
-interface QueuedTaskItem<T> {
-  id: string;
-  label: string;
-  priority: number; // 3 = Self-Repair / QA, 2 = DelTA Memory / Scout, 1 = Translation
-  fn: () => Promise<T>;
-  resolve: (val: T) => void;
-  reject: (err: Error) => void;
-  signal?: AbortSignal;
-}
-
-/**
- * Pure TypeScript Sliding Window Priority Queue modeled on p-queue with
- * strict sliding-window timestamp tracking (`carryoverIntervalCount: true`)
- * to prevent Fixed-Window boundary bursts and HTTP 429 errors.
- */
-export class SlidingWindowTaskQueue {
-  private readonly concurrency: number;
-  private readonly intervalCap: number;
-  private readonly intervalMs: number;
-  private readonly queue: Array<QueuedTaskItem<unknown>> = [];
-  private readonly windowStartTimestamps: number[] = [];
-  private activeCount = 0;
-  private completedCount = 0;
-  private onUpdate?: (snapshot: QueueTelemetrySnapshot) => void;
-
-  constructor(options?: {
-    concurrency?: number;
-    intervalCap?: number;
-    maxRequestsPerWindow?: number;
-    intervalMs?: number;
-    windowDurationMs?: number;
-    onUpdate?: (snapshot: QueueTelemetrySnapshot) => void;
-  }) {
-    this.concurrency = options?.concurrency ?? 2;
-    this.intervalCap = options?.intervalCap ?? options?.maxRequestsPerWindow ?? 6;
-    this.intervalMs = options?.intervalMs ?? options?.windowDurationMs ?? 10000;
-    this.onUpdate = options?.onUpdate;
-  }
-
-  private pruneSlidingWindow(now: number): void {
-    const cutoff = now - this.intervalMs;
-    while (
-      this.windowStartTimestamps.length > 0 &&
-      this.windowStartTimestamps[0] <= cutoff
-    ) {
-      this.windowStartTimestamps.shift();
-    }
-  }
-
-  public getSnapshot(): QueueTelemetrySnapshot {
-    this.pruneSlidingWindow(Date.now());
-    const used = this.windowStartTimestamps.length;
-    const clampedUsed = Math.min(this.intervalCap, used);
-    return {
-      queuedCount: this.queue.length,
-      activeCount: this.activeCount,
-      windowUsedSlots: clampedUsed,
-      requestsInCurrentWindow: clampedUsed,
-      intervalCap: this.intervalCap,
-      intervalMs: this.intervalMs,
-      isSaturated:
-        this.activeCount >= this.concurrency || used >= this.intervalCap,
-      completedCount: this.completedCount,
-    };
-  }
-
-  public getTelemetry(): QueueTelemetrySnapshot {
-    return this.getSnapshot();
-  }
-
-  private emitUpdate(): void {
-    if (this.onUpdate) {
-      this.onUpdate(this.getSnapshot());
-    }
-  }
-
-  public add<T>(
-    fn: () => Promise<T>,
-    options?: { priority?: number; label?: string; signal?: AbortSignal }
-  ): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
-      if (options?.signal?.aborted) {
-        reject(new Error('Task aborted before enqueue'));
-        return;
-      }
-
-      const item: QueuedTaskItem<unknown> = {
-        id: `q-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        label: options?.label || 'pipeline-task',
-        priority: options?.priority ?? 1,
-        fn: fn as () => Promise<unknown>,
-        resolve: resolve as (val: unknown) => void,
-        reject,
-        signal: options?.signal,
-      };
-
-      // Insert in descending priority order (FIFO within same priority)
-      const insertIdx = this.queue.findIndex((q) => q.priority < item.priority);
-      if (insertIdx === -1) {
-        this.queue.push(item);
-      } else {
-        this.queue.splice(insertIdx, 0, item);
-      }
-
-      this.emitUpdate();
-      this.processNext();
     });
   }
+  (existingScouted || []).forEach((t) => {
+    if (t?.eng) knownAll.add(t.eng.trim().toLowerCase());
+  });
 
-  private processNext(): void {
-    if (this.queue.length === 0) return;
-    if (this.activeCount >= this.concurrency) return;
+  const out: T[] = [];
+  for (const item of candidates) {
+    const eng = (item?.eng || '').trim();
+    const rus = (item?.rus_suggested || '').trim();
+    if (!eng || !rus || !/[а-яёА-ЯЁ]/.test(rus)) continue;
+    if (knownAll.has(eng.toLowerCase())) continue;
 
-    const now = Date.now();
-    this.pruneSlidingWindow(now);
-
-    if (this.windowStartTimestamps.length >= this.intervalCap) {
-      const oldest = this.windowStartTimestamps[0];
-      const waitMs = Math.max(25, oldest + this.intervalMs - now + 10);
-      setTimeout(() => this.processNext(), waitMs);
-      return;
-    }
-
-    const nextItem = this.queue.shift();
-    if (!nextItem) return;
-
-    if (nextItem.signal?.aborted) {
-      nextItem.reject(new Error('Task aborted'));
-      this.emitUpdate();
-      this.processNext();
-      return;
-    }
-
-    this.activeCount++;
-    this.windowStartTimestamps.push(Date.now());
-    this.emitUpdate();
-
-    nextItem
-      .fn()
-      .then((res) => {
-        this.completedCount++;
-        nextItem.resolve(res);
-      })
-      .catch((err) => {
-        nextItem.reject(err instanceof Error ? err : new Error(String(err)));
-      })
-      .finally(() => {
-        this.activeCount--;
-        this.emitUpdate();
-        this.processNext();
-      });
-  }
-}
-
-export const SlidingWindowPriorityQueue = SlidingWindowTaskQueue;
-
-// ============================================================================
-// MODULE 5: Pure TypeScript EPUB 3 Book Compiler (Zero External Dependencies)
-// ============================================================================
-
-export interface Epub3ChapterInput {
-  number: number;
-  titleRus: string;
-  titleEng?: string;
-  contentRus: string;
-  summary?: string;
-  summaryRus?: string;
-  csiNotes?: CsiCulturalNote[];
-}
-
-export interface Epub3BuildOptions {
-  bookId?: string;
-  titleRus?: string;
-  titleEng?: string;
-  novelTitle?: string;
-  author: string;
-  translator?: string;
-  genreTitle?: string;
-  genreLabel?: string;
-  heroLedger?: HeroStateLedger;
-  synopsisRus?: string;
-  includeCsiFootnotes?: boolean;
-  chapters: Epub3ChapterInput[];
-}
-
-export interface Epub3ArchivePackage {
-  filename: string;
-  bytes: Uint8Array;
-  byteSize: number;
-  chapterCount: number;
-  totalWords: number;
-  tocPreview: Array<{ number: number; titleRus: string; words: number; csiCount: number }>;
-}
-
-function escapeXml(unsafe: string): string {
-  return unsafe
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function renderChapterBodyToXhtml(
-  rusText: string,
-  csiNotes: CsiCulturalNote[] = [],
-  includeCsiFootnotes = true
-): string {
-  const lines = rusText.replace(/\r\n/g, '\n').split('\n');
-  const htmlBlocks: string[] = [];
-  let inSystemBox = false;
-  let systemLines: string[] = [];
-
-  for (const rawLine of lines) {
-    const trimmed = rawLine.trim();
-    if (!trimmed) continue;
-
-    if (trimmed === '---') {
-      if (inSystemBox) {
-        if (systemLines.length > 0) {
-          htmlBlocks.push(
-            `<div class="system-box">\n${systemLines
-              .map((sl) => `  <p class="system-line">${escapeXml(sl)}</p>`)
-              .join('\n')}\n</div>`
-          );
-          systemLines = [];
-        }
-        inSystemBox = false;
-      } else {
-        inSystemBox = true;
-      }
+    // 1. Block structural rank/tier/grade/system labels handled by deterministic rules
+    if (
+      /^(?:Chapter|Tier|Level|Stage|Layer|Rank|Grade|Mastery|Perfection|Speed\s+Bonus|Low\s+Grade|Mid(?:dle)?\s+Grade|High\s+Grade|Peak\s+Grade)\b/i.test(
+        eng
+      ) ||
+      /\b(?:Low|Mid(?:dle)?|High|Peak)\s+Grade$/i.test(eng)
+    ) {
       continue;
     }
 
-    if (inSystemBox) {
-      systemLines.push(trimmed);
-    } else if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-      htmlBlocks.push(
-        `<div class="system-box"><p class="system-line">${escapeXml(trimmed)}</p></div>`
-      );
-    } else {
-      htmlBlocks.push(`<p>${escapeXml(trimmed)}</p>`);
+    // 2. Require capitalized proper noun (or whitelisted Daoist unit)
+    if (!/^[A-Z]/.test(eng) && !/^(?:dantian|qi|jin|liang|li|zhang)$/i.test(eng)) {
+      continue;
     }
-  }
 
-  if (systemLines.length > 0) {
-    htmlBlocks.push(
-      `<div class="system-box">\n${systemLines
-        .map((sl) => `  <p class="system-line">${escapeXml(sl)}</p>`)
-        .join('\n')}\n</div>`
-    );
-  }
-
-  if (includeCsiFootnotes && csiNotes.length > 0) {
-    const noteItems = csiNotes
-      .map(
-        (n) =>
-          `<div class="csi-item"><p><strong>${escapeXml(n.sourcePhrase)}</strong> → <em>${escapeXml(n.adaptedRus)}</em> (${escapeXml(n.categoryLabel)})</p><p class="csi-rationale">${escapeXml(n.rationale)}</p></div>`
-      )
-      .join('\n');
-    htmlBlocks.push(
-      `<aside class="csi-notes"><h3>Примечания переводчика и локализатора (CSI)</h3>\n${noteItems}\n</aside>`
-    );
-  }
-
-  return htmlBlocks.join('\n');
-}
-
-const CRC32_TABLE = (() => {
-  const table = new Uint32Array(256);
-  for (let i = 0; i < 256; i++) {
-    let c = i;
-    for (let k = 0; k < 8; k++) {
-      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    // 3. Enforce Arabic number parity between eng and rus_suggested
+    const engNums = eng.match(/\d+/g) || [];
+    const rusNums = new Set(rus.match(/\d+/g) || []);
+    if (engNums.some((n) => !rusNums.has(n))) {
+      continue;
     }
-    table[i] = c >>> 0;
-  }
-  return table;
-})();
 
-function crc32(data: Uint8Array): number {
-  let crc = 0xffffffff;
-  for (let i = 0; i < data.length; i++) {
-    crc = CRC32_TABLE[(crc ^ data[i]) & 0xff] ^ (crc >>> 8);
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-/**
- * Packs an array of `{ path, content }` into an uncompressed ZIP archive (`Uint8Array`)
- * compliant with EPUB 3 Open Container Format (OCF), where `mimetype` is the first entry at offset 0.
- */
-function createStoredZipArchive(
-  files: Array<{ path: string; data: Uint8Array }>
-): Uint8Array {
-  const encoder = new TextEncoder();
-  const localParts: Uint8Array[] = [];
-  const centralParts: Uint8Array[] = [];
-  let offset = 0;
-
-  for (const file of files) {
-    const nameBytes = encoder.encode(file.path);
-    const dataBytes = file.data;
-    const crc = crc32(dataBytes);
-    const size = dataBytes.length;
-
-    // Local file header (30 bytes + filename)
-    const localHeader = new Uint8Array(30 + nameBytes.length);
-    const lv = new DataView(localHeader.buffer);
-    lv.setUint32(0, 0x04034b50, true); // signature
-    lv.setUint16(4, 20, true); // version needed (2.0)
-    lv.setUint16(6, 0x0800, true); // UTF-8 filename flag
-    lv.setUint16(8, 0, true); // compression method: 0 (STORE)
-    lv.setUint16(10, 0, true); // mod time
-    lv.setUint16(12, 0x5421, true); // mod date
-    lv.setUint32(14, crc, true);
-    lv.setUint32(18, size, true);
-    lv.setUint32(22, size, true);
-    lv.setUint16(26, nameBytes.length, true);
-    lv.setUint16(28, 0, true); // extra length 0 (critical for EPUB `mimetype`)
-    localHeader.set(nameBytes, 30);
-
-    localParts.push(localHeader, dataBytes);
-
-    // Central directory header (46 bytes + filename)
-    const centralHeader = new Uint8Array(46 + nameBytes.length);
-    const cv = new DataView(centralHeader.buffer);
-    cv.setUint32(0, 0x02014b50, true);
-    cv.setUint16(4, 20, true);
-    cv.setUint16(6, 20, true);
-    cv.setUint16(8, 0x0800, true);
-    cv.setUint16(10, 0, true);
-    cv.setUint16(12, 0, true);
-    cv.setUint16(14, 0x5421, true);
-    cv.setUint32(16, crc, true);
-    cv.setUint32(20, size, true);
-    cv.setUint32(24, size, true);
-    cv.setUint16(28, nameBytes.length, true);
-    cv.setUint16(30, 0, true);
-    cv.setUint16(32, 0, true);
-    cv.setUint16(34, 0, true);
-    cv.setUint16(36, 0, true);
-    cv.setUint32(38, 0, true);
-    cv.setUint32(42, offset, true);
-    centralHeader.set(nameBytes, 46);
-
-    centralParts.push(centralHeader);
-    offset += localHeader.length + dataBytes.length;
+    knownAll.add(eng.toLowerCase());
+    out.push({
+      ...item,
+      eng,
+      rus_suggested: rus,
+    });
   }
 
-  const centralSize = centralParts.reduce((acc, p) => acc + p.length, 0);
-  const eocd = new Uint8Array(22);
-  const ev = new DataView(eocd.buffer);
-  ev.setUint32(0, 0x06054b50, true);
-  ev.setUint16(4, 0, true);
-  ev.setUint16(6, 0, true);
-  ev.setUint16(8, files.length, true);
-  ev.setUint16(10, files.length, true);
-  ev.setUint32(12, centralSize, true);
-  ev.setUint32(16, offset, true);
-  ev.setUint16(20, 0, true);
-
-  const totalSize = offset + centralSize + eocd.length;
-  const out = new Uint8Array(totalSize);
-  let cursor = 0;
-  for (const part of localParts) {
-    out.set(part, cursor);
-    cursor += part.length;
-  }
-  for (const part of centralParts) {
-    out.set(part, cursor);
-    cursor += part.length;
-  }
-  out.set(eocd, cursor);
   return out;
 }
 
-/**
- * Compiles translated chapters into a complete, standards-compliant EPUB 3 archive (`.epub`).
- */
-export function buildEpub3Archive(options: Epub3BuildOptions): Epub3ArchivePackage {
-  const encoder = new TextEncoder();
-  const sorted = [...options.chapters].sort((a, b) => a.number - b.number);
-  const includeCsi = options.includeCsiFootnotes ?? true;
-  const titleRus = options.titleRus || options.novelTitle || 'Веб-новелла';
-  const titleEng = options.titleEng || options.novelTitle || 'Web Novel';
-  const bookId = options.bookId || `kanon-epub-${Date.now()}`;
-  const genreTitle = options.genreTitle || options.genreLabel || 'Сянься / ЛитРПГ';
-
-  const containerXml = `<?xml version="1.0" encoding="UTF-8"?>
-<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
-  <rootfiles>
-    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
-  </rootfiles>
-</container>`;
-
-  const stylesCss = `body {
-  font-family: Georgia, "Times New Roman", serif;
-  line-height: 1.7;
-  margin: 5%;
-  color: #111827;
-}
-h1, h2, h3 {
-  font-family: "Helvetica Neue", Arial, sans-serif;
-  line-height: 1.3;
-  margin-top: 1.5em;
-  margin-bottom: 0.6em;
-}
-p {
-  margin: 0 0 0.9em 0;
-  text-indent: 1.2em;
-  text-align: justify;
-}
-.system-box {
-  margin: 1.25em 0;
-  padding: 0.9em 1.2em;
-  border: 1px solid #d97706;
-  background-color: #fffbeb;
-  border-radius: 6px;
-  font-family: "Courier New", monospace;
-}
-.system-line {
-  text-indent: 0;
-  margin: 0.25em 0;
-  font-size: 0.92em;
-  color: #92400e;
-}
-.csi-notes {
-  margin-top: 2em;
-  padding-top: 1em;
-  border-top: 1px solid #e5e7eb;
-  font-size: 0.88em;
-}
-.csi-item {
-  margin-bottom: 0.75em;
-}
-.csi-rationale {
-  text-indent: 0;
-  color: #4b5563;
-}`;
-
-  const heroPassportHtml = options.heroLedger
-    ? `<div class="system-box">
-      <p class="system-line"><strong>[Паспорт состояния героя — Гл. ${options.heroLedger.lastUpdatedChapter}]</strong></p>
-      <p class="system-line">Протагонист: ${escapeXml(options.heroLedger.protagonistName)}</p>
-      <p class="system-line">Ступень культивации: ${escapeXml(options.heroLedger.cultivationRealm)}</p>
-      <p class="system-line">Ресурсы: ${escapeXml(options.heroLedger.resources.join(' · '))}</p>
-      <p class="system-line">Локация: ${escapeXml(options.heroLedger.activeLocation)}</p>
-    </div>`
-    : '';
-
-  const titlePageXhtml = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ru" lang="ru">
-<head>
-  <meta charset="UTF-8"/>
-  <title>${escapeXml(titleRus)}</title>
-  <link rel="stylesheet" type="text/css" href="styles.css"/>
-</head>
-<body>
-  <section>
-    <h1>${escapeXml(titleRus)}</h1>
-    <p style="text-indent:0;"><strong>Оригинальное название:</strong> ${escapeXml(titleEng)}</p>
-    <p style="text-indent:0;"><strong>Автор:</strong> ${escapeXml(options.author)}</p>
-    ${options.translator ? `<p style="text-indent:0;"><strong>Перевод:</strong> ${escapeXml(options.translator)}</p>` : ''}
-    <p style="text-indent:0;"><strong>Жанровый канон:</strong> ${escapeXml(genreTitle)}</p>
-    ${heroPassportHtml}
-    ${
-      options.synopsisRus
-        ? `<div class="system-box"><p class="system-line">${escapeXml(options.synopsisRus)}</p></div>`
-        : ''
-    }
-  </section>
-</body>
-</html>`;
-
-  const chapterFiles: Array<{
-    id: string;
-    href: string;
-    number: number;
-    titleRus: string;
-    words: number;
-    csiCount: number;
-    xhtml: string;
-  }> = [];
-
-  let totalWords = 0;
-
-  sorted.forEach((ch, idx) => {
-    const fileId = `chap-${idx + 1}`;
-    const href = `chapter-${idx + 1}.xhtml`;
-    const heading = ch.titleRus.trim() || `Глава ${ch.number}`;
-    const words = ch.contentRus.trim() ? ch.contentRus.trim().split(/\s+/).length : 0;
-    totalWords += words;
-    const csiList = ch.csiNotes || [];
-
-    const bodyHtml = renderChapterBodyToXhtml(ch.contentRus, csiList, includeCsi);
-    const xhtml = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ru" lang="ru">
-<head>
-  <meta charset="UTF-8"/>
-  <title>${escapeXml(heading)}</title>
-  <link rel="stylesheet" type="text/css" href="styles.css"/>
-</head>
-<body>
-  <section>
-    <h2>${escapeXml(heading)}</h2>
-    ${bodyHtml}
-  </section>
-</body>
-</html>`;
-
-    chapterFiles.push({
-      id: fileId,
-      href,
-      number: ch.number,
-      titleRus: heading,
-      words,
-      csiCount: csiList.length,
-      xhtml,
-    });
-  });
-
-  const navItems = [
-    `<li><a href="titlepage.xhtml">Титульный лист</a></li>`,
-    ...chapterFiles.map(
-      (cf) => `<li><a href="${cf.href}">${escapeXml(cf.titleRus)}</a></li>`
-    ),
-  ].join('\n        ');
-
-  const navXhtml = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="ru" lang="ru">
-<head>
-  <meta charset="UTF-8"/>
-  <title>Оглавление — ${escapeXml(titleRus)}</title>
-  <link rel="stylesheet" type="text/css" href="styles.css"/>
-</head>
-<body>
-  <nav epub:type="toc" id="toc">
-    <h1>Оглавление</h1>
-    <ol>
-        ${navItems}
-    </ol>
-  </nav>
-</body>
-</html>`;
-
-  const manifestItems = [
-    `<item id="css" href="styles.css" media-type="text/css"/>`,
-    `<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`,
-    `<item id="titlepage" href="titlepage.xhtml" media-type="application/xhtml+xml"/>`,
-    ...chapterFiles.map(
-      (cf) =>
-        `<item id="${cf.id}" href="${cf.href}" media-type="application/xhtml+xml"/>`
-    ),
-  ].join('\n    ');
-
-  const spineItems = [
-    `<itemref idref="titlepage"/>`,
-    ...chapterFiles.map((cf) => `<itemref idref="${cf.id}"/>`),
-  ].join('\n    ');
-
-  const modifiedIso = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
-  const contentOpf = `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid" xml:lang="ru">
-  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:identifier id="bookid">urn:uuid:${escapeXml(bookId)}</dc:identifier>
-    <dc:title>${escapeXml(titleRus)}</dc:title>
-    <dc:creator>${escapeXml(options.author)}</dc:creator>
-    <dc:language>ru</dc:language>
-    <meta property="dcterms:modified">${modifiedIso}</meta>
-  </metadata>
-  <manifest>
-    ${manifestItems}
-  </manifest>
-  <spine>
-    ${spineItems}
-  </spine>
-</package>`;
-
-  const archiveEntries: Array<{ path: string; data: Uint8Array }> = [
-    { path: 'mimetype', data: encoder.encode('application/epub+zip') },
-    { path: 'META-INF/container.xml', data: encoder.encode(containerXml) },
-    { path: 'OEBPS/styles.css', data: encoder.encode(stylesCss) },
-    { path: 'OEBPS/nav.xhtml', data: encoder.encode(navXhtml) },
-    { path: 'OEBPS/titlepage.xhtml', data: encoder.encode(titlePageXhtml) },
-    ...chapterFiles.map((cf) => ({
-      path: `OEBPS/${cf.href}`,
-      data: encoder.encode(cf.xhtml),
-    })),
-    { path: 'OEBPS/content.opf', data: encoder.encode(contentOpf) },
-  ];
-
-  const bytes = createStoredZipArchive(archiveEntries);
-  const firstNum = sorted[0]?.number ?? 1;
-  const lastNum = sorted[sorted.length - 1]?.number ?? 1;
-  const slug = titleEng
-    .replace(/[^a-zA-Z0-9]+/g, '_')
-    .replace(/^_|_$/g, '');
-
-  return {
-    filename: `${slug || 'Novel'}_Ch_${firstNum}_${lastNum}_EPUB3.epub`,
-    bytes,
-    byteSize: bytes.byteLength,
-    chapterCount: sorted.length,
-    totalWords,
-    tocPreview: chapterFiles.map((cf) => ({
-      number: cf.number,
-      titleRus: cf.titleRus,
-      words: cf.words,
-      csiCount: cf.csiCount,
-    })),
-  };
-}
+// Module 2–5 extracted to ./delta-diting.ts and ./epub-archive.ts
+export * from './delta-diting.ts';
+export * from './epub-archive.ts';
 
 // ============================================================================
 // MODULE 6: GOOGLE COLAB L4 (24GB VRAM) & MULTI-MODEL PROVIDER ADAPTER
@@ -4900,377 +4344,12 @@ export function repairPunctuationArtifacts(text: string): string {
   return text
     .replace(/\.,/g, '.')
     .replace(/,\./g, '.')
-    .replace(/!\./g, '!')
-    .replace(/\?\./g, '?')
+    .replace(/!\.(?!\.)/g, '!')
+    .replace(/\?\.(?!\.)/g, '?')
     .replace(/,,+/g, ',')
     .replace(/(?<!\.)\.\.,/g, '...')
     .replace(/^(\s*)—,\s*/gm, '$1— ')
     .replace(/[ \t]+([,.;!?])/g, '$1');
-}
-
-export interface SanitizeChapterResult {
-  cleanedText: string;
-  removedLinesCount: number;
-  removedSamples: string[];
-}
-
-/**
- * Raw Chapter Sanitizer (Q6: C + `dyad-apps/Perevod/sanitizer_patterns.txt` + `mt_check/extract.py`):
- * 1. Converts HTML block tags (`<p>`, `<br>`, `<div>`) into paragraph breaks and strips inline HTML tags.
- * 2. Unescapes HTML entities (`&nbsp;`, `&quot;`, `&mdash;`, `&#39;`, `&amp;`).
- * 3. Removes `TL Note:`, `Editor's Note:`, Patreon/Discord/Ko-fi promos, and scraper watermarks (`Rulate.ru`, `Webnovel`, etc.).
- * 4. Preserves ЛитРПГ `[System: ...]` brackets and `---` scene dividers.
- */
-export function sanitizeRawChapterText(rawText: string): SanitizeChapterResult {
-  if (!rawText || typeof rawText !== 'string') {
-    return { cleanedText: '', removedLinesCount: 0, removedSamples: [] };
-  }
-
-  // Step 1: Unpack HTML block tags if the input came from HTML/EPUB/Web scraper
-  let text = rawText
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    .replace(/<(?:br|hr)\s*\/?>/gi, '\n')
-    .replace(/<\/(?:p|div|section|article|h[1-6]|li|blockquote)>/gi, '\n\n')
-    .replace(/<(?:p|div|section|article|h[1-6]|li|blockquote)(?:\s[^>]*)?>/gi, '')
-    .replace(/<\/?(?:span|b|strong|i|em|u|a|font|small|sup|sub)(?:\s[^>]*)?>/gi, '');
-
-  // Step 2: Decode common HTML entities
-  text = text
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&mdash;/gi, '—')
-    .replace(/&ndash;/gi, '–')
-    .replace(/&hellip;/gi, '...')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#0*39;|&apos;/gi, "'")
-    .replace(/&laquo;/gi, '«')
-    .replace(/&raquo;/gi, '»')
-    .replace(/&amp;/gi, '&');
-
-  // Step 3: Line-by-line watermark, translator note, and promo filter
-  const junkLinePatterns: RegExp[] = [
-    /^\s*(?:\[|\(|【)?\s*(?:TL\s*Note|T\/N|TN|Translator'?s?\s*Note|Editor'?s?\s*Note|ED\s*Note|A\/N|Author'?s?\s*Note|Примечание\s+(?:переводчика|редактора|автора)|П\.?\s*П\.?)\s*[:：\-]/i,
-    /^\s*(?:Translated|Edited|Proofread)\s+by\s*[:：]/i,
-    /(?:patreon\.com|ko-fi\.com|discord\.gg|paypal\.me|boosty\.to)/i,
-    /(?:прочитано\s+на\s+rulate\.ru|перевод\s+выполнен\s+с\s+сайта|read\s+latest\s+chapters?\s+at|visit\s+wuxiaworld|webnovel\.com|royalroad\.com)/i,
-    /^\s*(?:please\s+support\s+the\s+(?:author|translator)|don't\s+forget\s+to\s+vote\s+power\s+stones)/i,
-    /^\s*[=*~_]{4,}\s*$/,
-  ];
-
-  const lines = text.split('\n');
-  const keptLines: string[] = [];
-  const removedSamples: string[] = [];
-  let removedLinesCount = 0;
-
-  for (const rawLine of lines) {
-    const trimmed = rawLine.trim();
-    if (!trimmed) {
-      keptLines.push('');
-      continue;
-    }
-
-    // Always keep canonical scene divider `---`
-    if (trimmed === '---') {
-      keptLines.push('---');
-      continue;
-    }
-
-    const isJunk = junkLinePatterns.some((re) => re.test(trimmed));
-    if (isJunk) {
-      removedLinesCount++;
-      if (removedSamples.length < 10) {
-        removedSamples.push(trimmed.slice(0, 120));
-      }
-      continue;
-    }
-
-    keptLines.push(trimmed);
-  }
-
-  const cleanedText = keptLines
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-
-  return {
-    cleanedText,
-    removedLinesCount,
-    removedSamples,
-  };
-}
-
-export interface ImportedEpubChapter {
-  number: number;
-  titleEng: string;
-  engText: string;
-  wordCountEng: number;
-  href: string;
-}
-
-export interface EpubImportResult {
-  bookTitle: string;
-  author: string;
-  chapters: ImportedEpubChapter[];
-  totalRemovedJunkLines: number;
-}
-
-/**
- * Low-level ZIP Central Directory reader.
- * Extracts raw entries (`{ path, compressionMethod, compressedData }`) from a `.epub` or `.zip` buffer.
- */
-function readZipEntriesRaw(zipBytes: Uint8Array): Array<{
-  path: string;
-  compressionMethod: number;
-  compressedData: Uint8Array;
-  uncompressedSize: number;
-}> {
-  const view = new DataView(zipBytes.buffer, zipBytes.byteOffset, zipBytes.byteLength);
-  const decoder = new TextDecoder('utf-8');
-
-  // Locate End of Central Directory (EOCD) signature 0x06054b50 scanning backwards
-  let eocdOffset = -1;
-  const minEocdSearch = Math.max(0, zipBytes.byteLength - 65557);
-  for (let i = zipBytes.byteLength - 22; i >= minEocdSearch; i--) {
-    if (view.getUint32(i, true) === 0x06054b50) {
-      eocdOffset = i;
-      break;
-    }
-  }
-
-  if (eocdOffset === -1) {
-    throw new Error('Не найден заголовок EOCD ZIP-архива (файл повреждён или не является .epub/.zip)');
-  }
-
-  const totalEntries = view.getUint16(eocdOffset + 10, true);
-  const cdOffset = view.getUint32(eocdOffset + 16, true);
-
-  const entries: Array<{
-    path: string;
-    compressionMethod: number;
-    compressedData: Uint8Array;
-    uncompressedSize: number;
-  }> = [];
-
-  let ptr = cdOffset;
-  for (let idx = 0; idx < totalEntries && ptr + 46 <= zipBytes.byteLength; idx++) {
-    const sig = view.getUint32(ptr, true);
-    if (sig !== 0x02014b50) break;
-
-    const compressionMethod = view.getUint16(ptr + 10, true);
-    const compressedSize = view.getUint32(ptr + 20, true);
-    const uncompressedSize = view.getUint32(ptr + 24, true);
-    const nameLen = view.getUint16(ptr + 28, true);
-    const extraLen = view.getUint16(ptr + 30, true);
-    const commentLen = view.getUint16(ptr + 32, true);
-    const localHeaderOffset = view.getUint32(ptr + 42, true);
-
-    const path = decoder.decode(zipBytes.subarray(ptr + 46, ptr + 46 + nameLen));
-    ptr += 46 + nameLen + extraLen + commentLen;
-
-    if (localHeaderOffset + 30 > zipBytes.byteLength) continue;
-    const localSig = view.getUint32(localHeaderOffset, true);
-    if (localSig !== 0x04034b50) continue;
-
-    const localNameLen = view.getUint16(localHeaderOffset + 26, true);
-    const localExtraLen = view.getUint16(localHeaderOffset + 28, true);
-    const dataStart = localHeaderOffset + 30 + localNameLen + localExtraLen;
-    const dataEnd = Math.min(zipBytes.byteLength, dataStart + compressedSize);
-
-    entries.push({
-      path,
-      compressionMethod,
-      compressedData: zipBytes.subarray(dataStart, dataEnd),
-      uncompressedSize,
-    });
-  }
-
-  return entries;
-}
-
-/**
- * Inflates raw DEFLATE bytes in Browser (`DecompressionStream('deflate-raw')`) or Node.js.
- */
-async function inflateRawBytesAsync(compressed: Uint8Array): Promise<Uint8Array> {
-  if (typeof DecompressionStream !== 'undefined') {
-    const ds = new DecompressionStream('deflate-raw');
-    const writer = ds.writable.getWriter();
-    writer.write(new Uint8Array(compressed));
-    writer.close();
-    const reader = ds.readable.getReader();
-    const chunks: Uint8Array[] = [];
-    let totalLen = 0;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value) {
-        chunks.push(value);
-        totalLen += value.byteLength;
-      }
-    }
-    const out = new Uint8Array(totalLen);
-    let offset = 0;
-    for (const c of chunks) {
-      out.set(c, offset);
-      offset += c.byteLength;
-    }
-    return out;
-  }
-  throw new Error('DecompressionStream deflate-raw is not available in this environment');
-}
-
-function parseEpubDecodedFileMap(fileMap: Map<string, string>): EpubImportResult {
-  // 1. Find OPF path via META-INF/container.xml or fallback scan
-  let opfPath = '';
-  const containerXml = fileMap.get('META-INF/container.xml') || '';
-  const rootfileMatch = containerXml.match(/full-path=["']([^"']+\.opf)["']/i);
-  if (rootfileMatch && rootfileMatch[1]) {
-    opfPath = rootfileMatch[1];
-  } else {
-    for (const key of fileMap.keys()) {
-      if (key.toLowerCase().endsWith('.opf')) {
-        opfPath = key;
-        break;
-      }
-    }
-  }
-
-  const opfContent = opfPath ? fileMap.get(opfPath) || '' : '';
-  const opfDir = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : '';
-
-  const titleMatch = opfContent.match(/<dc:title[^>]*>([\s\S]*?)<\/dc:title>/i);
-  const creatorMatch = opfContent.match(/<dc:creator[^>]*>([\s\S]*?)<\/dc:creator>/i);
-  const bookTitle = titleMatch ? sanitizeRawChapterText(titleMatch[1]).cleanedText : 'Импортированная новелла';
-  const author = creatorMatch ? sanitizeRawChapterText(creatorMatch[1]).cleanedText : 'Unknown Author';
-
-  // 2. Map manifest id -> href
-  const manifestMap = new Map<string, string>();
-  const itemRegex = /<item\b([^>]+)\/?>/gi;
-  let itemMatch: RegExpExecArray | null;
-  while ((itemMatch = itemRegex.exec(opfContent)) !== null) {
-    const attrs = itemMatch[1];
-    const idM = attrs.match(/\bid=["']([^"']+)["']/i);
-    const hrefM = attrs.match(/\bhref=["']([^"']+)["']/i);
-    if (idM && hrefM) {
-      manifestMap.set(idM[1], hrefM[1]);
-    }
-  }
-
-  // 3. Collect ordered spine hrefs
-  const orderedHrefs: string[] = [];
-  const itemrefRegex = /<itemref\b[^>]*\bidref=["']([^"']+)["'][^>]*\/?>/gi;
-  let refMatch: RegExpExecArray | null;
-  while ((refMatch = itemrefRegex.exec(opfContent)) !== null) {
-    const href = manifestMap.get(refMatch[1]);
-    if (href) {
-      orderedHrefs.push(href);
-    }
-  }
-
-  // Fallback if spine is empty: take all .xhtml / .html files sorted naturally
-  if (orderedHrefs.length === 0) {
-    for (const key of Array.from(fileMap.keys()).sort()) {
-      if (/\.(?:xhtml|html|htm)$/i.test(key)) {
-        orderedHrefs.push(key);
-      }
-    }
-  }
-
-  const chapters: ImportedEpubChapter[] = [];
-  let totalRemovedJunkLines = 0;
-
-  for (const rawHref of orderedHrefs) {
-    const cleanHref = rawHref.split('#')[0];
-    // Skip navigation / cover / titlepage files
-    if (/(?:^|\/)(?:nav|toc|titlepage|cover)\.(?:xhtml|html|htm)$/i.test(cleanHref)) {
-      continue;
-    }
-
-    const fullPath = fileMap.has(opfDir + cleanHref) ? opfDir + cleanHref : cleanHref;
-    const rawHtml = fileMap.get(fullPath);
-    if (!rawHtml) continue;
-
-    // Extract heading from <h1>, <h2>, or <title>
-    const hMatch =
-      rawHtml.match(/<h[12][^>]*>([\s\S]*?)<\/h[12]>/i) ||
-      rawHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-    const extractedTitle = hMatch
-      ? sanitizeRawChapterText(hMatch[1]).cleanedText.replace(/\n+/g, ' ').trim()
-      : '';
-
-    // Strip <head>...</head>, <style>...</style>, <nav>...</nav>, and first <h1>/<h2> if already extracted as title
-    let bodyHtml = rawHtml
-      .replace(/<head[\s\S]*?<\/head>/gi, '')
-      .replace(/<style[\s\S]*?<\/style>/gi, '')
-      .replace(/<script[\s\S]*?<\/script>/gi, '')
-      .replace(/<nav[\s\S]*?<\/nav>/gi, '');
-
-    if (hMatch && /<h[12]/i.test(hMatch[0])) {
-      bodyHtml = bodyHtml.replace(hMatch[0], '');
-    }
-
-    const sanitized = sanitizeRawChapterText(bodyHtml);
-    totalRemovedJunkLines += sanitized.removedLinesCount;
-
-    if (!sanitized.cleanedText || sanitized.cleanedText.length < 15) continue;
-
-    const chapNum = chapters.length + 1;
-    const titleEng = extractedTitle || `Chapter ${chapNum}`;
-    const wordCountEng = sanitized.cleanedText.split(/\s+/).filter(Boolean).length;
-
-    chapters.push({
-      number: chapNum,
-      titleEng,
-      engText: sanitized.cleanedText,
-      wordCountEng,
-      href: fullPath,
-    });
-  }
-
-  return {
-    bookTitle,
-    author,
-    chapters,
-    totalRemovedJunkLines,
-  };
-}
-
-/**
- * Unpacks an `.epub` binary buffer into clean chapters synchronously (for STORED EPUBs)
- * or asynchronously via `parseEpubArchiveToChaptersAsync` (for STORED + DEFLATE EPUBs).
- */
-export function parseEpubArchiveToChapters(epubBytes: Uint8Array): EpubImportResult {
-  const entries = readZipEntriesRaw(epubBytes);
-  const decoder = new TextDecoder('utf-8');
-  const fileMap = new Map<string, string>();
-
-  for (const entry of entries) {
-    if (entry.compressionMethod === 0) {
-      fileMap.set(entry.path, decoder.decode(entry.compressedData));
-    }
-  }
-
-  return parseEpubDecodedFileMap(fileMap);
-}
-
-export async function parseEpubArchiveToChaptersAsync(epubBytes: Uint8Array): Promise<EpubImportResult> {
-  const entries = readZipEntriesRaw(epubBytes);
-  const decoder = new TextDecoder('utf-8');
-  const fileMap = new Map<string, string>();
-
-  for (const entry of entries) {
-    if (entry.compressionMethod === 0) {
-      fileMap.set(entry.path, decoder.decode(entry.compressedData));
-    } else if (entry.compressionMethod === 8) {
-      try {
-        const inflated = await inflateRawBytesAsync(entry.compressedData);
-        fileMap.set(entry.path, decoder.decode(inflated));
-      } catch {
-        // Skip unreadable entry
-      }
-    }
-  }
-
-  return parseEpubDecodedFileMap(fileMap);
 }
 
 /**
@@ -5513,411 +4592,8 @@ export function applySurgicalPatches(
   };
 }
 
-export interface ChaptersZipArchivePackage {
-  filename: string;
-  bytes: Uint8Array;
-  byteSize: number;
-  chapterCount: number;
-  fileList: string[];
-}
-
-/**
- * Compiles translated chapters into a `.zip` archive where each chapter is a standalone
- * UTF-8 LF `.txt` or `.md` file (`Chapter_0001.txt`, `Chapter_0002.txt`, ...) for Ranobelib / Author.Today / Boosty (`Q11: B`).
- */
-export function buildChaptersZipArchive(
-  novelName: string,
-  chapters: Array<{ number: number; titleRus: string; contentRus: string }>,
-  format: 'txt' | 'md' = 'txt'
-): ChaptersZipArchivePackage {
-  const encoder = new TextEncoder();
-  const sorted = [...chapters].sort((a, b) => a.number - b.number);
-  const ext = format === 'md' ? 'md' : 'txt';
-  const files: Array<{ path: string; data: Uint8Array }> = [];
-  const fileList: string[] = [];
-
-  for (const ch of sorted) {
-    const padded = String(ch.number).padStart(4, '0');
-    const cleanHeading = (ch.titleRus || `Глава ${ch.number}`).replace(/\r\n/g, '\n').trim();
-    const cleanBody = (ch.contentRus || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
-    const fileContent =
-      format === 'md'
-        ? `# ${cleanHeading}\n\n${cleanBody}\n`
-        : `${cleanHeading}\n\n${cleanBody}\n`;
-
-    const filePath = `Chapter_${padded}.${ext}`;
-    fileList.push(filePath);
-    files.push({
-      path: filePath,
-      data: encoder.encode(fileContent),
-    });
-  }
-
-  const manifestJson = JSON.stringify(
-    {
-      novelName,
-      exportedAt: new Date().toISOString(),
-      chapterCount: sorted.length,
-      format: ext,
-      files: fileList,
-    },
-    null,
-    2
-  );
-  files.push({
-    path: '00_MANIFEST.json',
-    data: encoder.encode(manifestJson),
-  });
-
-  const bytes = createStoredZipArchive(files);
-  const firstNum = sorted[0]?.number ?? 1;
-  const lastNum = sorted[sorted.length - 1]?.number ?? 1;
-  const slug = novelName
-    .replace(/[^a-zA-Z0-9а-яА-ЯёЁ]+/g, '_')
-    .replace(/^_|_$/g, '');
-
-  return {
-    filename: `${slug || 'Novel'}_Chapters_${firstNum}_${lastNum}_${ext.toUpperCase()}.zip`,
-    bytes,
-    byteSize: bytes.byteLength,
-    chapterCount: sorted.length,
-    fileList,
-  };
-}
-
-export type GikunCategory =
-  | 'reading_aid'
-  | 'bouten'
-  | 'nomenclature'
-  | 'litrpg_term'
-  | 'deictic'
-  | 'subtext';
-
-export interface RubyGikunParseItem {
-  base: string;
-  ruby: string;
-  category: GikunCategory;
-  renderedTag: string;
-}
-
-export interface RubyGikunParseResult {
-  parsedText: string;
-  foundCount: number;
-  items: RubyGikunParseItem[];
-}
-
-/**
- * Step 0.1: Deterministic Japanese Furigana, Gikun, and Bouten AST Pre-Parser.
- * Classifies Japanese ruby annotations into 6 linguistic types before Pass 1 translation
- * to eliminate bracketed artifacts in dialogue and enable natural Russian stylistic fusion.
- */
-export function parseRubyAndGikunMarkup(sourceText: string): RubyGikunParseResult {
-  if (!sourceText || typeof sourceText !== 'string') {
-    return { parsedText: '', foundCount: 0, items: [] };
-  }
-
-  const items: RubyGikunParseItem[] = [];
-  let working = sourceText;
-
-  // 1. Bouten standalone notation: 《《text》》
-  working = working.replace(/《《([^》\n]+)》》/g, (_, emphText) => {
-    const renderedTag = `<emph text="${emphText}"/>`;
-    items.push({
-      base: emphText,
-      ruby: 'bouten',
-      category: 'bouten',
-      renderedTag,
-    });
-    return renderedTag;
-  });
-
-  // 2. HTML <ruby> tags: <ruby><rb>Base</rb><rt>Ruby</rt></ruby> or <ruby>Base<rt>Ruby</rt></ruby>
-  working = working.replace(
-    /<ruby>(?:<rb>)?([^<]+)(?:<\/rb>)?<rt>([^<]+)<\/rt><\/ruby>/gi,
-    (_, base, ruby) => {
-      const parsed = classifyRubyItem(base.trim(), ruby.trim());
-      items.push(parsed);
-      return parsed.renderedTag;
-    }
-  );
-
-  // 3. Syosetu / Kakuyomu ruby: ｜Base《Ruby》 or Base《Ruby》
-  working = working.replace(
-    /(?:｜([^\s《\n]+)|([一-龯々〆ヵヶa-zA-Z0-9]+))《([^》\n]+)》/g,
-    (_, base1, base2, ruby) => {
-      const base = (base1 || base2 || '').trim();
-      const parsed = classifyRubyItem(base, (ruby || '').trim());
-      items.push(parsed);
-      return parsed.renderedTag;
-    }
-  );
-
-  // 4. Kanji + Parentheses notation: 漢字(ふりがな/カタカナ)
-  working = working.replace(
-    /([一-龯々〆ヵヶ]{1,8})\(([ぁ-んァ-ヶーa-zA-Z0-9・•●]+)\)/g,
-    (_, base, ruby) => {
-      const parsed = classifyRubyItem(base.trim(), ruby.trim());
-      items.push(parsed);
-      return parsed.renderedTag;
-    }
-  );
-
-  return {
-    parsedText: working,
-    foundCount: items.length,
-    items,
-  };
-}
-
-function classifyRubyItem(base: string, ruby: string): RubyGikunParseItem {
-  // A. Bouten: ruby is a bullet/dot (・, •, ●)
-  if (/^[・•●]+$/.test(ruby)) {
-    const renderedTag = `<emph text="${base}"/>`;
-    return { base, ruby, category: 'bouten', renderedTag };
-  }
-
-  // B. Deictic / Alias Gikun: pronoun in ruby refering to noun in base
-  const deicticPattern = /^(?:ここ|ぼくたち|僕たち|わたし|私|あいつ|そこ|あれ|オレたち|俺たち|あんた|お前|きみ|君)$/;
-  if (deicticPattern.test(ruby)) {
-    const renderedTag = `<gikun type="deictic" spoken="${ruby}" referent="${base}"/>`;
-    return { base, ruby, category: 'deictic', renderedTag };
-  }
-
-  // C. LitRPG Game Gikun: terms like クラス, スキル, ステータス, レベル, 職業, 技能
-  const litrpgPattern = /クラス|スキル|ステータス|レベル|職業|技能|魔法|属性|ダンジョン/;
-  if (litrpgPattern.test(ruby) || litrpgPattern.test(base)) {
-    const renderedTag = `<gikun type="litrpg_term" spoken="${ruby}" meaning="${base}"/>`;
-    return { base, ruby, category: 'litrpg_term', renderedTag };
-  }
-
-  // C2. Subtext Slang Gikun: terms like 本気《マジ》, 強敵《とも》, リアル, ガチ, ウソ
-  const subtextSlangPattern = /^(?:マジ|ガチ|リアル|ウソ|とも|やつ|ヤツ|オトコ|オンナ)$/;
-  if (subtextSlangPattern.test(ruby)) {
-    const renderedTag = `<gikun type="subtext" spoken="${ruby}" hidden="${base}"/>`;
-    return { base, ruby, category: 'subtext', renderedTag };
-  }
-
-  // D. Nomenclature / Chuunibyou Gikun: Kanji base + Katakana loanword
-  const hasKanji = /[一-龯々〆ヵヶ]/.test(base);
-  const isKatakana = /^[ァ-ヶー・\s]+$/.test(ruby);
-  if (hasKanji && isKatakana) {
-    const renderedTag = `<gikun type="nomenclature" spoken="${ruby}" meaning="${base}"/>`;
-    return { base, ruby, category: 'nomenclature', renderedTag };
-  }
-
-  // E. Standard phonetic reading aid: pure Hiragana matching phonetic helper
-  const isHiragana = /^[ぁ-んー\s]+$/.test(ruby);
-  if (hasKanji && isHiragana && ruby.length <= base.length * 4) {
-    return { base, ruby, category: 'reading_aid', renderedTag: base };
-  }
-
-  // F. Synonymous / Subtext Gikun: oxymoronic or contextual subtext
-  const renderedTag = `<gikun type="subtext" spoken="${ruby}" hidden="${base}"/>`;
-  return { base, ruby, category: 'subtext', renderedTag };
-}
-
-export interface KoreanParagraphNormalizeResult {
-  normalizedText: string;
-  groupedParagraphCount: number;
-  originalLineCount: number;
-  paragraphIndexMap: number[]; // maps each new paragraph index to original line index
-}
-
-/**
- * Normalizes fragmented Korean single-sentence mobile web-novel paragraphs into cohesive narrative units.
- * Preserves Dialogue lines (—, ", 「), scene dividers (---, ***), and system status boxes ([...]).
- */
-export function normalizeKoreanOneLineParagraphs(rawText: string): KoreanParagraphNormalizeResult {
-  if (!rawText || typeof rawText !== 'string') {
-    return { normalizedText: '', groupedParagraphCount: 0, originalLineCount: 0, paragraphIndexMap: [] };
-  }
-
-  const lines = rawText.replace(/\r\n/g, '\n').split('\n');
-  const normalizedParagraphs: string[] = [];
-  const paragraphIndexMap: number[] = [];
-
-  let pendingNarrative: string[] = [];
-  let pendingStartIndex = -1;
-
-  const flushNarrative = () => {
-    if (pendingNarrative.length > 0) {
-      normalizedParagraphs.push(pendingNarrative.join(' '));
-      paragraphIndexMap.push(pendingStartIndex >= 0 ? pendingStartIndex : 0);
-      pendingNarrative = [];
-      pendingStartIndex = -1;
-    }
-  };
-
-  for (let idx = 0; idx < lines.length; idx++) {
-    const line = lines[idx].trim();
-    if (!line) {
-      flushNarrative();
-      continue;
-    }
-
-    const isDivider = line === '---' || line === '***' || line === '◇◇◇';
-    const isSystemFrame =
-      (line.startsWith('[') && line.endsWith(']')) ||
-      (line.startsWith('【') && line.endsWith('】'));
-    const isDialogue =
-      /^[—\-"“'«‘「『]/.test(line) ||
-      (line.endsWith('다."') || line.endsWith('다.’') || line.endsWith('요."'));
-
-    if (isDivider || isSystemFrame || isDialogue) {
-      flushNarrative();
-      normalizedParagraphs.push(line);
-      paragraphIndexMap.push(idx);
-    } else {
-      if (pendingStartIndex === -1) {
-        pendingStartIndex = idx;
-      }
-      pendingNarrative.push(line);
-      // Group up to 3 sentences or ~220 characters
-      if (pendingNarrative.length >= 3 || pendingNarrative.join(' ').length >= 220) {
-        flushNarrative();
-      }
-    }
-  }
-
-  flushNarrative();
-
-  return {
-    normalizedText: normalizedParagraphs.join('\n\n'),
-    groupedParagraphCount: normalizedParagraphs.length,
-    originalLineCount: lines.length,
-    paragraphIndexMap,
-  };
-}
-
-export interface ChapterChunkItem {
-  chunkIndex: number;
-  totalChunks: number;
-  text: string;
-  readOnlyPrecedingContext: string;
-  readOnlyLookahead: string;
-  startParagraphIndex: number;
-  endParagraphIndex: number;
-}
-
-/**
- * Dialogue- and Scene-Aware Sliding Window Chunker (SceneDialogueChunker).
- * Enforces Dialogue Lock (never split mid-conversation), Frame Lock (never split [...] or dividers),
- * and provisions read-only preceding context + lookahead sentences.
- */
-export function chunkChapterWithSceneAndDialogueLocks(
-  chapterText: string,
-  options?: {
-    maxTokens?: number; // default ~1800 words/tokens
-    precedingContextParagraphs?: number; // default 3
-    lookaheadSentences?: number; // default 2
-  }
-): ChapterChunkItem[] {
-  if (!chapterText || !chapterText.trim()) {
-    return [];
-  }
-
-  const maxTokens = options?.maxTokens || 1800;
-  const contextCount = options?.precedingContextParagraphs || 3;
-  const lookaheadCount = options?.lookaheadSentences || 2;
-
-  const paragraphs = chapterText
-    .replace(/\r\n/g, '\n')
-    .split(/\n\n+/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-
-  if (paragraphs.length === 0) return [];
-
-  // Approximate tokens by word count
-  const estimateTokens = (text: string) => Math.ceil((text.match(/\S+/g) || []).length * 1.3);
-
-  const chunks: Array<{
-    paragraphs: string[];
-    startIdx: number;
-    endIdx: number;
-  }> = [];
-
-  let currentChunk: string[] = [];
-  let currentTokens = 0;
-  let currentStart = 0;
-
-  for (let i = 0; i < paragraphs.length; i++) {
-    const p = paragraphs[i];
-    const pTokens = estimateTokens(p);
-
-    const isDialogue = /^[—\-"“'«‘「『]/.test(p);
-    const nextP = i + 1 < paragraphs.length ? paragraphs[i + 1] : undefined;
-    const nextIsDialogue = nextP ? /^[—\-"“'«‘「『]/.test(nextP) : false;
-    const isDivider = p === '---' || p === '***' || p === '◇◇◇';
-    const isSystemFrame =
-      (p.startsWith('[') && p.endsWith(']')) ||
-      (p.startsWith('【') && p.endsWith('】'));
-
-    currentChunk.push(p);
-    currentTokens += pTokens;
-
-    // Check if we should split:
-    // 1. Exceeded maxTokens
-    // 2. NOT in Dialogue Lock (if this is dialogue and next is dialogue, keep together)
-    // 3. NOT in Frame Lock
-    const canSplit = !(isDialogue && nextIsDialogue) && !isSystemFrame && !isDivider;
-
-    if (currentTokens >= maxTokens && canSplit && i < paragraphs.length - 1) {
-      chunks.push({
-        paragraphs: [...currentChunk],
-        startIdx: currentStart,
-        endIdx: i,
-      });
-      currentChunk = [];
-      currentTokens = 0;
-      currentStart = i + 1;
-    }
-  }
-
-  if (currentChunk.length > 0) {
-    chunks.push({
-      paragraphs: [...currentChunk],
-      startIdx: currentStart,
-      endIdx: paragraphs.length - 1,
-    });
-  }
-
-  // Build final ChapterChunkItem with preceding context & lookahead
-  return chunks.map((c, cIdx) => {
-    // Preceding context from previous chunk
-    let precedingContext = '';
-    if (cIdx > 0) {
-      const prevChunkParas = chunks[cIdx - 1].paragraphs;
-      const sliceCount = Math.min(contextCount, prevChunkParas.length);
-      precedingContext = prevChunkParas.slice(-sliceCount).join('\n\n');
-    }
-
-    // Lookahead sentences from next chunk
-    let lookahead = '';
-    if (cIdx < chunks.length - 1) {
-      const nextChunkFirstParas = chunks[cIdx + 1].paragraphs.slice(0, 2).join(' ');
-      const sentences = nextChunkFirstParas
-        .split(/(?<=[.!?。！？])\s+/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-      lookahead = sentences.slice(0, lookaheadCount).join(' ');
-    }
-
-    return {
-      chunkIndex: cIdx + 1,
-      totalChunks: chunks.length,
-      text: c.paragraphs.join('\n\n'),
-      readOnlyPrecedingContext: precedingContext
-        ? `[READ_ONLY_PRECEDING_CONTEXT - DO NOT TRANSLATE]:\n${precedingContext}`
-        : '',
-      readOnlyLookahead: lookahead
-        ? `[READ_ONLY_LOOKAHEAD - DO NOT TRANSLATE]:\n${lookahead}`
-        : '',
-      startParagraphIndex: c.startIdx,
-      endParagraphIndex: c.endIdx,
-    };
-  });
-}
+// Japanese Ruby/Gikun, Korean Normalizer & Chunker extracted to ./ruby-korean-parser.ts
+export * from './ruby-korean-parser.ts';
 
 // Stage 1: Deep Chapter Postprocessing & Verification Pipeline
 export * from './chapter-verifier.ts';

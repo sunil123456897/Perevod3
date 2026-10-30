@@ -303,6 +303,13 @@ export interface DeserializedBundleResult {
   novels: NovelProject[];
   activeProject?: NovelProject;
   llmConfig?: LlmProviderConfig;
+  updatedAt?: string | null;
+}
+
+export interface DiskDatabasePayload {
+  version: '4.1-kanon-xianxia';
+  updatedAt: string;
+  novels: NovelProject[];
 }
 
 /**
@@ -340,7 +347,8 @@ export function serializeProjectBundle(options: {
 }
 
 /**
- * Unifies project bundle deserialization, accepting v4.1, v2.5, array of novels, or raw single novel.
+ * Unifies project bundle deserialization, accepting v4.1, v2.5, 4.1-kanon-xianxia disk envelope,
+ * array of novels, or raw single novel.
  */
 export function deserializeProjectBundle(
   rawInput: unknown
@@ -360,29 +368,32 @@ export function deserializeProjectBundle(
       novels: [proj],
       activeProject: proj,
       llmConfig: parsed.llmConfig as LlmProviderConfig | undefined,
+      updatedAt: parsed.exportedAt || null,
     };
   }
 
-  // Format 2: v2.5 IDB Backup
+  // Format 2: v2.5 IDB Backup or 4.1-kanon-xianxia disk envelope
   if (
     (parsed.studio_version === '2.5-idb' || Array.isArray(parsed.novels)) &&
     Array.isArray(parsed.novels)
   ) {
     const novelsList = parsed.novels as NovelProject[];
     return {
-      version: parsed.studio_version || '2.5-idb',
+      version: parsed.studio_version || parsed.version || '2.5-idb',
       novels: novelsList,
       activeProject: novelsList[0],
+      updatedAt: parsed.updatedAt || parsed.exported_at || null,
     };
   }
 
-  // Format 3: Raw array of NovelProjects
-  if (Array.isArray(parsed) && parsed.length > 0 && parsed[0]?.id) {
+  // Format 3: Raw array of NovelProjects (including empty array or legacy headless-runner dump)
+  if (Array.isArray(parsed) && (parsed.length === 0 || parsed[0]?.id)) {
     const novelsList = parsed as NovelProject[];
     return {
       version: 'raw-array',
       novels: novelsList,
       activeProject: novelsList[0],
+      updatedAt: null,
     };
   }
 
@@ -393,8 +404,41 @@ export function deserializeProjectBundle(
       version: 'single-novel',
       novels: [proj],
       activeProject: proj,
+      updatedAt: null,
     };
   }
 
   throw new Error('Unrecognized project bundle format');
+}
+
+/**
+ * Canonical disk serializer for `data/novels_db.json` shared by `/api/projects` and `scripts/headless-runner.ts`.
+ */
+export function serializeDiskDatabasePayload(
+  novels: NovelProject[],
+  updatedAt: string = new Date().toISOString()
+): string {
+  const payload: DiskDatabasePayload = {
+    version: '4.1-kanon-xianxia',
+    updatedAt,
+    novels,
+  };
+  return JSON.stringify(payload, null, 2);
+}
+
+/**
+ * Canonical disk parser for `data/novels_db.json` that accepts both the `{ version, updatedAt, novels }`
+ * envelope and legacy raw `[...]` arrays without data loss.
+ */
+export function parseDiskDatabasePayload(rawInput: unknown): {
+  version: string;
+  novels: NovelProject[];
+  updatedAt: string | null;
+} {
+  const res = deserializeProjectBundle(rawInput);
+  return {
+    version: res.version,
+    novels: res.novels,
+    updatedAt: res.updatedAt ?? null,
+  };
 }

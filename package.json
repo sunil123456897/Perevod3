@@ -2,13 +2,16 @@
   "name": "ai-studio-applet",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
     "clean": "next clean",
-    "batch": "tsx scripts/headless-runner.ts"
+    "test": "node --test lib/qa-linter.test.ts lib/audit-fixes.test.ts",
+    "batch": "node --env-file-if-exists=.env.local scripts/headless-runner.ts",
+    "audit:novel": "node scripts/forensic-novel-audit.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -35,6 +38,7 @@
     "eslint-config-next": "16.0.8",
     "firebase-tools": "^15.0.0",
     "tailwindcss": "4.1.11",
+    "tsx": "^4.19.2",
     "tw-animate-css": "^1.4.0",
     "typescript": "5.9.3"
   }

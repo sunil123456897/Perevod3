@@ -837,9 +837,17 @@ export function batchLookaheadScoutChapters(
 
   const discoveredTerms: ScoutedTerm[] = [];
   let idx = 0;
+  let autoPromotedCount = 0;
   hitMap.forEach((val) => {
+    const hasCyrillicTranslation = Boolean(val.rus && /[а-яёА-ЯЁ]/.test(val.rus));
     const isDomainCanon = /pill|sect|realm|cauldron|grass|flame|beast/i.test(val.eng);
-    const confidence = val.chapterOccurrences >= 2 || isDomainCanon ? 0.98 : 0.95;
+    const confidence = hasCyrillicTranslation
+      ? val.chapterOccurrences >= 2 || isDomainCanon
+        ? 0.98
+        : 0.95
+      : 0.65;
+    const approved = hasCyrillicTranslation;
+    if (approved) autoPromotedCount++;
     discoveredTerms.push({
       id: `lookahead-${Date.now()}-${idx++}`,
       eng: val.eng,
@@ -848,14 +856,14 @@ export function batchLookaheadScoutChapters(
       gender: val.gender,
       chapter_first_seen: val.firstChapter,
       context_snippet: val.snippet,
-      approved_for_glossary: true,
+      approved_for_glossary: approved,
       confidence,
     });
   });
 
   return {
     discoveredTerms,
-    autoPromotedCount: discoveredTerms.length,
+    autoPromotedCount,
   };
 }
 
@@ -1002,7 +1010,8 @@ export function autoApprovePendingTermsInVault(
   let curVault = vault;
 
   for (const st of vault.scoutedTerms) {
-    if (!st.approved_for_glossary && st.confidence >= minConfidence) {
+    const hasCyrillic = Boolean(st.rus_suggested && /[а-яёА-ЯЁ]/.test(st.rus_suggested));
+    if (!st.approved_for_glossary && hasCyrillic && st.confidence >= minConfidence) {
       curVault = approveScoutedTermInVault(curVault, st.id);
       approvedCount++;
     }

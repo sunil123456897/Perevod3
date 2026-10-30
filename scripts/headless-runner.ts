@@ -20,9 +20,11 @@ import {
 } from '../lib/pipeline-run-engine.ts';
 import {
   createPipelineLlmPort,
+  buildScoutPrompts,
   buildTranslatePass1Prompts,
   buildSurgicalCriticPass2Prompts,
   buildBlindStylistPass3Prompts,
+  annotateSceneDialogueAndZeroPronouns,
   classifyScenePacingMode,
   selectContrastiveFewShotTriplets,
   capStylisticDirectivesPerParagraph,
@@ -31,6 +33,8 @@ import {
   type LiTransProQaRubricScores,
 } from '../lib/llm-inference-port.ts';
 import {
+  runAdditionBySubtractionScout,
+  filterScoutedTermsWithAgentS,
   parseRubyAndGikunMarkup,
   normalizeKoreanOneLineParagraphs,
   applySurgicalPatches,
@@ -48,6 +52,10 @@ import {
   verifyAndRollbackStylistPass,
   finalizeAndVerifyChapter,
 } from '../lib/chapter-verifier.ts';
+import {
+  parseDiskDatabasePayload,
+  serializeDiskDatabasePayload,
+} from '../lib/storage-idb.ts';
 import { INITIAL_NOVELS, type NovelProject } from '../lib/seed-data.ts';
 
 const DB_PATH = path.resolve(process.cwd(), 'data', 'novels_db.json');
@@ -62,30 +70,33 @@ for (const arg of args) {
   }
 }
 
-function loadProjectsFromDisk(): NovelProject[] {
+export function loadProjectsFromDisk(customPath: string = DB_PATH): NovelProject[] {
   try {
-    if (fs.existsSync(DB_PATH)) {
-      const raw = fs.readFileSync(DB_PATH, 'utf-8');
-      const data = JSON.parse(raw);
-      if (Array.isArray(data) && data.length > 0) return data;
+    if (fs.existsSync(customPath)) {
+      const raw = fs.readFileSync(customPath, 'utf-8');
+      const parsed = parseDiskDatabasePayload(raw);
+      if (Array.isArray(parsed.novels) && parsed.novels.length > 0) {
+        return parsed.novels;
+      }
     }
   } catch (err) {
-    console.warn(`[Runner] Warning reading ${DB_PATH}:`, err);
+    console.warn(`[Runner] Warning reading ${customPath}:`, err);
   }
   return INITIAL_NOVELS;
 }
 
-function saveProjectsToDisk(novels: NovelProject[]) {
+export function saveProjectsToDisk(novels: NovelProject[], customPath: string = DB_PATH) {
   try {
-    const dir = path.dirname(DB_PATH);
+    const dir = path.dirname(customPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    const tmp = `${DB_PATH}.tmp.${Date.now()}`;
-    fs.writeFileSync(tmp, JSON.stringify(novels, null, 2), 'utf-8');
-    fs.renameSync(tmp, DB_PATH);
+    const tmp = `${customPath}.tmp.${Date.now()}`;
+    const payload = serializeDiskDatabasePayload(novels);
+    fs.writeFileSync(tmp, payload, 'utf-8');
+    fs.renameSync(tmp, customPath);
   } catch (err) {
-    console.error(`[Runner] Error persisting ${DB_PATH}:`, err);
+    console.error(`[Runner] Error persisting ${customPath}:`, err);
   }
 }
 
@@ -95,11 +106,83 @@ function saveProjectsToDisk(novels: NovelProject[]) {
  * (Pass 0.1 AST Ruby/Korean -> Pass 1 Draft -> Pass 2 Critic & Patches -> Pass 3 Blind Stylist -> Step 4 Rollback & Finalize)
  * without needing an external HTTP server.
  */
-class DirectEngineTransportAdapter implements PipelineTransportAdapter {
-  constructor(private llmConfig: LlmProviderConfig) {}
+export class DirectEngineTransportAdapter implements PipelineTransportAdapter {
+  private llmConfig: LlmProviderConfig;
+
+  constructor(llmConfig: LlmProviderConfig) {
+    this.llmConfig = llmConfig;
+  }
 
   async scout(req: PipelineTransportScoutRequest): Promise<PipelineTransportScoutResponse> {
-    return { discoveredTerms: [] };
+    const config = req.llmConfig || this.llmConfig;
+    const genrePreset = (req.genrePreset || 'xianxia') as GenrePreset;
+    const genreInfo = GENRE_PRESET_LABELS[genrePreset] || GENRE_PRESET_LABELS['xianxia'];
+    const localAbs = runAdditionBySubtractionScout(
+      req.engText,
+      req.chapterNumber,
+      req.glossary,
+      req.scoutedTerms || []
+    );
+
+    const scoutPrompts = buildScoutPrompts({
+      chapterNumber: req.chapterNumber,
+      titleEng: `Chapter ${req.chapterNumber}`,
+      engText: req.engText,
+      glossary: req.glossary,
+      scoutedTerms: req.scoutedTerms || [],
+      genrePromptHint: genreInfo.promptHint,
+      genreTitle: genreInfo.title,
+    });
+
+    let discoveredList = localAbs.discoveredTerms;
+    try {
+      const llmPort = createPipelineLlmPort(config, req.glossary, 'classic');
+      const response = await llmPort.complete({
+        task: 'scout',
+        systemInstruction: scoutPrompts.systemPrompt,
+        userPrompt: scoutPrompts.userPrompt,
+        expectJson: true,
+        temperature: 0.2,
+        numCtx: config.numCtx || 16384,
+        geminiModel: config.scoutModelId || 'gemini-3.1-flash-lite',
+        geminiResponseSchema: scoutPrompts.geminiSchema,
+      });
+
+      const parsed = extractResilientJsonFromLlm<unknown>(
+        response.text,
+        localAbs.discoveredTerms
+      );
+      const candidateList = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray((parsed as { terms?: unknown[] })?.terms)
+          ? (parsed as { terms: unknown[] }).terms
+          : localAbs.discoveredTerms;
+
+      if (Array.isArray(candidateList) && candidateList.length > 0) {
+        const filteredCandidates = filterScoutedTermsWithAgentS(
+          candidateList as typeof localAbs.discoveredTerms,
+          req.glossary,
+          req.scoutedTerms || []
+        );
+        discoveredList =
+          filteredCandidates.length > 0 ? filteredCandidates : localAbs.discoveredTerms;
+      }
+    } catch {
+      // Fallback to deterministic Addition-by-Subtraction scout
+    }
+
+    return {
+      discoveredTerms: discoveredList.map((dt) => ({
+        eng: dt.eng,
+        rus_suggested: dt.rus_suggested,
+        category: dt.category,
+        gender: dt.gender || 'M',
+        context_snippet: dt.context_snippet,
+        confidence: dt.confidence || 0.95,
+      })),
+      addedRecallCount: localAbs.addedRecallCount,
+      subtractedNoiseCount: localAbs.subtractedNoiseCount,
+    };
   }
 
   async translateAndEdit(
@@ -138,6 +221,18 @@ class DirectEngineTransportAdapter implements PipelineTransportAdapter {
       }
     });
 
+    const effectiveSceneDialogueBlock =
+      req.sceneDialogueBlock ??
+      (() => {
+        const analysis = annotateSceneDialogueAndZeroPronouns(
+          normalizedSource,
+          req.glossary,
+          req.glossaryMeta || {},
+          []
+        );
+        return analysis.annotations.length > 0 ? analysis.promptSummaryBlock : undefined;
+      })();
+
     // Pass 1: Semantic & Canonical Translation
     const pass1Prompts = buildTranslatePass1Prompts({
       chapterNumber: req.chapterNumber,
@@ -159,8 +254,8 @@ class DirectEngineTransportAdapter implements PipelineTransportAdapter {
       socialEdgesBlock: req.socialEdgesBlock,
       lorebookBlock: req.lorebookBlock,
       forwardQuestionsBlock: req.forwardQuestionsBlock,
-      sceneDialogueBlock: req.sceneDialogueBlock,
-      useHashAnchors: req.useHashAnchors,
+      sceneDialogueBlock: effectiveSceneDialogueBlock,
+      useHashAnchors: req.useHashAnchors ?? true,
     });
 
     const pass1Response = await llmPort.complete({
@@ -355,6 +450,12 @@ class DirectEngineTransportAdapter implements PipelineTransportAdapter {
       summaryEng: verifiedOutput.summaryEng,
       csiNotes: verifiedOutput.csiNotes,
       ditingReport: verifiedOutput.ditingReport,
+      alreadyVerified: true,
+      verified: verifiedOutput.verified,
+      appliedFixes: verifiedOutput.appliedFixes,
+      lintReport: verifiedOutput.lintReport,
+      wordCountEng: verifiedOutput.wordCountEng,
+      wordCountRus: verifiedOutput.wordCountRus,
       scenePacingMode: pacingMode,
       otqsScore,
       stylistAcceptedCount,
@@ -380,7 +481,7 @@ async function main() {
 
   const fromCh = flags['from'] ? Number(flags['from']) : 1;
   const toCh = flags['to'] ? Number(flags['to']) : fromCh + 2;
-  const provider = (flags['provider'] || 'gemini_api') as LlmProviderConfig['provider'];
+  const provider = (flags['provider'] || 'antigravity_cli') as LlmProviderConfig['provider'];
   const colabUrl = flags['colab'] || '';
 
   const llmConfig: LlmProviderConfig = {
@@ -460,7 +561,15 @@ async function main() {
   console.log('='.repeat(65));
 }
 
-main().catch((err) => {
-  console.error('[Runner] Неперехваченная фатальная ошибка:', err);
-  process.exit(1);
-});
+const isDirectCliExecution =
+  typeof process !== 'undefined' &&
+  Array.isArray(process.argv) &&
+  process.argv[1] &&
+  path.resolve(process.argv[1]).endsWith('headless-runner.ts');
+
+if (isDirectCliExecution) {
+  main().catch((err) => {
+    console.error('[Runner] Неперехваченная фатальная ошибка:', err);
+    process.exit(1);
+  });
+}

@@ -1,0 +1,122 @@
+{
+  "project_name": "My Step Daughters",
+  "completed_at": "2026-09-08T12:02:36.965516+00:00",
+  "run": {
+    "input_dir": "E:/Projects/kod/My Step-Daughters Are The Villainesses_ENG",
+    "output_dir": "E:/Projects/kod/My Step-Daughters Are The Villainesses_RUS",
+    "overwrite_existing": true,
+    "retry_failed": false,
+    "retry_incomplete": false,
+    "rejudge_existing": false,
+    "gemini_free_tier_mode": true,
+    "model_configs": {
+      "analysis": "gemini-3.5-flash-lite",
+      "curation": "gemini-3.5-flash-lite",
+      "translation": "gemini-3.5-flash-lite",
+      "translation_lite": "gemini-3.5-flash-lite",
+      "qa": "gemini-3.5-flash-lite",
+      "judge": "gemini-3.5-flash-lite",
+      "expert_judge": "gemini-3.5-flash-lite",
+      "editor": "gemini-3.5-flash-lite",
+      "summarization": "gemini-3.5-flash-lite"
+    },
+    "embedding_model": "gemini-embedding-2"
+  },
+  "metrics": {
+    "started_at": "2026-09-08T12:01:30.040660+00:00",
+    "model_name": "gemini-3.5-flash-lite",
+    "chapters_total": 1,
+    "chapters_translated": 1,
+    "chapters_failed": 0,
+    "chapters_qa_failed": 0,
+    "avg_judge_score": 9.8,
+    "pass_rate": 1.0,
+    "refine_iterations": 0,
+    "suggestion_fixes": 0,
+    "duration_seconds": 66.9,
+    "error_classes": {}
+  },
+  "total_chapters": 1,
+  "processed_count": 1,
+  "processed_chapters": [
+    "Chapter 168 A Dance With Queen Kaliantha [6]"
+  ],
+  "failed_count": 0,
+  "warning_count": 0,
+  "chapters": [
+    {
+      "title": "Chapter 168 A Dance With Queen Kaliantha [6]",
+      "status": "translated",
+      "stages": {
+        "context": "done",
+        "analysis": "done",
+        "glossary": "done",
+        "translation": "done",
+        "output": "done",
+        "judge": "done",
+        "refine": "not_needed",
+        "rewrite": "not_needed",
+        "summary": "done",
+        "memory": "done"
+      },
+      "input_path": "E:/Projects/kod/My Step-Daughters Are The Villainesses_ENG\\Chapter 168 A Dance With Queen Kaliantha [6].txt",
+      "output_path": "E:\\Projects\\kod\\My Step-Daughters Are The Villainesses_RUS\\Глава 168 Танец с королевой Калиантхой [6].txt",
+      "output_backup_path": "E:\\Projects\\kod\\My Step-Daughters Are The Villainesses_RUS\\Глава 168 Танец с королевой Калиантхой [6].txt.bak",
+      "reused_existing_translation": false,
+      "translation_source": "api",
+      "translation_mode": "whole_chapter",
+      "translation_chunk_count": 1,
+      "translation_outcome": "translated",
+      "translation_artifact_sha256": "71187cf7664cdb596aa617310a433825619f2f9e306008debcfb07a874215534",
+      "refined": false,
+      "refinement_count": 0,
+      "refine_checkpoint_reused": false,
+      "refine_issues_fixed": [],
+      "rewritten": false,
+      "rewrite_count": 0,
+      "rewrite_fully_blocked": false,
+      "judge_pass_check": true,
+      "judge_score": 9.8,
+      "judge_severity": "low",
+      "blocking_issues": [],
+      "issue_codes": [],
+      "issues": [],
+      "quality_suggestions": [
+        "В предложении «Освободи полумаскированный музыкант...» можно рассмотреть вариант «выпусти музыкант в маске» для более естественного звучания при описании применения магии."
+      ],
+      "dictionary_conflicts": [],
+      "context_warnings": [],
+      "summary_checkpoint_reused": false,
+      "summary": "Во время танца с королевой Калиантой Ульрих замечает на ней Сердце Феникса — древнюю королевскую реликвию, создающую непроницаемый барьер при смертельной угрозе. Вспоминая сюжет романа, где артефакт позже перешел к Камелии, он анализирует ограничения защиты и угрозу от замаскированного музыканта. Опасаясь сопутствующего ущерба и раскрытия тайны артефакта врагам, Ульрих решает лично предотвратить покушение, пока Калианта иронично не прерывает его размышления.",
+      "summary_key_events": [
+        "Ульрих замечает Сердце Феникса на шее танцующей с ним королевы Калианты и вспоминает природу его защитной магии из оригинального сюжета романа.",
+        "Ульрих анализирует уязвимости ситуации: кулдаун артефакта, угрозу для окружающих от взрывной магии и риск раскрытия секрета защиты демонам.",
+        "Ульрих принимает решение лично предотвратить готовящееся покушение музыканта, сохранив тайну реликвии.",
+        "Калианта замечает пристальный взгляд Ульриха на свое декольте и прерывает его размышления замечанием."
+      ],
+      "summary_active_characters": [
+        "Ульрих Рубенхарт",
+        "Королева Калианта"
+      ],
+      "summary_chapter_index": null,
+      "error": null,
+      "error_category": null,
+      "error_retryable": null,
+      "error_status_code": null,
+      "error_operation": null,
+      "error_model": null,
+      "warnings": [],
+      "semantic_grounding_incomplete": false,
+      "retryable": false
+    }
+  ],
+  "error": null,
+  "error_category": null,
+  "error_retryable": null,
+  "error_status_code": null,
+  "error_operation": null,
+  "error_model": null,
+  "dictionary_conflicts": [],
+  "quota_exhausted": false,
+  "run_status": "completed"
+}

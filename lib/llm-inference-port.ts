@@ -56,18 +56,19 @@ interface RotatingClientEntry {
 }
 
 export function getAiClientPool(): RotatingClientEntry[] {
+  const cleanEnv = (val?: string) => (val || '').trim().replace(/^['"]|['"]$/g, '');
   const rawList = [
-    process.env.GEMINI_API_KEY || '',
-    process.env.GOOGLE_API_KEY || '',
-    ...(process.env.GOOGLE_API_KEYS || '').split(','),
-    ...(process.env.GEMINI_API_KEYS || '').split(','),
+    cleanEnv(process.env.GEMINI_API_KEY),
+    cleanEnv(process.env.GOOGLE_API_KEY),
+    ...cleanEnv(process.env.GOOGLE_API_KEYS).split(','),
+    ...cleanEnv(process.env.GEMINI_API_KEYS).split(','),
   ];
 
   const seen = new Set<string>();
   const pool: RotatingClientEntry[] = [];
 
   for (const item of rawList) {
-    const k = item.trim();
+    const k = item.trim().replace(/^['"]|['"]$/g, '');
     if (!k || k === 'MY_GEMINI_API_KEY' || k === 'your-gemini-api-key' || seen.has(k)) {
       continue;
     }
@@ -87,6 +88,91 @@ export function getAiClientPool(): RotatingClientEntry[] {
   }
 
   return pool;
+}
+
+/**
+ * Batched multi-account embedding helper for `gemini-embedding-2`.
+ * Respects Free Tier limits (100 RPM, 30K TPM, 1K RPD per account) by packing up to
+ * `batchSize` (default 90, max 100) paragraphs into a single `embedContent` request
+ * and rotating across all configured API keys on 429/400 errors.
+ */
+export async function embedTextsWithGeminiPool(
+  texts: string[],
+  options?: {
+    model?: string;
+    outputDimensionality?: number;
+    batchSize?: number;
+  }
+): Promise<{
+  embeddings: number[][];
+  requestsUsed: number;
+  keysUsed: string[];
+}> {
+  if (texts.length === 0) {
+    return { embeddings: [], requestsUsed: 0, keysUsed: [] };
+  }
+  const pool = getAiClientPool();
+  if (pool.length === 0) {
+    throw new Error('No Gemini API keys configured in GEMINI_API_KEY / GOOGLE_API_KEYS');
+  }
+
+  const model = options?.model || 'gemini-embedding-2';
+  const outputDimensionality = options?.outputDimensionality ?? 768;
+  const batchSize = Math.min(100, Math.max(1, options?.batchSize ?? 90));
+  const allEmbeddings: number[][] = [];
+  const keysUsedSet = new Set<string>();
+  let requestsUsed = 0;
+
+  for (let offset = 0; offset < texts.length; offset += batchSize) {
+    const chunk = texts.slice(offset, offset + batchSize);
+    let succeeded = false;
+    let lastError: unknown = null;
+
+    for (let attempt = 0; attempt < pool.length; attempt++) {
+      const idx = (activeGeminiKeyIndex + attempt) % pool.length;
+      const entry = pool[idx];
+      const cooldownUntil = geminiQuotaCooldownUntil.get(entry.key) || 0;
+      if (cooldownUntil > Date.now()) {
+        continue;
+      }
+
+      try {
+        const res = await entry.client.models.embedContent({
+          model,
+          contents: chunk,
+          config: { outputDimensionality },
+        });
+        const vecs = (res.embeddings || []).map((e) => e.values || []);
+        if (vecs.length !== chunk.length) {
+          throw new Error(`Expected ${chunk.length} embeddings, received ${vecs.length}`);
+        }
+        allEmbeddings.push(...vecs);
+        requestsUsed++;
+        keysUsedSet.add(entry.masked);
+        activeGeminiKeyIndex = (idx + 1) % pool.length;
+        succeeded = true;
+        break;
+      } catch (err) {
+        lastError = err;
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('API_KEY_INVALID')) {
+          geminiQuotaCooldownUntil.set(entry.key, Date.now() + QUOTA_COOLDOWN_MS);
+        }
+      }
+    }
+
+    if (!succeeded) {
+      throw lastError instanceof Error
+        ? lastError
+        : new Error(`Failed to embed batch via Gemini pool: ${String(lastError)}`);
+    }
+  }
+
+  return {
+    embeddings: allEmbeddings,
+    requestsUsed,
+    keysUsed: Array.from(keysUsedSet),
+  };
 }
 
 /**
@@ -272,13 +358,25 @@ export class RotatingGeminiAdapter implements LlmInferencePort {
     this.defaultModel = options?.model || 'gemini-3.8-flash';
   }
 
+  private normalizeGeminiApiModelId(rawModel?: string, task?: LlmCompletionRequest['task']): string {
+    const m = (rawModel || this.defaultModel || '').trim();
+    if (!m || m.includes(':')) {
+      return task === 'scout' ? 'gemini-3.1-flash-lite' : 'gemini-3.8-flash';
+    }
+    if (m.endsWith('-low')) return 'gemini-3.1-flash-lite';
+    if (m.endsWith('-high') || m.endsWith('-medium')) {
+      return m.replace(/-(?:high|medium)$/i, '');
+    }
+    return m;
+  }
+
   async complete(req: LlmCompletionRequest): Promise<LlmCompletionResponse> {
     const pool = getAiClientPool();
     if (pool.length === 0) {
       throw new Error('No valid GEMINI_API_KEY found in environment');
     }
 
-    const modelName = req.geminiModel || this.defaultModel;
+    const modelName = this.normalizeGeminiApiModelId(req.geminiModel, req.task);
     const retriesBeforeRotation = 2;
     const maxRotations = pool.length;
     let lastErr: unknown;
@@ -572,7 +670,8 @@ export class DeterministicCanonAdapter implements LlmInferencePort {
       const match = req.userPrompt.match(/\[SOURCE CHAPTER (\d+): "([^"]*)"\]\s*([\s\S]*)$/i);
       const chNum = match ? parseInt(match[1], 10) : 1;
       const chTitle = match ? match[2] : 'Chapter';
-      const engBody = match ? match[3] : req.userPrompt;
+      const rawEngBody = match ? match[3] : req.userPrompt;
+      const engBody = rawEngBody.replace(/^\s*\[(?:[a-z0-9]{2,4}\|)?#p\d+\]\s*/gim, '');
 
       const translated = deterministicLocalTranslate(
         engBody,
@@ -668,6 +767,10 @@ export function createPipelineLlmPort(
   tone?: ProseTone
 ): LlmInferencePort {
   const provider = config?.provider || 'colab_ollama';
+  if ((provider as string) === 'deterministic') {
+    return new FallbackChainAdapter([new DeterministicCanonAdapter({ glossary, tone })]);
+  }
+
   const adapters: LlmInferencePort[] = [];
   const hasColabEndpoint = Boolean(
     config?.colabEndpointUrl || process.env.COLAB_OLLAMA_URL
@@ -696,6 +799,18 @@ export function createPipelineLlmPort(
   // Next in chain: Rotating Gemini (forward modelId if specified)
   adapters.push(new RotatingGeminiAdapter({ model: config?.modelId }));
 
+  // Server-side resilience: if Colab is offline and direct Gemini API is geo-blocked (400 FAILED_PRECONDITION),
+  // fall back to local Antigravity CLI subscription before degrading to deterministic regex translation.
+  if (provider !== 'antigravity_cli' && typeof window === 'undefined') {
+    adapters.push(
+      new AntigravityCliAdapter({
+        primaryModelId: config?.modelId || 'gemini-3.8-flash-high',
+        criticModelId: config?.criticModelId || 'gemini-4-argon-medium',
+        scoutModelId: config?.scoutModelId || 'gemini-3.8-flash-low',
+      })
+    );
+  }
+
   // Final fallback: Deterministic Canon
   adapters.push(new DeterministicCanonAdapter({ glossary, tone }));
 
@@ -716,19 +831,23 @@ export function deterministicLocalTranslate(
   if (chapterNumber === 5 && engText.includes('Myriad Beasts Mountain')) {
     const dynamicClosing =
       proseTone === 'dynamic'
-        ? '«Не ту цель выбрали», — холодно отрезал про себя Линь Сюань. Миг — и он растворился тенью, обрушив на врагов разящий удар меча, магического артефакта 1-го яруса.'
-        : '«Вы выбрали не ту добычу», — хладнокровно подумал Линь Сюань, исчезая словно призрак и нанося сокрушительный удар своим мечом, который ценился как магический артефакт 1-го яруса.';
+        ? '«Не на того вы нарвались», — холодно отрезал про себя Линь Сюань, в то же мгновение растворился тенью и обрушил на врагов разящий удар своего магического меча-артефакта 1-го яруса.'
+        : '«Вы выбрали не ту добычу», — хладнокровно подумал Линь Сюань, исчезая словно призрак и нанося сокрушительный удар своим магическим мечом-артефактом 1-го яруса.';
 
     return {
       titleRus: 'Глава 5. Канон Теневого Шага и засада во Внешней Секте',
       rusText: `Под бледным светом луны на Горе Мириадов Зверей Линь Сюань вложил 120 Очков Истока в изучение «Канона Теневого Шага».
+
 ---
-[Техника: Канон Теневого Шага — 1-го яруса высшего ранга]
-[Освоение: 100% Совершенство]
-[Бонус к скорости: +45% к скорости передвижения]
+[Техника: Канон Теневого Шага (1-го яруса высшего ранга)]
+[Освоение: 100% (Совершенство)]
+[Бонус к скорости: +45% (передвижение)]
 ---
-Трое бродячих культиваторов из Секты Каменных Демонов метнулись из тумана, сжимая в руках клинки весом по 35 цзинь.
+
+Трое вольных совершенствующихся из Секты Каменных Демонов метнулись из тумана, сжимая в руках клинки весом по 35 цзинь.
+
 — Живо выкладывай 60 духовных камней, которые ты получил в Павильоне Багрового Пламени! — прорычал их вожак.
+
 ${dynamicClosing}`,
     };
   }
@@ -737,8 +856,11 @@ ${dynamicClosing}`,
     return {
       titleRus: 'Глава 6. Противостояние со старшим братом Чэнем',
       rusText: `У врат Павильона Багрового Пламени старший брат Чэнь с холодной усмешкой преградил путь Линь Сюаню.
-Достигнув 7-го слоя Очищения Ци, старший брат Чэнь сжимал в руке копьё весом 80 цзинь — магический артефакт 1-го яруса высшего ранга.
+
+Достигнув 7-го слоя Очищения Ци, старший брат Чэнь сжимал в руке тяжёлое копьё весом 80 цзинь, магический артефакт 1-го яруса высшего ранга.
+
 — Старейшина Чжао выдал тебе 50 духовных камней и открыл доступ к залу земного пламени, а ты смеешь отказываться платить 30% дани нашей фракции? — потребовал ответа старший брат Чэнь.
+
 Су Цинсюэ внимательно наблюдала с нефритового балкона Секты Каменных Демонов, как Линь Сюань высвободил чистую ауру 6-го слоя Очищения Ци.`,
     };
   }
@@ -1111,9 +1233,9 @@ ${params.styleGuideMd}`;
   const userPrompt = `${layer0}\n\n${layer1}\n\n${layer2}\n\n${layer3}`;
 
   const systemPrompt = `You are an autonomous Literary Translation Pipeline (LCD-MAS + CHORUS + Perevod_Ready Canon) for ${params.genrePromptHint}:
-Role 1 (Semantic & Canon Translator): Translate 100% of facts 1:1 paragraph-by-paragraph without dropping or merging paragraphs. Preserve every Arabic number (21, 50, 80%, 6-м слое, 1-го яруса), system boxes inside --- dividers, and canonical glossary terms declined naturally in Russian cases (unless marked "нескл.").
-Role 2 (CSI Localization Specialist): Adapt Daoist idioms, honorifics (старший брат, старейшина), and cultural items (цзинь, ли) into authentic Russian and document each adaptation rationale in csiNotes (CHORUS C3).
-Role 3 (Dedicated Literary Stylist — ${params.toneTitle}): Eliminate English calques ("в своём сердце" → "про себя", "горько улыбнулся" → "криво усмехнулся", "выплюнул полный рот крови" → "сплюнул сгусток крови", no possessive pronouns on body parts like "свои глаза / своей головой"), align verb past-tense gender with character gender metadata, enforce em-dashes "— " for dialogue and guillemets «...» for thoughts, and produce a bilingual summary (summary & summaryEng).
+Role 1 (Semantic & Canon Translator): Translate 100% of facts 1:1 paragraph-by-paragraph without dropping or merging paragraphs. Preserve every Arabic number (21, 50, 80%, 6-м слое, 1-го яруса), system boxes inside --- dividers, and canonical glossary terms declined naturally in Russian cases (unless marked "нескл."). Strip paragraph anchor prefixes like [abc|#p0] from the output rusText.
+Role 2 (CSI & Ruby/Gikun Localization Specialist): Adapt Daoist idioms, honorifics (старший брат, старейшина), and cultural items (цзинь, ли) into authentic Russian and document each adaptation rationale in csiNotes (CHORUS C3). When the source contains AST tags <emph text="..."/> or <gikun type="..." spoken="..." meaning|referent|hidden="..."/>, render the semantic/spoken duality into natural Russian prose (e.g. «Произносимое» (Смысл)) and strictly strip all raw XML <gikun/> and <emph/> tags from rusText.
+Role 3 (Dedicated Literary Stylist — ${params.toneTitle}): Eliminate English calques ("в своём сердце" → "про себя", "горько улыбнулся" → "криво усмехнулся", "выплюнул полный рот крови" → "сплюнул сгусток крови", no possessive pronouns on body parts like "свои глаза / своей головой"), align verb past-tense gender with character gender metadata, enforce em-dashes "— " for dialogue and guillemets «...» for thoughts, and produce a bilingual summary (summary & summaryEng). STRICT ANTI-AI PUNCTUATION RULE: Never insert gratuitous em-dashes ("—"), en-dashes ("–"), or spaced hyphens (" - ") inside narrative sentences (no appositive tail dashes like "клинок — магический артефакт", no "— и", no "— это", and no artificial colons ":" after speech/thought tags like "подумал он: ..."); use em-dashes ONLY for direct dialogue lines and speech/thought attribution tags.
 Return ONLY a JSON object with keys: {"titleRus": string, "rusText": string, "summary": string, "summaryEng": string, "csiNotes": [{"sourcePhrase": string, "categoryLabel": string, "adaptedRus": string, "rationale": string}]}.`;
 
   return { systemPrompt, userPrompt };
@@ -1187,15 +1309,15 @@ const CONTRASTIVE_FEW_SHOT_LIBRARY: ContrastiveFewShotTriplet[] = [
     pacingMode: 'combat_action',
     rawSource: "The sword came at his throat. Lin Xuan didn't hesitate. He swung his blade and blocked it.",
     badAiDraft: 'Меч приближался к его горлу. Линь Сюань не колебался. Он взмахнул своим клинком и заблокировал его.',
-    referenceRu: 'Клинок метил прямо в горло. Ни доли секунды на раздумья — встречный взмах, и сталь с лязгом приняла удар на себя.',
-    whyExplanation: 'Рубленый синтаксис, устранение притяжательных калек («своим/его»), звукопись и динамика глаголов.',
+    referenceRu: 'Клинок метил прямо в горло. Ни секунды не медля, Линь Сюань взметнул меч навстречу, и сталь со звоном приняла удар на себя.',
+    whyExplanation: 'Динамичный синтаксис без ИИ-тире, устранение притяжательных калек («своим/его»), звукопись и глагольный напор.',
   },
   {
     pacingMode: 'combat_action',
     rawSource: 'Blood sprayed out. He stepped forward with a fierce punch aimed right at the demon’s skull.',
     badAiDraft: 'Кровь брызнула наружу. Он шагнул вперёд со свирепым ударом, направленным прямо на череп демона.',
-    referenceRu: 'Хлынула кровь. Шаг вперёд — и сокрушительный выпад обрушился прямо в темя твари.',
-    whyExplanation: 'Парцелляция, устранение тяжеловесных причастий («направленным на»), акцент на глагольном напоре.',
+    referenceRu: 'Брызнула кровь. Шагнув наперерез, он со всего маху впечатал кулак прямо в темя твари.',
+    whyExplanation: 'Устранение тяжеловесных причастий («направленным на») и отказ от шаблонных ИИ-тире («Шаг вперёд — и...») в пользу живого глагола.',
   },
   {
     pacingMode: 'cultivation_epiphany',
@@ -1215,7 +1337,7 @@ const CONTRASTIVE_FEW_SHOT_LIBRARY: ContrastiveFewShotTriplet[] = [
     pacingMode: 'comedy_banter',
     rawSource: '“Are you crazy? Why would I give you money?” he said with a twitching mouth.',
     badAiDraft: '— Ты сумасшедший? Почему я должен давать тебе деньги? — сказал он с подёргивающимся ртом.',
-    referenceRu: '— С дуба рухнул, что ли? С какой стати мне тебе платить?! — у него даже губы нервно дрогнули.',
+    referenceRu: '— С дуба рухнул, что ли? С какой стати мне тебе платить?! — проворчал он, и губы у него нервно дрогнули.',
     whyExplanation: 'Разговорные частицы «что ли», фразеологизм «с какой стати», замена китайской соматической кальки.',
   },
   {
@@ -1236,8 +1358,8 @@ const CONTRASTIVE_FEW_SHOT_LIBRARY: ContrastiveFewShotTriplet[] = [
     pacingMode: 'romance_psychology',
     rawSource: 'She bit her lower lip, feeling a strange warmth in her chest as he took her hand.',
     badAiDraft: 'Она прикусила свою нижнюю губу, чувствуя странное тепло в своей груди, когда он взял её руку.',
-    referenceRu: 'Девушка закусила губу: от его прикосновения к ладони по груди разлилось непривычное тепло.',
-    whyExplanation: 'Снятие тройного калькирования притяжательных местоимений (свою/своей/её), передача эмоционального жеста.',
+    referenceRu: 'Девушка закусила губу, и от его прикосновения к ладони в груди разлилось непривычное тепло.',
+    whyExplanation: 'Снятие тройного калькирования притяжательных местоимений (свою/своей/её) и плавная союзная связь без искусственных двоеточий и тире.',
   },
 ];
 
@@ -1382,8 +1504,9 @@ export function buildBlindStylistPass3Prompts(params: {
 2. Глагольность: безжалостно вербализуй отглагольные существительные («после завершения поглощения» → «усвоив», «осуществил прорыв» → «прорвался»).
 3. Одушевлённость: заменяй мёртвые неодушевлённые подлежащие («вид крови заставил пробежать холодок» → «при виде крови у него по спине пробежал холодок»).
 4. Никаких чужих местоимений у частей тела: вычеркивай «свои глаза», «свою руку», «своей головой».
-5. Живой диалог и модальные частицы: вплетай органичные русские частицы («же», «ведь», «-то», «ну», «что ли») и разговорный эллипсис.
-6. НЕПРИКОСНОВЕННОСТЬ ДАННЫХ: сохрани КАЖДОЕ арабское число (21, 50, 100%), системные рамки [...] и канонические термины внутри тегов <term>...</term>.
+5. Естественный диалог без механических частиц: не вставляй искусственное «же» в середину фразы («Не ту цель же вы выбрали» — запрещено; пиши естественно: «Не на того вы нарвались» или «Вы выбрали не ту мишень»).
+6. СТРОГИЙ ЗАПРЕТ НА ИИ-ТИРЕ И ДВОЕТОЧИЯ В ПОВЕСТВОВАНИИ: длинное тире («—») допустимо ТОЛЬКО для реплик диалога и атрибуции прямой речи/мыслей («...», — подумал он). Категорически запрещено ставить тире-приложения в конце предложения («клинок — магический артефакт»), тире перед союзом («— и»), тире-связки («— это»), обычные дефисы с пробелами (« - »), средние тире (« – ») и искусственные двоеточия после слов автора («подумал он: призраком...»). Связывай фразы живыми глаголами, союзами и запятыми.
+7. НЕПРИКОСНОВЕННОСТЬ ДАННЫХ: сохрани КАЖДОЕ арабское число (21, 50, 100%), системные рамки [...] и все имена собственные и канонические термины глоссария (в нужном русском падеже), НЕ добавляя никаких HTML/XML-тегов.
 
 Формат ответа — строго JSON:
 {

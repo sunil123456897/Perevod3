@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   finalizeAndVerifyChapter,
+  verifyAndRepairChapterAsync,
   extractFlawedParagraphsPayload,
   mergeRepairedParagraphsByIndex,
   filterGlossaryForChapter,
   runAdditionBySubtractionScout,
+  filterScoutedTermsWithAgentS,
   extractResilientJsonFromLlm,
   alignChapterParagraphs,
   createPipelineLlmPort,
@@ -16,6 +18,8 @@ import {
   verifyAndRollbackStylistPass,
   applySurgicalPatches,
   parseRubyAndGikunMarkup,
+  normalizeKoreanOneLineParagraphs,
+  annotateSceneDialogueAndZeroPronouns,
   classifyScenePacingMode,
   selectContrastiveFewShotTriplets,
   buildCharacterVoicePromptBlock,
@@ -62,8 +66,13 @@ export async function POST(req: NextRequest) {
       twoPassCritic = true,
       heroLedger,
       llmConfig,
+      socialEdgesBlock,
+      lorebookBlock,
+      forwardQuestionsBlock,
+      sceneDialogueBlock,
+      useHashAnchors = true,
     } = body as {
-      action: 'scout' | 'translate_and_edit' | 'self_repair' | 'ping_colab';
+      action: 'scout' | 'translate_and_edit' | 'self_repair' | 'finalize' | 'ping_colab';
       engText: string;
       rusText?: string;
       titleEng?: string;
@@ -82,6 +91,11 @@ export async function POST(req: NextRequest) {
       twoPassCritic?: boolean;
       heroLedger?: HeroStateLedger;
       llmConfig?: LlmProviderConfig;
+      socialEdgesBlock?: string;
+      lorebookBlock?: string;
+      forwardQuestionsBlock?: string;
+      sceneDialogueBlock?: string;
+      useHashAnchors?: boolean;
     };
 
     const genreInfo = GENRE_PRESET_LABELS[genrePreset] || GENRE_PRESET_LABELS.xianxia;
@@ -154,7 +168,7 @@ export async function POST(req: NextRequest) {
           expectJson: true,
           temperature: 0.2,
           numCtx: llmConfig?.numCtx || 16384,
-          geminiModel: 'gemini-3.1-flash-lite',
+          geminiModel: llmConfig?.scoutModelId || 'gemini-3.1-flash-lite',
           geminiResponseSchema: scoutPrompts.geminiSchema,
         });
 
@@ -170,7 +184,13 @@ export async function POST(req: NextRequest) {
             : localAbs.discoveredTerms;
 
         if (Array.isArray(candidateList) && candidateList.length > 0) {
-          discoveredList = candidateList as typeof localAbs.discoveredTerms;
+          const filteredCandidates = filterScoutedTermsWithAgentS(
+            candidateList as typeof localAbs.discoveredTerms,
+            glossary,
+            scoutedTerms
+          );
+          discoveredList =
+            filteredCandidates.length > 0 ? filteredCandidates : localAbs.discoveredTerms;
         }
       } catch {
         // Fall back to local Addition-by-Subtraction scout
@@ -187,16 +207,28 @@ export async function POST(req: NextRequest) {
 
     // PHASE 2 & 3: DelTA 4-Level Memory + LCD-MAS + Universal Pass 2 Surgical Critic + Pass 3 Blind Stylist (Source Firewall)
     if (action === 'translate_and_edit') {
-      // Step 0.1: Japanese AST Ruby/Gikun/Bouten Pre-parser
+      // Step 0.1: Japanese AST Ruby/Gikun/Bouten Pre-parser & Korean One-Line Paragraph Normalizer
       const rubyGikunRes = parseRubyAndGikunMarkup(engText);
-      const effectiveEngText = rubyGikunRes.foundCount > 0 ? rubyGikunRes.parsedText : engText;
+      const afterRubyText = rubyGikunRes.foundCount > 0 ? rubyGikunRes.parsedText : engText;
+      const effectiveEngText = normalizeKoreanOneLineParagraphs(afterRubyText).normalizedText;
 
       const { filteredGlossary, matchedCount } = filterGlossaryForChapter(effectiveEngText, glossary);
 
-      // Pass 0: Scene Pacing Mode, Character Voices & Dynamic Few-Shot
+      // Pass 0: Scene Pacing Mode, Character Voices, Dialogue/Zero-Pronoun Map & Dynamic Few-Shot
       const pacingMode = classifyScenePacingMode(effectiveEngText);
       const contrastiveTriplets = selectContrastiveFewShotTriplets(pacingMode, 3);
       const characterVoicesBlock = buildCharacterVoicePromptBlock(filteredGlossary, glossaryMeta);
+      const effectiveSceneDialogueBlock =
+        sceneDialogueBlock ??
+        (() => {
+          const analysis = annotateSceneDialogueAndZeroPronouns(
+            effectiveEngText,
+            filteredGlossary,
+            glossaryMeta,
+            []
+          );
+          return analysis.annotations.length > 0 ? analysis.promptSummaryBlock : undefined;
+        })();
 
       const genderRulesList: string[] = [];
       Object.entries(filteredGlossary.characters || {}).forEach(([eng, rus]) => {
@@ -226,6 +258,11 @@ export async function POST(req: NextRequest) {
         previousChapterSummaryEng,
         deltaShortTermWindow,
         deltaLongTermMemories,
+        socialEdgesBlock,
+        lorebookBlock,
+        forwardQuestionsBlock,
+        sceneDialogueBlock: effectiveSceneDialogueBlock,
+        useHashAnchors,
       });
 
       let pass1Response;
@@ -237,7 +274,7 @@ export async function POST(req: NextRequest) {
           expectJson: true,
           temperature: llmConfig?.temperature ?? 0.2,
           numCtx: llmConfig?.numCtx ?? 16384,
-          geminiModel: 'gemini-3.8-flash',
+          geminiModel: llmConfig?.modelId || 'gemini-3.8-flash',
         });
       } catch {
         // Deterministic local adaptation fallback
@@ -429,21 +466,47 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Deep verification and postprocessing (Stages 1 invariant order)
-      const verifiedOutput = finalizeAndVerifyChapter({
-        chapterNumber,
-        titleEng,
-        titleRus: parsed.titleRus,
-        engText: effectiveEngText,
-        candidateRusText: verifiedRusIntermediate,
-        glossary,
-        glossaryMeta,
-        enabledRuleIds,
-        surgicalPatches: [], // already applied via Mechanical Gate prior to Pass 3
-        aiCsiNotes: parsed.csiNotes,
-        existingSummaryRus: parsed.summary,
-        existingSummaryEng: parsed.summaryEng,
-      });
+      // Deep verification, Prose Quality Gate, and 3-Stage Self-Repair
+      const verifiedOutput = await verifyAndRepairChapterAsync(
+        {
+          chapterNumber,
+          titleEng,
+          titleRus: parsed.titleRus,
+          engText: effectiveEngText,
+          candidateRusText: verifiedRusIntermediate,
+          glossary,
+          glossaryMeta,
+          enabledRuleIds,
+          surgicalPatches: [], // already applied via Mechanical Gate prior to Pass 3
+          aiCsiNotes: parsed.csiNotes,
+          existingSummaryRus: parsed.summary,
+          existingSummaryEng: parsed.summaryEng,
+        },
+        {
+          enableNeuralAudit: true,
+          llmParagraphRepairFn: async ({ promptBlock }) => {
+            const repairPrompts = buildSelfRepairPrompts({
+              engText: effectiveEngText,
+              rusText: verifiedRusIntermediate,
+              glossary,
+              linterIssues: [],
+              genreTitle: genreInfo.title,
+              toneTitle: toneInfo.title,
+              flawedPromptBlock: promptBlock,
+            });
+            const resp = await llmPort.complete({
+              task: 'self_repair',
+              systemInstruction: repairPrompts.systemPrompt,
+              userPrompt: repairPrompts.userPrompt,
+              expectJson: false,
+              temperature: 0.2,
+              numCtx: llmConfig?.numCtx ?? 16384,
+              geminiModel: llmConfig?.modelId || 'gemini-3.8-flash',
+            });
+            return resp.text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+          },
+        }
+      );
 
       return NextResponse.json({
         engine: `${pass1Response.engineUsed}${
@@ -461,10 +524,17 @@ export async function POST(req: NextRequest) {
         summaryEng: verifiedOutput.summaryEng,
         csiNotes: verifiedOutput.csiNotes,
         ditingReport: verifiedOutput.ditingReport,
+        proseGateReport: verifiedOutput.proseGateReport,
+        neuralAudit: verifiedOutput.neuralAudit,
+        scorecard: verifiedOutput.scorecard,
         slicedGlossaryCount: matchedCount,
         deltaShortTermCount: deltaShortTermWindow.length,
         appliedFixes: verifiedOutput.appliedFixes,
         lintReport: verifiedOutput.lintReport,
+        alreadyVerified: true,
+        verified: verifiedOutput.verified,
+        wordCountEng: verifiedOutput.wordCountEng,
+        wordCountRus: verifiedOutput.wordCountRus,
         scenePacingMode: pacingMode,
         otqsScore,
         stylistAcceptedCount,
@@ -473,21 +543,26 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // PHASE 4: QA Self-Repair Loop (Paragraph-Scoped or Full Chapter)
-    if (action === 'self_repair') {
-      const alignment = alignChapterParagraphs(engText, rusText);
-      let targetRusText = rusText;
-      let engineUsed = 'surgical-deterministic-qa-repair';
+    // PHASE 4: Unified 3-Stage QA & Prose Quality Gate Self-Repair Loop
+    if (action === 'self_repair' || action === 'finalize') {
+      let engineUsed = '3-stage-deterministic-dtw-qa-repair';
 
-      if (!alignment.hasDrift) {
-        // High-precision paragraph-scoped self repair
-        const flawedPayload = extractFlawedParagraphsPayload(engText, rusText, glossary, {
-          enabledRuleIds,
+      const verifiedOutput = await verifyAndRepairChapterAsync(
+        {
+          chapterNumber,
+          titleEng,
+          titleRus: (body as { titleRus?: string }).titleRus || '',
+          engText,
+          candidateRusText: rusText,
+          glossary,
           glossaryMeta,
-        });
-
-        if (flawedPayload.flawedCount > 0) {
-          try {
+          enabledRuleIds,
+          existingSummaryRus: (body as { existingSummaryRus?: string }).existingSummaryRus,
+          existingSummaryEng: (body as { existingSummaryEng?: string }).existingSummaryEng,
+        },
+        {
+          enableNeuralAudit: true,
+          llmParagraphRepairFn: async ({ promptBlock }) => {
             const repairPrompts = buildSelfRepairPrompts({
               engText,
               rusText,
@@ -495,7 +570,7 @@ export async function POST(req: NextRequest) {
               linterIssues: [],
               genreTitle: genreInfo.title,
               toneTitle: toneInfo.title,
-              flawedPromptBlock: flawedPayload.promptBlock,
+              flawedPromptBlock: promptBlock,
             });
 
             const response = await llmPort.complete({
@@ -505,70 +580,13 @@ export async function POST(req: NextRequest) {
               expectJson: false,
               temperature: 0.2,
               numCtx: llmConfig?.numCtx ?? 16384,
-              geminiModel: 'gemini-3.8-flash',
+              geminiModel: llmConfig?.modelId || 'gemini-3.8-flash',
             });
-
-            const cleanedRepair = response.text
-              .replace(/<think>[\s\S]*?<\/think>/gi, '')
-              .trim();
-
-            if (cleanedRepair) {
-              const merged = mergeRepairedParagraphsByIndex(rusText, cleanedRepair);
-              if (merged.repairedIndices.length > 0) {
-                targetRusText = merged.mergedText;
-                engineUsed = `${response.engineUsed} (Paragraph-Scoped Repair)`;
-              }
-            }
-          } catch {
-            // Keep deterministic repair
-          }
+            engineUsed = `${response.engineUsed} (Stage 3 Paragraph-Scoped Repair)`;
+            return response.text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+          },
         }
-      } else {
-        // Structural drift: repair full chapter text
-        try {
-          const repairPrompts = buildSelfRepairPrompts({
-            engText,
-            rusText,
-            glossary,
-            linterIssues: [],
-            genreTitle: genreInfo.title,
-            toneTitle: toneInfo.title,
-          });
-
-          const response = await llmPort.complete({
-            task: 'self_repair',
-            systemInstruction: repairPrompts.systemPrompt,
-            userPrompt: repairPrompts.userPrompt,
-            expectJson: false,
-            temperature: 0.2,
-            numCtx: llmConfig?.numCtx ?? 16384,
-            geminiModel: 'gemini-3.8-flash',
-          });
-
-          const cleanedRepair = response.text
-            .replace(/<think>[\s\S]*?<\/think>/gi, '')
-            .trim();
-
-          if (cleanedRepair) {
-            targetRusText = cleanedRepair;
-            engineUsed = `${response.engineUsed} (Full-Chapter Drift Repair)`;
-          }
-        } catch {
-          // Keep deterministic repair
-        }
-      }
-
-      // Final deep verification
-      const verifiedOutput = finalizeAndVerifyChapter({
-        chapterNumber,
-        titleEng,
-        titleRus: '',
-        engText,
-        candidateRusText: targetRusText,
-        glossary,
-        glossaryMeta,
-        enabledRuleIds,
-      });
+      );
 
       return NextResponse.json({
         engine: `${engineUsed} + diting-agenteval`,
@@ -578,8 +596,16 @@ export async function POST(req: NextRequest) {
         summaryEng: verifiedOutput.summaryEng,
         csiNotes: verifiedOutput.csiNotes,
         ditingReport: verifiedOutput.ditingReport,
+        proseGateReport: verifiedOutput.proseGateReport,
+        neuralAudit: verifiedOutput.neuralAudit,
+        scorecard: verifiedOutput.scorecard,
         appliedFixes: verifiedOutput.appliedFixes,
+        surgicallyFixedParagraphs: verifiedOutput.surgicallyFixedParagraphs,
+        flawedParagraphIndices: verifiedOutput.flawedParagraphIndices,
         lintReport: verifiedOutput.lintReport,
+        verified: verifiedOutput.verified,
+        wordCountEng: verifiedOutput.wordCountEng,
+        wordCountRus: verifiedOutput.wordCountRus,
         repairedCount: verifiedOutput.surgicallyFixedParagraphs.length,
       });
     }

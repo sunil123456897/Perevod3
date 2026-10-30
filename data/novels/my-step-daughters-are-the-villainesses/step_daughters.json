@@ -1,0 +1,5534 @@
+{
+ "book": "step_daughters",
+ "project_name": "My Step Daughters",
+ "exported_at": "2026-09-17",
+ "qa_policy_version": "2026-09-11.single-canon.1",
+ "terms": [
+  {
+   "english": "Ulrich",
+   "russian": "Ульрих",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Monika",
+   "russian": "Моника",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Rubenhart",
+   "russian": "Рубенхарт",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Skargardia",
+   "russian": "Скаргардия",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Airam",
+   "russian": "Айрам",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Hermione",
+   "russian": "Гермиона",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Esther",
+   "russian": "Эстер",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Count",
+   "russian": "граф",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "crimson barrier spell",
+   "russian": "алое магическое заграждение",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "daughters of a witch",
+   "russian": "дочери ведьмы",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Anna-Maria",
+   "russian": "Анна-Мария",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Albert Van Skargardia",
+   "russian": "Альберт ван Скаргардия",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Julian Gravenberg",
+   "russian": "Джулиан Гравенберг",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Rubenhart House",
+   "russian": "Дом Рубенхарт",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Coven",
+   "russian": "Ковен",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Fabian",
+   "russian": "Фабиан",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Elana Etton",
+   "russian": "Элана Эттон",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Thomas Danvers",
+   "russian": "Томас Дэнверс",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Linnea Danvers",
+   "russian": "Линнея Дэнверс",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Brian Strelley",
+   "russian": "Брайан Стрелли",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Grandmaster of Magic",
+   "russian": "Грандмастер магии",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Witches",
+   "russian": "Ведьмы",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Core Sickness",
+   "russian": "Болезнь Ядра",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Silas",
+   "russian": "Сайлас",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Zagon",
+   "russian": "Загон",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Demon Core",
+   "russian": "Демоническое ядро",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Kaliantha",
+   "russian": "Калианта",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Queen Kaliantha",
+   "russian": "Королева Калианта",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Princess Camellia",
+   "russian": "Принцесса Камелия",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Shintanmara",
+   "russian": "Шинтанмара",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Arcadia",
+   "russian": "Аркадия",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Hendrick",
+   "russian": "Хендрик",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Count Rubenhart",
+   "russian": "граф Рубенхарт",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Brian",
+   "russian": "Брайан",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Tree",
+   "russian": "Древо",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Libra",
+   "russian": "Либра",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Copper Guild",
+   "russian": "Медная гильдия",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Skargardian Arc",
+   "russian": "Скардарская арка",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Listener",
+   "russian": "Слушатель",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Rubenhart Estate",
+   "russian": "Поместье Рубенхарт",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Meera",
+   "russian": "Мира",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Grayhaven",
+   "russian": "Грейхейвен",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Goddess of Fortune",
+   "russian": "Богиня Удачи",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Barton",
+   "russian": "Бартон",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Scar",
+   "russian": "Шрам",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Leviathan",
+   "russian": "Левиафан",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Edmar",
+   "russian": "Эдмар",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Grover",
+   "russian": "Гровер",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Blue Scar",
+   "russian": "Синий Шрам",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Faith",
+   "russian": "Фейт",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "succubus",
+   "russian": "суккуб",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Linnea",
+   "russian": "Линнея",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Kaelor",
+   "russian": "Каэлор",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Demons",
+   "russian": "Демоны",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Legendary core",
+   "russian": "Легендарное ядро",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Crimson cylinder",
+   "russian": "Багровый цилиндр",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "crimson cylinders",
+   "russian": "алые цилиндры",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Magical barrier",
+   "russian": "Магический барьер",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Lord Rubenhart",
+   "russian": "лорд Рубенхарт",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Hunters",
+   "russian": "Охотники",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Knights",
+   "russian": "Рыцари",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Rubenhart family",
+   "russian": "семья Рубенхарт",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Crown Prince",
+   "russian": "кронпринц",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [
+    "наследный принц"
+   ],
+   "provenance": null
+  },
+  {
+   "english": "House of Rubenhart",
+   "russian": "Дом Рубенхарт",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Grandmaster",
+   "russian": "Гроссмейстер",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "crimson prison",
+   "russian": "багровая тюрьма",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Mana Core",
+   "russian": "Мана-ядро",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [
+    "ядро маны"
+   ],
+   "provenance": null
+  },
+  {
+   "english": "Core-Reading Sphere",
+   "russian": "Сфера определения ядра",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Prismatic-Shaped Cores",
+   "russian": "Призматические ядра",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Prismatic-Shaped Core",
+   "russian": "Призматическое ядро",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Witch",
+   "russian": "Ведьма",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [
+    "удочерённая ведьма"
+   ],
+   "provenance": null
+  },
+  {
+   "english": "Witch channels",
+   "russian": "Ведьминские каналы",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Archmage",
+   "russian": "Архимаг",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Grand Archmage",
+   "russian": "Великий архимаг",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Witch’s Branches and Veins",
+   "russian": "Ветви и вены ведьмы",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Core-Reading",
+   "russian": "Чтение Ядра",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Veins",
+   "russian": "Жилы",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Witch Veins",
+   "russian": "Ведьмины жилы",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Lord Magister",
+   "russian": "Лорд Магистр",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Grandmaster Brian",
+   "russian": "Грандмастер Брайан",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Crown Prince Albert",
+   "russian": "кронпринц Альберт",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Demon Race",
+   "russian": "Раса Демонов",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Matriarch",
+   "russian": "Матриарх",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Elder Mother",
+   "russian": "Старшая мать",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Daughters",
+   "russian": "Дочери",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Triple-Headed Goddess",
+   "russian": "Трехголовая Богиня",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Skargardian Royal Capital",
+   "russian": "Скардарская королевская столица",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Ashara Frost",
+   "russian": "Ашара Фрост",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Four Arcadian Houses",
+   "russian": "Четыре аркадийских дома",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Saint God Kaelor",
+   "russian": "Святой бог Каэлор",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Prismatic Core",
+   "russian": "Призматическое Ядро",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Flameheart House",
+   "russian": "Дом Флеймхарт",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Frost House",
+   "russian": "Дом Фрост",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Albert",
+   "russian": "Альберт",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Camellia",
+   "russian": "Камелия",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Antonias Van Skargardia",
+   "russian": "Антониас ван Скаргардия",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Eurich",
+   "russian": "Эурих",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "House Frost",
+   "russian": "дом Фрост",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Count Marten Van Bentheim",
+   "russian": "Граф Мартен ван Бентхейм",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Core",
+   "russian": "Ядро",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Kaliantha Van Skargardia",
+   "russian": "Калианта ван Скаргардия",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Arcadian Houses",
+   "russian": "Аркадийские дома",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Ashara",
+   "russian": "Ашара",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Dark Blue Seas",
+   "russian": "Темно-синие моря",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Shitanmara",
+   "russian": "Шитанмара",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Seven Pillared Bridges",
+   "russian": "Семь Столповых Мостов",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Ms. Elana",
+   "russian": "мисс Элана",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Skargradia",
+   "russian": "Скарградия",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Sylphara",
+   "russian": "Сильфара",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Lucida",
+   "russian": "Люсида",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Agatha",
+   "russian": "Агата",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Rubenhart County",
+   "russian": "Графство Рубенхарт",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Domain",
+   "russian": "Домен",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Five-Core Beast",
+   "russian": "Пятиъядерный зверь",
+   "category": "Other",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Root",
+   "russian": "Корень",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Rank 2 Domain",
+   "russian": "Домен 2-го ранга",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Theos",
+   "russian": "Теос",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Creon",
+   "russian": "Креон",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Shana",
+   "russian": "Шана",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Dan",
+   "russian": "Дэн",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Blooded Son",
+   "russian": "Кровный сын",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Magical core",
+   "russian": "Магическое ядро",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Lord",
+   "russian": "Лорд",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [
+    "милорд"
+   ],
+   "provenance": null
+  },
+  {
+   "english": "Lady",
+   "russian": "Леди",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [
+    "госпожа"
+   ],
+   "provenance": null
+  },
+  {
+   "english": "Ring",
+   "russian": "Кольцо",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Rank 2 spell",
+   "russian": "Заклинание 2-го ранга",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Kaeloran Calendar",
+   "russian": "Каэлоранский календарь",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Grand Hall of Skargardian Keep",
+   "russian": "Большой зал Скаргардийской крепости",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Grandmaster Strelley",
+   "russian": "Грандмастер Стрелли",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "High-court poetry",
+   "russian": "Высокая придворная поэзия",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "City",
+   "russian": "Город",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Archmage of Magic",
+   "russian": "Верховный маг",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Elana",
+   "russian": "Элана",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Runes",
+   "russian": "Руны",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Hendrick Van Sittart",
+   "russian": "Хендрик ван Ситтарт",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Rubenhart Knight Order",
+   "russian": "Рыцарский орден Рубенхарт",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Madame Rosaline",
+   "russian": "Мадам Розалин",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Rosaline",
+   "russian": "Розалина",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "royal banquet",
+   "russian": "королевский банкет",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Father of Magic",
+   "russian": "Отец Магии",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "enchanted steel",
+   "russian": "зачарованная сталь",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Ben",
+   "russian": "Бен",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Andrusia",
+   "russian": "Андрусия",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Broken core",
+   "russian": "Сломанное ядро",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Sir Hendrick",
+   "russian": "Сэр Хендрик",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Tier 3 Intermediate Spell",
+   "russian": "заклинание среднего уровня 3-го тира",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Advanced-Ranked Spell",
+   "russian": "заклинание продвинутого ранга",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Rank 4 spell",
+   "russian": "заклинание 4-го ранга",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Helix Core",
+   "russian": "Спиральное Ядро",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Springs",
+   "russian": "Пружины",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Rung Channels",
+   "russian": "Ступенчатые каналы",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Skargardian Imperial Waltz",
+   "russian": "Скаргардийский имперский вальс",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Magical Beast",
+   "russian": "Магический зверь",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Beast Core",
+   "russian": "Звериное ядро",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Original Covens of Witches",
+   "russian": "Первородные ковены ведьм",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Hunter Union",
+   "russian": "Союз Охотников",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Maelstrom of Forgotten Depths",
+   "russian": "Водоворот Забытых Глубин",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Demon God Haniah Belhor",
+   "russian": "Бог-Демон Хания Белор",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Great Dark Blue Sea",
+   "russian": "Великое Темно-Синее море",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Kingdom of Skargardia",
+   "russian": "Королевство Скаргардия",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Hunter",
+   "russian": "Охотник",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "4-Core Magical Beast",
+   "russian": "Магический зверь 4-го ядра",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Universal Runes",
+   "russian": "Универсальные руны",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Universal Affinity",
+   "russian": "Универсальная стихия",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Elemental Runes",
+   "russian": "Элементальные руны",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Herald of Light",
+   "russian": "Вестник Света",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Imperial Academy",
+   "russian": "Имперская Академия",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Magical Beasts",
+   "russian": "Магические звери",
+   "category": "Other",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Storage Ring",
+   "russian": "Кольцо Хранения",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Skyborn Elves",
+   "russian": "Небесные эльфы",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "spirit-bonds",
+   "russian": "духовные узы",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "cold iron",
+   "russian": "холодное железо",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Skyborn Elf",
+   "russian": "Небесный эльф",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Branches",
+   "russian": "Ветви",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Den of Magical Beasts",
+   "russian": "Логово магических зверей",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Thornbreath Curse",
+   "russian": "Проклятие Тернового Дыхания",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Den",
+   "russian": "Логово",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Arcadia Academy",
+   "russian": "Академия Аркадия",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Butcher of Rubenhart",
+   "russian": "Мясник из Рубенхарта",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "binding spells",
+   "russian": "заклинания связывания",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Veinsight",
+   "russian": "Вейнсайт",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Mana Echo",
+   "russian": "Эхо маны",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Internal Tree",
+   "russian": "Внутреннее древо",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Countess",
+   "russian": "графиня",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [
+    "графиней Рубенхарт"
+   ],
+   "provenance": null
+  },
+  {
+   "english": "Skargardian Crown",
+   "russian": "Скардарская корона",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Skargardian Royal Family",
+   "russian": "Скардарская королевская семья",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Estate",
+   "russian": "Поместье",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "eastern wing",
+   "russian": "восточное крыло",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Black Runes",
+   "russian": "Черные руны",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Ceres’s Thornbreath",
+   "russian": "Терновое дыхание Цереры",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Binding rings",
+   "russian": "Связующие кольца",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Witch Tree",
+   "russian": "Ведьмино древо",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "mana stone",
+   "russian": "мана-камень",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "bloody, vengeful history",
+   "russian": "кровавая история мести",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Witch Trees",
+   "russian": "Ведьмины древа",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "writ of authorization",
+   "russian": "верительная грамота",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Rubenhart Crest",
+   "russian": "Герб Рубенхартов",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Coming-of-age ceremony",
+   "russian": "Церемония совершеннолетия",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Demon",
+   "russian": "Демон",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Demon God",
+   "russian": "Бог Демонов",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Hollow Core",
+   "russian": "Полое ядро",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Human God",
+   "russian": "Бог Людей",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Skargardian",
+   "russian": "скаргардский",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Seven Pillared Bridge",
+   "russian": "Мост семи столпов",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "New Ruben",
+   "russian": "Нью-Рубен",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Blossoming",
+   "russian": "Расцвет",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Maelstrom",
+   "russian": "Водоворот",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Blue Wind",
+   "russian": "Синий ветер",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Ulrich Van Rubenhart",
+   "russian": "Ульрих ван Рубенхарт",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Veritas Sphere",
+   "russian": "Сфера Истины",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Witch’s Tree",
+   "russian": "Ведьмино древо",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Witchcraft",
+   "russian": "Колдовство",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Blooded Sons",
+   "russian": "Кровные Сыны",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Crimson Garden",
+   "russian": "Багровый Сад",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Mana bird",
+   "russian": "Мана-птица",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Stampede",
+   "russian": "Натиск",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Ceres",
+   "russian": "Церес",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Thornbreath",
+   "russian": "Терновое дыхание",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Skargardian Kingdom",
+   "russian": "Скардарское королевство",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [
+    "Скаргардии"
+   ],
+   "provenance": null
+  },
+  {
+   "english": "Louise Van Rommels",
+   "russian": "Луиза ван Роммельс",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Julian Van Gravenberg",
+   "russian": "Юлиан ван Гравенберг",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Ashen Stag",
+   "russian": "Пепельный Олень",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Livia",
+   "russian": "Ливия",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "James",
+   "russian": "Джеймс",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "demon command",
+   "russian": "демоническое командование",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Marx Lambert",
+   "russian": "Маркс Ламберт",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Lord Ulrich",
+   "russian": "Лорд Ульрих",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "House Rubenhart",
+   "russian": "Дом Рубенхарт",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Skargard",
+   "russian": "Скаргард",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Princess Camellia Van Skargardia",
+   "russian": "Принцесса Камелия ван Скаргардия",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Antonias",
+   "russian": "Антониас",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Sylphira",
+   "russian": "Силфира",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Ulrich Rubenhart",
+   "russian": "Ульрих Рубенхарт",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Airam Van Rubenhart",
+   "russian": "Айрам ван Рубенхарт",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Hermione Van Rubenhart",
+   "russian": "Гермиона ван Рубенхарт",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Esther Van Rubenhart",
+   "russian": "Эстер ван Рубенхарт",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "House Edevane",
+   "russian": "дом Эдевейн",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Countess Rubenhart",
+   "russian": "графиня Рубенхарт",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Duke Markus Van Gravenberg",
+   "russian": "герцог Маркус ван Графенберг",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Duke",
+   "russian": "герцог",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Duke Gravenberg",
+   "russian": "герцог Графенберг",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Prince Albert",
+   "russian": "Принц Альберт",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Astrid",
+   "russian": "Астрид",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Van Rubenhart",
+   "russian": "ван Рубенхарт",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Markus",
+   "russian": "Маркус",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Julian",
+   "russian": "Джулиан",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [
+    "Юлиан"
+   ],
+   "provenance": null
+  },
+  {
+   "english": "Gravenberg",
+   "russian": "Графенберг",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Resistance",
+   "russian": "Сопротивление",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Louise",
+   "russian": "Луиза",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Ethan",
+   "russian": "Этан",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Eurich Van Rubenhart",
+   "russian": "Эурих ван Рубенхарт",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Skargardian Keep",
+   "russian": "Скаргардская цитадель",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [
+    "Скаргардская крепость",
+    "Крепость Скаргард"
+   ],
+   "provenance": null
+  },
+  {
+   "english": "Markus Van Gravenberg",
+   "russian": "Маркус ван Графенберг",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Astrid Van Gravenberg",
+   "russian": "Астрид ван Гравенберг",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Ethan Van Rommels",
+   "russian": "Итан ван Роммель",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Marquis Rommels",
+   "russian": "маркиз Роммель",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [
+    "маркиз Роммельс"
+   ],
+   "provenance": null
+  },
+  {
+   "english": "Skargardian Waltz",
+   "russian": "скаргардский вальс",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "House",
+   "russian": "Дом",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "formal dance",
+   "russian": "бальный танец",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [
+    "понимать бальный танец"
+   ],
+   "provenance": null
+  },
+  {
+   "english": "three witch sisters",
+   "russian": "три сестры-ведьмы",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Anna-Maria's daughters",
+   "russian": "дочери Анны-Марии",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "magic",
+   "russian": "магия",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "past life",
+   "russian": "прошлая жизнь",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "novel",
+   "russian": "роман",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [
+    "книги"
+   ],
+   "provenance": null
+  },
+  {
+   "english": "adoption",
+   "russian": "удочерение",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "talent",
+   "russian": "дар",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "powers",
+   "russian": "силы",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Domain Spell",
+   "russian": "заклинание домена",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Skargardian forms",
+   "russian": "скаргардские формы",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "hypocrites",
+   "russian": "лицемеры",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "House Rommels",
+   "russian": "Дом Роммельс",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "duty list",
+   "russian": "список дежурств",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "livery",
+   "russian": "ливрея",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Your Highness",
+   "russian": "Ваше Высочество",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "coming of age",
+   "russian": "совершеннолетие",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Chapters",
+   "russian": "главы",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "female lead",
+   "russian": "главная героиня",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "protagonist",
+   "russian": "протагонист",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "royal palace",
+   "russian": "королевский дворец",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "quartet",
+   "russian": "квартет",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Master Verdan",
+   "russian": "Мастер Вердан",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Royal Conservatory",
+   "russian": "Королевская консерватория",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Skargardian royal crest",
+   "russian": "королевский герб Скаргардии",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "violin",
+   "russian": "скрипка",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "bow",
+   "russian": "смычок",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [
+    "бант"
+   ],
+   "provenance": null
+  },
+  {
+   "english": "my lord",
+   "russian": "милорд",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "House Gravenberg",
+   "russian": "дом Гравенберг",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Her Highness",
+   "russian": "Её Высочество",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "palace gardens",
+   "russian": "дворцовые сады",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "southern marches",
+   "russian": "южные марки",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "waltz",
+   "russian": "вальс",
+   "category": "Other",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "violinist",
+   "russian": "скрипач",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "harpist",
+   "russian": "арфист",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [
+    "арфистка"
+   ],
+   "provenance": null
+  },
+  {
+   "english": "cellist",
+   "russian": "виолончелист",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "half-mask",
+   "russian": "полумаска",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "silver cord",
+   "russian": "серебряный шнур",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "wineglass",
+   "russian": "бокал вина",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [
+    "бокал"
+   ],
+   "provenance": null
+  },
+  {
+   "english": "violin case",
+   "russian": "футляр для скрипки",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Master of Ceremonies",
+   "russian": "церемониймейстер",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Duke Markus",
+   "russian": "Герцог Маркус",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "royal dance",
+   "russian": "королевский танец",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "half-masked violinist",
+   "russian": "полумаскированный скрипач",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "strumpet",
+   "russian": "потаскуха",
+   "category": "Other",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "royal guards",
+   "russian": "королевская стража",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "dais",
+   "russian": "помост",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [
+    "возвышение",
+    "королевское возвышение"
+   ],
+   "provenance": null
+  },
+  {
+   "english": "noble children",
+   "russian": "дети знати",
+   "category": "Other",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "lower house",
+   "russian": "низший дом",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "duke's daughter",
+   "russian": "дочь герцога",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Queen of Skargardia",
+   "russian": "королева Скаргардии",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Princess",
+   "russian": "принцесса",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "royal platform",
+   "russian": "королевская платформа",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "wards",
+   "russian": "подопечные",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [
+    "оберегами"
+   ],
+   "provenance": null
+  },
+  {
+   "english": "Skargardian Queen",
+   "russian": "Скаргардская королева",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "witch blood",
+   "russian": "ведьмовская кровь",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "refreshment table",
+   "russian": "стол с закусками",
+   "category": "Other",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Marquis's daughter",
+   "russian": "дочь маркиза",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "King",
+   "russian": "король",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "His Majesty",
+   "russian": "Его Величество",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Her Majesty",
+   "russian": "Её Величество",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [
+    "с Её Величеством"
+   ],
+   "provenance": null
+  },
+  {
+   "english": "traditional dance",
+   "russian": "традиционный танец",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Valeronne",
+   "russian": "Валеронн",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Skargardian wine",
+   "russian": "скаргардское вино",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Rubenhart wines",
+   "russian": "вина Рубенхартов",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "west gallery",
+   "russian": "западная галерея",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "small receiving room",
+   "russian": "малая приёмная",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Your Majesty",
+   "russian": "Ваше Величество",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [
+    "Слушаюсь, Ваше Величество"
+   ],
+   "provenance": null
+  },
+  {
+   "english": "Valeronne wine",
+   "russian": "вино Валеронн",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Lady Rommels",
+   "russian": "леди Роммельс",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "mana stones",
+   "russian": "камни маны",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "mana lights",
+   "russian": "магические светильники",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "coming-of-age speech",
+   "russian": "речь совершеннолетия",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "royal ballroom",
+   "russian": "королевский бальный зал",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "kingdom's nobility",
+   "russian": "знать королевства",
+   "category": "Faction",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Count Bentheim",
+   "russian": "граф Бентхайм",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "royal physician",
+   "russian": "королевский лекарь",
+   "category": "Title",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "ceremonial dance",
+   "russian": "церемониальный танец",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [
+    "на церемониальном танце"
+   ],
+   "provenance": null
+  },
+  {
+   "english": "Skargardian history",
+   "russian": "история Скаргарда",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [
+    "за всю историю Скаргарда"
+   ],
+   "provenance": null
+  },
+  {
+   "english": "Count Ulrich van Rubenhart",
+   "russian": "Граф Ульрих ван Рубенхарт",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Rubenhart territory",
+   "russian": "земли Рубенхарт",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "royal dais",
+   "russian": "королевское возвышение",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [
+    "королевский помост"
+   ],
+   "provenance": null
+  },
+  {
+   "english": "coming-of-age celebration",
+   "russian": "праздник совершеннолетия",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "formal waltz",
+   "russian": "официальный вальс",
+   "category": "Other",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Camellia van Skargardia",
+   "russian": "Камелия ван Скаргардия",
+   "category": "Person",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Rank 5 barrier",
+   "russian": "Барьер 5-го ранга",
+   "category": "Technique",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Mana",
+   "russian": "Мана",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Elven blood",
+   "russian": "Эльфийская кровь",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Demonic poison",
+   "russian": "Демонический яд",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Demonic barrier",
+   "russian": "Демонический барьер",
+   "category": "Concept",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Camellia pendant",
+   "russian": "Кулон-камелия",
+   "category": "Item",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Maelstrom of the Forgotten Depths",
+   "russian": "Водоворот Забытых Глубин",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  },
+  {
+   "english": "Arcadian Academy",
+   "russian": "Академия Аркадия",
+   "category": "Location",
+   "declension_policy": "auto",
+   "variants": [],
+   "provenance": null
+  }
+ ],
+ "bible": [],
+ "summaries": [
+  {
+   "chapter": 105,
+   "title": "Chapter 105 Ashen Stag",
+   "summary": "Ульрих направляется в рабочие кварталы столицы, чтобы найти человека, которому в будущем предстоит возглавить сопротивление против коррумпированной королевской власти и демонов. Он посещает таверну «Пепельный олень», знакомится с ее владелицей Ливией и встречается с ее братом Джеймсом — будущим лидером повстанцев. Оставив щедрую плату за эль, Ульрих подтверждает свои подозрения насчет Джеймса, после чего коротко беседует с ним на улице и уходит.",
+   "key_events": [],
+   "active_characters": []
+  },
+  {
+   "chapter": 137,
+   "title": "Chapter 137 A Dance with Airam [3]",
+   "summary": "Ульрих танцует с Айрам на балу, замечая её сдержанность и точность движений. Она пытается перехватить инициативу, но он жёстко возвращает контроль. Между ними происходит разговор о ненависти к знати и королевству, а также о будущем уходе сестёр. Ульрих признаёт, что не будет удерживать их силой, что вызывает у Айрам удивление.",
+   "key_events": [],
+   "active_characters": []
+  },
+  {
+   "chapter": 138,
+   "title": "The Dance of Confrontation",
+   "summary": "During a dance, Airam confronts Ulrich about adopting her and her sisters, suspecting he knew their mother Anna-Maria and possibly wanted her dead. Ulrich denies this, saying he wanted to take all four of them, but couldn't. He admits he knew who they were but avoids fully explaining his motives. Airam remains distrustful, while Ulrich reflects on his own unclear reasons and sees a resemblance between them.",
+   "key_events": [
+    "Airam asks Ulrich why they were adopted, revealing she knows he knew their mother.",
+    "Ulrich says he wanted to take all four including Anna-Maria, but couldn't.",
+    "Airam questions his motives for saving them and their mother.",
+    "Ulrich admits he knew they were Anna-Maria's daughters but gives no clear answer.",
+    "Airam declares she doesn't trust him, and Ulrich acknowledges she shouldn't.",
+    "Ulrich internally reflects on his feelings and notes Airam's resemblance to himself."
+   ],
+   "active_characters": [
+    "Ulrich",
+    "Airam"
+   ]
+  },
+  {
+   "chapter": 139,
+   "title": "Танец Ульриха и Айрам",
+   "summary": "Во время танца Айрам замечает, что Ульрих напряжён и следит за залом, и прямо спрашивает, в опасности ли они. Ульрих уклоняется, утверждая, что она не в опасности, но Айрам не верит и начинает испытывать его ведение в танце, пытаясь перехватить инициативу. Ульрих отвечает на вызов, и между ними возникает молчаливая борьба за контроль. Ульрих признаёт её необычайное танцевальное мастерство, которое выделяет её среди сестёр, но остаётся непреклонным, не раскрывая своих мыслей о возможной угрозе.",
+   "key_events": [
+    "Айрам замечает, что Ульрих следит за залом, и спрашивает, в опасности ли они.",
+    "Ульрих отрицает опасность для неё, но Айрам чувствует ложь.",
+    "Айрам пытается перехватить управление в танце, бросая вызов Ульриху.",
+    "Ульрих отвечает на вызов, демонстрируя превосходство в ведении.",
+    "Ульрих осознаёт, что Айрам обладает исключительным танцевальным мастерством, сравнимым с его собственным."
+   ],
+   "active_characters": [
+    "Ульрих",
+    "Айрам"
+   ]
+  },
+  {
+   "chapter": 140,
+   "title": "Танец вызова",
+   "summary": "Во время бала Ульрих и Айрам танцуют, превращая танец в состязание воли и мастерства. Ульрих доминирует, но Айрам сопротивляется, пока он не сбивает её с ног, едва не роняя на пол, но ловит в последний момент. Он предупреждает её о грядущей опасности, советуя держаться рядом с сёстрами. Айрам решает использовать колдовство при необходимости, и они обмениваются понимающими взглядами, после чего зал замечает их напряжённый танец.",
+   "key_events": [
+    "Ульрих меняет темп танца, заставляя Айрам подстраиваться",
+    "Айрам принимает вызов и начинает точнее повторять его движения",
+    "Ульрих сбивает Айрам с ног, но ловит её в последний момент",
+    "Ульрих предупреждает Айрам о предстоящей опасности и советует держаться рядом с сёстрами",
+    "Айрам решает использовать колдовство, если возникнет угроза",
+    "Зал замечает их напряжённый танец, и все замирают"
+   ],
+   "active_characters": [
+    "Ульрих",
+    "Айрам",
+    "Эстер",
+    "Гермиона"
+   ]
+  },
+  {
+   "chapter": 141,
+   "title": "The Dance and Its Aftermath",
+   "summary": "After an intense dance that captivates the hall, Ayram and Ulrich step aside as applause breaks out. Ayram is disgusted by the nobles' sudden admiration, calling them hypocrites. Ulrich warns her about hidden enemies among the guests, but refuses to share details. Ayram insists on being involved, citing her family name, but Ulrich dismisses her. He tells her to stay with her sisters and not do anything foolish. When Ayram suggests using sorcery, Ulrich harshly forbids it. Ayram leaves coldly, and Ulrich feels regret for his harsh words.",
+   "key_events": [
+    "The dance ends and the hall applauds, with Esther leading the clapping.",
+    "Ayram and Ulrich discuss the hidden threat among the guests.",
+    "Ulrich warns Ayram to stay with her sisters and not act foolishly.",
+    "Ayram offers to use sorcery, but Ulrich forbids it harshly.",
+    "Ayram leaves, and Ulrich regrets his tone."
+   ],
+   "active_characters": [
+    "Ayram",
+    "Ulrich",
+    "Esther",
+    "Hermione"
+   ]
+  },
+  {
+   "chapter": 143,
+   "title": "The Princess's Burden",
+   "summary": "After dancing with the three sisters, Ulrich is approached by Princess Camellia, who has been watching him. Their conversation reveals her exhaustion with royal expectations and her struggle to define herself beyond her mother's legacy. Ulrich advises her to make small personal choices, striking a chord that leaves her both exposed and relieved. Camellia then returns to her duties, but his words linger.",
+   "key_events": [
+    "Ulrich dances with Esther, Hermione, and Airam, drawing attention.",
+    "Princess Camellia intercepts Ulrich and engages him in a private conversation.",
+    "Camellia confesses her weariness with always being compared to her mother, Queen Caliantha.",
+    "Ulrich tells Camellia she doesn't need to become a copy of the queen and should make small choices for herself.",
+    "Camellia is deeply moved and returns to the waiting nobles."
+   ],
+   "active_characters": [
+    "Ulrich (Lord Rubenhart)",
+    "Princess Camellia",
+    "Esther",
+    "Hermione",
+    "Airam",
+    "Louise"
+   ]
+  },
+  {
+   "chapter": 144,
+   "title": "Chapter 144 Ulrich’s Self-Reflection Over Camellia",
+   "summary": "Ulrich watches Camellia leave the dance floor, noticing a flicker of hesitation in her eyes. He reflects on his memories of Silas, which reveal Camellia's future suffering after her mother's death. Determined to change the story, he considers intervening to save Calantha and prevent Camellia from becoming cold and distant. He draws parallels between Camellia and Esther, resolving to protect her kindness. Camellia briefly glances back at him before regaining her composure. As Ulrich resumes scanning the room for threats, Astrid van Gravenberg approaches him from behind and speaks, catching his attention.",
+   "key_events": [],
+   "active_characters": []
+  },
+  {
+   "chapter": 145,
+   "title": "The Uninvited Musician",
+   "summary": "Astrid overhears Ulrich speaking kindly to Princess Camellia and misinterprets his intentions, believing he intends to court her. She confronts him, but he dismisses her. She follows him, collides with a musician, and berates him. Ulrich intervenes, notices the musician's claim about being left out of the quartet, and realizes something clever about the situation.",
+   "key_events": [
+    "Astrid overhears Ulrich's conversation with Camellia and misinterprets his intentions.",
+    "Astrid confronts Ulrich, who dismisses her.",
+    "Astrid follows Ulrich and bumps into a musician, scolding him.",
+    "Ulrich notices the musician's story and realizes something clever."
+   ],
+   "active_characters": [
+    "Astrid van Gravenberg",
+    "Ulrich van Rubenhardt",
+    "Musician"
+   ]
+  },
+  {
+   "chapter": 146,
+   "title": "Умно",
+   "summary": "Ульрих замечает, что среди музыкантов на королевском торжестве может скрываться самозванец. Он поручает опоздавшему скрипачу вычислить слабого исполнителя, который, вероятно, является подставным лицом, и не привлекать внимания. Астрид наблюдает за его действиями, испытывая смесь раздражения и тревоги.",
+   "key_events": [
+    "Ульрих упрекает Астрид за её отношение к опоздавшему музыканту и приказывает ей уйти.",
+    "Ульрих расспрашивает скрипача о его обучении и просит его найти фальшивого музыканта среди квартетов.",
+    "Скрипач соглашается выполнить задание и направляется к ближайшей группе исполнителей.",
+    "Астрид остаётся в недоумении, наблюдая за Ульрихом, и чувствует растущую тревогу."
+   ],
+   "active_characters": [
+    "Ульрих",
+    "Астрид",
+    "Скрипач (безымянный)"
+   ]
+  },
+  {
+   "chapter": 148,
+   "title": "Скрипач в маске",
+   "summary": "Ульрих и Астрид узнают от музыканта о подозрительном скрипаче в маске, который притворяется исполнителем. Выясняется, что во время речей и церемониального танца музыканты будут стоять ближе к королевскому помосту, что создаёт возможность для покушения. Ульрих решает не раскрывать угрозу, чтобы не спугнуть убийцу, и приказывает музыканту молчать, а Астрид — занять принцессу Камелию.",
+   "key_events": [
+    "Музыкант сообщает Ульриху и Астрид, что скрипач в маске играет неправильно и имеет мозоли, как у мечника, а не музыканта",
+    "Ульрих выясняет, что после танцев музыканты переместятся ближе к помосту, где будут речи и танец принцессы Камелии с королём",
+    "Ульрих понимает, что убийца будет действовать во время церемониального танца, когда королева Калианта покинет трон",
+    "Ульрих приказывает музыканту вернуться и никому не говорить о разговоре, а Астрид — не привлекать внимание и занять принцессу"
+   ],
+   "active_characters": [
+    "Ульрих",
+    "Астрид",
+    "Музыкант (опоздавший скрипач)"
+   ]
+  },
+  {
+   "chapter": 149,
+   "title": "The Masked Violinist",
+   "summary": "Ulrich observes a masked violinist from a hidden position, deducing he is an assassin sent to kill Princess Camellia. He considers the risks of approaching directly and decides on an indirect approach. Astrid confronts him, insisting on helping to protect the princess. Ulrich insults her to drive her away, but she persists, revealing her sense of duty. Ulrich's perception of her shifts, recognizing her armor of pride and her genuine concern.",
+   "key_events": [
+    "Ulrich watches the masked violinist and assesses the threat, noting the instrument case could hide a weapon.",
+    "Astrid approaches Ulrich and demands to help protect Princess Camellia.",
+    "Ulrich insults Astrid, calling her a 'whore', to make her leave.",
+    "Astrid stands her ground, declaring her duty as a lady of Scargardia, and Ulrich sees her in a new light."
+   ],
+   "active_characters": [
+    "Ulrich",
+    "Astrid",
+    "Masked violinist"
+   ]
+  },
+  {
+   "chapter": 150,
+   "title": "План с Астрид",
+   "summary": "Ульрих, несмотря на опасения, решает вовлечь Астрид в расследование. Он просит её подойти к подозрительному музыканту и заставить его среагировать на футляр, чтобы выяснить, что внутри. Ульрих предупреждает её о риске и необходимости отступить при опасности. Астрид соглашается и направляется к музыканту.",
+   "key_events": [
+    "Ульрих решает использовать Астрид для проверки музыканта, несмотря на её неопытность",
+    "Он инструктирует её заставить музыканта среагировать на футляр",
+    "Ульрих предупреждает Астрид не рисковать и отступать при опасности",
+    "Астрид соглашается и идёт к музыканту"
+   ],
+   "active_characters": [
+    "Ульрих",
+    "Астрид"
+   ]
+  },
+  {
+   "chapter": 151,
+   "title": "Глава без названия",
+   "summary": "Ульрих наблюдает за подозрительным музыкантом в маске, который играет в квартете. Астрид, используя мальчика-аристократа, провоцирует музыканта снять маску, но тот лишь показывает шрам. Однако его чрезмерная защита скрипичного футляра усиливает подозрения Ульриха. Ульрих отправляет Астрид, а сам планирует приблизиться к королеве.",
+   "key_events": [
+    "Астрид отправляет мальчика к музыканту, чтобы тот потребовал снять маску",
+    "Музыкант снимает маску, показывая шрам, но не демонические черты",
+    "Музыкант защищает футляр, что вызывает подозрение Ульриха",
+    "Ульрих приказывает Астрид уйти и вернуться к Камелии",
+    "Ульрих решает подойти к королеве до начала вальса"
+   ],
+   "active_characters": [
+    "Ульрих",
+    "Астрид",
+    "Музыкант в маске"
+   ]
+  },
+  {
+   "chapter": 152,
+   "title": "The Dance Dilemma",
+   "summary": "Ulrich struggles to find a plausible reason to be near Queen Kalianta when the assassin strikes. He rejects the idea of asking her to dance as too scandalous, then considers removing either King Antonias or Prince Albert from the ceremonial dance, but finds both options flawed. After much deliberation, he conceives a plan and heads toward Louise.",
+   "key_events": [
+    "Ulrich considers dancing with Queen Kalianta but deems it inappropriate.",
+    "He evaluates sabotaging King Antonias or Prince Albert to create an opening.",
+    "Ulrich realizes both options have complications and rejects them.",
+    "He has a sudden insight and decides to approach Louise."
+   ],
+   "active_characters": [
+    "Ulrich",
+    "Kalianta",
+    "Albert",
+    "Antonias",
+    "Louise"
+   ]
+  },
+  {
+   "chapter": 153,
+   "title": "The Ballroom Conversation",
+   "summary": "At a ball, Hermione and Louise debate the nature of love. Hermione denies ever being in love, but her sisters Esther and Airaam reveal a past crush on a village boy. Louise then questions Ulrich's capacity for love, revealing he once loved a woman named Ashara. Hermione mentions a woman named Mira, and Louise declares her intention to become Ulrich's countess.",
+   "key_events": [
+    "Hermione and Louise argue about love and whether Ulrich understands it.",
+    "Esther and Airaam reveal Hermione had a childhood crush on a village boy.",
+    "Louise shares that Ulrich had a first love named Ashara.",
+    "Hermione mentions Mira, a woman with blue hair and eyes, as a possible interest of Ulrich.",
+    "Louise states she intends to become Ulrich's countess."
+   ],
+   "active_characters": [
+    "Hermione",
+    "Louise",
+    "Esther",
+    "Airaam"
+   ]
+  },
+  {
+   "chapter": 154,
+   "title": "Chapter 154 The Sisters and Louise [2]",
+   "summary": "Louise announces her intention to become Countess Ulrich, surprising the sisters. She recounts how Ulrich once saved her from bullies and argues that he genuinely cares for them despite his hatred of witches. The sisters react with disbelief, embarrassment, and suspicion. Louise teases them about marrying Ulrich, and Ulrich appears at the end, overhearing part of the conversation.",
+   "key_events": [],
+   "active_characters": []
+  },
+  {
+   "chapter": 155,
+   "title": "The Request",
+   "summary": "Ulrich approaches Louise during the royal celebration and asks her to get King Antonias drunk and lead him away so that Ulrich can dance with Queen Calianthe. Louise interprets this as a sign of Ulrich's affection for the queen and is hurt by his request, but ultimately agrees to help him.",
+   "key_events": [
+    "Ulrich leaves his sisters to speak privately with Louise.",
+    "Ulrich asks Louise to get the king drunk and escort him from the ballroom.",
+    "Louise assumes Ulrich loves the queen and expresses her hurt feelings.",
+    "Louise agrees to help Ulrich despite her emotional discomfort."
+   ],
+   "active_characters": [
+    "Ulrich",
+    "Louise",
+    "Hermione",
+    "Esther",
+    "Ayram"
+   ]
+  },
+  {
+   "chapter": 156,
+   "title": "Просьба Ульриха",
+   "summary": "Луиза, выполняя просьбу Ульриха, подходит к королю Антониасу, чтобы напоить его и увести из бального зала до традиционного танца. Она использует свою красоту и упоминание редкого вина Валеронн, чтобы заманить короля в уединённую приёмную. Королева Калианта наблюдает за ними с холодным спокойствием, но не вмешивается. Луиза испытывает внутренний конфликт, но продолжает выполнять задание.",
+   "key_events": [
+    "Луиза решает подойти к королю, несмотря на сомнения и оскорбительность просьбы Ульриха.",
+    "Она заводит разговор с Антониасом, льстит ему и упоминает вино Валеронн.",
+    "Луиза предлагает королю попробовать вино в малой приёмной, чтобы избежать сплетен.",
+    "Антониас соглашается и уходит с Луизой, оставляя Калианту на троне.",
+    "Калианта замечает уход мужа, но сохраняет невозмутимость."
+   ],
+   "active_characters": [
+    "Луиза",
+    "Антониас",
+    "Калианта"
+   ]
+  },
+  {
+   "chapter": 157,
+   "title": "Отвлечение короля",
+   "summary": "Луиза выполняет просьбу Ульриха, отвлекая короля Антониаса на празднике. Она льстит ему и уводит из бального зала, надеясь напоить его крепким вином. Однако король становится агрессивным и прижимает её к стене. Внезапно появляется Ульрих, хватает короля и с силой ударяет его лицом о стену, вырубая его.",
+   "key_events": [
+    "Луиза льстит королю и уводит его из бального зала, чтобы дать Ульриху время.",
+    "Король становится агрессивным и прижимает Луизу к стене, пытаясь её поцеловать.",
+    "Ульрих появляется и бьёт короля лицом о стену, вырубая его."
+   ],
+   "active_characters": [
+    "Луиза",
+    "Король Антониас",
+    "Ульрих"
+   ]
+  },
+  {
+   "chapter": 158,
+   "title": "The Corridor Confrontation",
+   "summary": "Ulrich intervenes when King Antonias corners Louise in a corridor, knocking him unconscious. Louise is shaken but Ulrich reassures her, proposing a cover story that Antonias slipped and fell. Louise, grateful and emotionally stirred, kisses Ulrich before they return to the ballroom.",
+   "key_events": [
+    "Ulrich knocks out King Antonias after finding him forcing himself on Louise.",
+    "Louise and Ulrich agree to claim Antonias slipped and fell due to drunkenness.",
+    "Louise kisses Ulrich, expressing her gratitude and relief."
+   ],
+   "active_characters": [
+    "Ulrich",
+    "Louise",
+    "Antonias"
+   ]
+  },
+  {
+   "chapter": 159,
+   "title": "Возвращение в бальный зал",
+   "summary": "Ульрих возвращается в бальный зал с Луизой после того, как оставил короля Антониаса без сознания. Они обсуждают, как скрыть произошедшее. Ульрих наблюдает за своими приёмными сёстрами, которые стали увереннее после танца. Луиза советует ему больше общаться с ними. Затем Ульрих направляется к королевскому помосту, оставляя Луизу присматривать за сёстрами.",
+   "key_events": [
+    "Ульрих и Луиза возвращаются в бальный зал и договариваются о версии событий с королём.",
+    "Ульрих замечает, что сёстры (Гермиона, Эстер, Айрам) изменились после танца и стали сплочённее.",
+    "Луиза советует Ульриху наладить общение с сёстрами, особенно с Эстер и Гермионой.",
+    "Ульрих решает подойти к королеве Калианте, оставив Луизу присматривать за сёстрами."
+   ],
+   "active_characters": [
+    "Ульрих",
+    "Луиза",
+    "Гермиона",
+    "Эстер",
+    "Айрам"
+   ]
+  },
+  {
+   "chapter": 160,
+   "title": "Танец с Калиантой",
+   "summary": "Ульрих планирует спасти королеву Калианту от убийцы во время бала, рассчитывая оказаться рядом с ней, когда погаснет свет. Он манипулирует событиями, чтобы Антониас отсутствовал, но Калианта отказывается танцевать. Ульрих решает подойти к ней напрямую, но в этот момент в зал врывается пьяный и раненый король Антониас, разрушая его планы.",
+   "key_events": [
+    "Ульрих обдумывает способы убедить Калианту танцевать с ним, чтобы быть рядом во время покушения.",
+    "Камелия произносит речь совершеннолетия, Калианта хвалит дочь и поручает Альберту танцевать с Камелией.",
+    "Ульрих подходит к Калианте, чтобы пригласить её на танец, но двери распахиваются.",
+    "Появляется король Антониас с кровью на лице, в растрёпанной одежде, явно пьяный и в ярости."
+   ],
+   "active_characters": [
+    "Ульрих",
+    "Калианта",
+    "Камелия",
+    "Альберт",
+    "Антониас"
+   ]
+  },
+  {
+   "chapter": 161,
+   "title": "Скандал в бальном зале",
+   "summary": "Король Антониас, пьяный и окровавленный, врывается в бальный зал и публично обвиняет графа Ульриха в нападении. Королева Калианта пытается остановить его, Ульрих отрицает вину, а Луиза, на которую ссылается Антониас, говорит, что ничего не помнит. Антониас в ярости раскрывает, что покинул праздник с Луизой, вызывая скандал. Ульрих сохраняет спокойствие и провоцирует короля, который теряет контроль.",
+   "key_events": [
+    "Антониас входит в зал с кровью на лице и обвиняет Ульриха в нападении",
+    "Калианта преграждает путь королю и требует объяснений",
+    "Луиза заявляет, что не помнит инцидента, а Антониас публично признаётся, что уходил с ней",
+    "Ульрих невозмутимо отрицает обвинения и провоцирует Антониаса, который бросается на него"
+   ],
+   "active_characters": [
+    "Антониас",
+    "Ульрих",
+    "Калианта",
+    "Луиза"
+   ]
+  },
+  {
+   "chapter": 162,
+   "title": "The King's Humiliation",
+   "summary": "At a ball, a drunken King Antonias attempts to attack Ulrich, but Kalanta intervenes. Antonias shoves her aside, and Ulrich catches her. Kalanta, furious, orders the guards to remove the king, publicly shaming him. She then turns to Ulrich, who requests a dance to speak privately. Meanwhile, Albert dances with Camelia to restore order.",
+   "key_events": [
+    "Antonias tries to attack Ulrich but misses as Ulrich dodges.",
+    "Antonias shoves Kalanta, who is caught by Ulrich.",
+    "Kalanta orders the guards to escort Antonias out, citing his intoxication.",
+    "Kalanta confronts Antonias about neglecting his daughter and his drunken behavior.",
+    "Ulrich asks Kalanta for a dance to talk, and she accepts.",
+    "Albert dances with Camelia to move past the embarrassment."
+   ],
+   "active_characters": [
+    "Ulrich",
+    "Antonias",
+    "Kalanta",
+    "Camelia",
+    "Albert",
+    "Marten"
+   ]
+  },
+  {
+   "chapter": 163,
+   "title": "The Queen's Dance",
+   "summary": "After King Antonias's drunken, violent outburst and removal from the ballroom, Queen Kalyanta publicly invites Count Ulrich to dance, shocking the court and her children. The dance becomes a statement of defiance and political maneuvering, as the court interprets her actions as revenge or a deeper calculation. Ulrich apologizes as they take the floor, and the musicians adjust the music to follow them.",
+   "key_events": [
+    "King Antonias returns drunk and bloody, accuses Ulrich, and shoves Kalyanta before being dragged away.",
+    "Kalyanta takes Ulrich's hand and invites him to dance, stunning the court.",
+    "Albert and Camelia watch in disbelief as their mother dances with Ulrich.",
+    "Ulrich apologizes to Kalyanta as they begin dancing.",
+    "The musicians change the tune to match Ulrich's lead, and the court watches intently."
+   ],
+   "active_characters": [
+    "Kalyanta",
+    "Ulrich",
+    "Antonias",
+    "Albert",
+    "Camelia"
+   ]
+  },
+  {
+   "chapter": 165,
+   "title": "Chapter 165 A Dance With Queen Kaliantha [3]",
+   "summary": "Калианта ведёт Ульриха в танце, меняя ритм. Во время танца она требует объяснений, но Ульрих уклоняется, говоря о конфиденциальных делах. Затем он признаётся, что хотел подарить Королеве настоящий танец. Они обсуждают инцидент с королём, и Ульрих даёт понять, что вмешается снова, если король подвергнет кого-то опасности. Калианта предупреждает, что будет защищать мужа, а Ульрих обещает не обременять её.",
+   "key_events": [],
+   "active_characters": []
+  },
+  {
+   "chapter": 166,
+   "title": "Chapter 166 A Dance With Queen Kaliantha [4]",
+   "summary": "Королева Калианта и граф Ульрих танцуют в бальном зале, поражая всех своей синхронностью. Ульрих ускоряет темп, они обмениваются колкими репликами, он делает ей комплимент. Ульрих замечает подозрительного музыканта в маске и чувствует приближающуюся угрозу, решая предоставить им ложную возможность.",
+   "key_events": [],
+   "active_characters": []
+  },
+  {
+   "chapter": 167,
+   "title": "Сердце Феникса",
+   "summary": "На празднике совершеннолетия Камелии королева Калианта и граф Ульрих поражают придворных невероятно быстрым и безупречным танцем. В процессе Ульрих замечает подозрительное поведение музыканта у сцены и понимает, что готовится нападение. Кульминацией становится обнаружение на шее Калианты артефакта из прочитанного им романа — ожерелья «Сердце Феникса», которое по сюжету должно было принадлежать Камелии.",
+   "key_events": [
+    "Альберт и Камелия прекращают танец, уступая паркет ошеломляюще танцующим Калианте и Ульриху.",
+    "Ульрих замечает подозрительные приготовления музыканта у сцены и осознает надвигающуюся угрозу.",
+    "Во время стремительного поворота у Калианты из-под платья выскальзывает ожерелье «Сердце Феникса», которое Ульрих узнает из книги."
+   ],
+   "active_characters": [
+    "Ульрих ван Рубенхарт",
+    "Калианта",
+    "Альберт",
+    "Камелия"
+   ]
+  },
+  {
+   "chapter": 168,
+   "title": "Сердце Феникса",
+   "summary": "Во время танца с королевой Калиантой Ульрих замечает на ней Сердце Феникса — древнюю королевскую реликвию, создающую непроницаемый барьер при смертельной угрозе. Вспоминая сюжет романа, где артефакт позже перешел к Камелии, он анализирует ограничения защиты и угрозу от замаскированного музыканта. Опасаясь сопутствующего ущерба и раскрытия тайны артефакта врагам, Ульрих решает лично предотвратить покушение, пока Калианта иронично не прерывает его размышления.",
+   "key_events": [
+    "Ульрих замечает Сердце Феникса на шее танцующей с ним королевы Калианты и вспоминает природу его защитной магии из оригинального сюжета романа.",
+    "Ульрих анализирует уязвимости ситуации: кулдаун артефакта, угрозу для окружающих от взрывной магии и риск раскрытия секрета защиты демонам.",
+    "Ульрих принимает решение лично предотвратить готовящееся покушение музыканта, сохранив тайну реликвии.",
+    "Калианта замечает пристальный взгляд Ульриха на свое декольте и прерывает его размышления замечанием."
+   ],
+   "active_characters": [
+    "Ульрих Рубенхарт",
+    "Королева Калианта"
+   ]
+  },
+  {
+   "chapter": 169,
+   "title": "The Dance and the Darkness",
+   "summary": "While dancing with Queen Kalianta, Ulrich von Rubenhart uses his hidden magic to preemptively shatter the ballroom's chandeliers, disrupting an impending assassination attempt. As panic engulfs the nobility in the sudden darkness, Ulrich protects and guides the Queen, eventually spotting a masked musician whose glowing mask serves as a beacon for the hidden demon assassins.",
+   "key_events": [
+    "Ulrich and Kalianta share a tense, intimate dance and converse about court scandals.",
+    "Ulrich triggers a hidden spell to shatter the room's mana chandeliers, ruining the assassins' timing.",
+    "Chaos and panic erupt among the nobility as the ballroom is plunged into darkness.",
+    "Ulrich shields Kalianta, keeping her moving to prevent them from becoming easy targets.",
+    "Ulrich identifies the masked musician, whose glowing mask acts as a visual beacon for the other assassins."
+   ],
+   "active_characters": [
+    "Ulrich von Rubenhart",
+    "Queen Kalianta",
+    "Masked Musician"
+   ]
+  },
+  {
+   "chapter": 170,
+   "title": "Ловушка во тьме",
+   "summary": "Во время бала гаснет свет, и на королеву Калианту нападают демоны-убийцы. Ульрих защищает ее и выясняет, что зал запечатан сложнейшим магическим барьером 5-го ранга, который не только изолирует пространство, но и полностью подавляет магию, отрезая их от королевской стражи. Раскрыв масштабный план врагов, Ульрих осознает, что из-за его вмешательства королева лишена автоматической защиты артефакта Сердце Феникса, а сам он оказался в ловушке с ограниченными силами.",
+   "key_events": [
+    "Нападение демонов-убийц на Ульриха и королеву Калианту в погрузившемся во тьму бальном зале.",
+    "Обнаружение мощного барьера 5-го ранга, запершего их внутри и подавляющего любую магию.",
+    "Беспокойство Калианты о судьбе принца Альберта и принцессы Камелии.",
+    "Ульрих осознает, что его присутствие помешало естественной активации защитной силы Сердца Феникса."
+   ],
+   "active_characters": [
+    "Ульрих",
+    "Калианта",
+    "Маркс Ламберт",
+    "Убийцы-демоны",
+    "Альберт",
+    "Камелия"
+   ]
+  },
+  {
+   "chapter": 171,
+   "title": "Blades in the Dark",
+   "summary": "While navigating a darkened ballroom with Queen Kalianta, Ulrich is ambushed by five masked demon assassins. He expertly shields the Queen, who remains remarkably calm, while dodging lethal blows. After receiving a minor cut, Ulrich shifts from defense to offense, overpowering one of the demons, breaking his wrist, and taking his dagger to fight back.",
+   "key_events": [
+    "Ulrich and Queen Kalianta are ambushed by five glowing-masked demon assassins in a dark ballroom.",
+    "Ulrich skillfully shields Kalianta and evades multiple coordinated knife attacks.",
+    "Ulrich sustains a minor facial injury from an assassin's blade.",
+    "Ulrich shifts to an aggressive stance, overpowers an assassin, breaks his wrist, and seizes his dagger."
+   ],
+   "active_characters": [
+    "Ulrich",
+    "Kalianta",
+    "Masked Demon Assassins"
+   ]
+  },
+  {
+   "chapter": 172,
+   "title": "Protecting the Queen",
+   "summary": "Trapped within a dark magical barrier, Ulrich fiercely defends Queen Calianta from five demon-masked assassins. Ignoring her protests and the assurance of her protective family artifact, Ulrich uses his own body as a shield against their coordinated, mana-enhanced attacks. As the outer barrier begins to fracture under the guards' assault outside, Ulrich wraps Calianta in his cloak to obscure her and charges back into combat.",
+   "key_events": [
+    "Ulrich refuses to abandon Calianta, rejecting the reliance on her protective family artifact.",
+    "Five assassins unleash demonic mana and launch a synchronized, high-speed assault.",
+    "Ulrich skillfully evades and blocks incoming strikes while keeping Calianta safely shielded against his body.",
+    "Sensing the outer barrier weakening, Ulrich wraps Calianta in his red cloak and initiates a counterattack."
+   ],
+   "active_characters": [
+    "Ulrich",
+    "Calianta",
+    "Masked Assassins"
+   ]
+  },
+  {
+   "chapter": 174,
+   "title": "The Aftermath in the Ballroom",
+   "summary": "Following a sudden and terrifying attack, Ulrich stands victorious after single-handedly slaying five demons to protect Queen Kalianta. While the nobles look on in shock and royal guards secure the area, Queen Kalianta is confirmed to be completely uninjured. Ulrich's sisters—Esther, Hermione, and Airam—rush to his side, with Airam attempting to use her dark magic to treat his wounds before the royal healers finally arrive.",
+   "key_events": [
+    "Ulrich defeats all five demons, successfully saving Queen Kalianta.",
+    "Royal guards and healers secure the ballroom, confirming the Queen is unharmed.",
+    "The assembled nobles react with fear and shock to the carnage and Ulrich's immense power.",
+    "Esther and Hermione express deep worry over Ulrich's injuries, and Airam attempts to heal him using her own magic."
+   ],
+   "active_characters": [
+    "Ulrich",
+    "Kalianta",
+    "Marx Lambert",
+    "Albert",
+    "Camelia",
+    "Esther",
+    "Hermione",
+    "Airam"
+   ]
+  },
+  {
+   "chapter": 175,
+   "title": "The Aftermath of the Attack",
+   "summary": "Following the failed demon assassination attempt, healers examine Queen Calianta and a wounded Count Ulrich. While Camelia and Albert process the trauma of the human-like invaders, Commander Marx Lambert locks down the ballroom, orders a rigorous security sweep of all guests, and uncovers the rune-carved instrument case used to trigger the barrier. Suspicious of an insider betrayal, Marx reflects on his own failure as commander and approaches Ulrich to reevaluate his mysterious actions.",
+   "key_events": [
+    "Healers examine Queen Calianta and Count Ulrich for injuries.",
+    "Commander Marx Lambert locks down the ballroom and enforces a strict mana-scan search of every noble guest.",
+    "Knights discover the rune-inscribed instrument case that served as the barrier's trigger.",
+    "Marx suspects an internal traitor and contemplates Count Ulrich's suspicious foresight and heroic defense of the Queen."
+   ],
+   "active_characters": [
+    "Calianta",
+    "Ulrich",
+    "Camelia",
+    "Albert",
+    "Marx Lambert"
+   ]
+  },
+  {
+   "chapter": 176,
+   "title": "Treating the Wounds",
+   "summary": "Female healers treat Ulrich's injuries in the ballroom. Ulrich removes his shirt to facilitate treatment, startling onlookers like Hermione. Meanwhile, Louise cleans his face and reflects on his protection of Queen Kalianta. Shortly after, Ayram touches a minor back wound, triggering a sudden, severe burning pain that causes Ulrich to collapse in Louise's arms, leading her to suspect poison.",
+   "key_events": [
+    "Female healers approach Ulrich to examine and treat his wounds.",
+    "Ulrich removes his shirt in the ballroom, causing a stir among the onlookers.",
+    "Louise cleans blood from Ulrich's face and contemplates his motives for protecting Queen Kalianta.",
+    "Ayram touches a minor wound on Ulrich's back and senses something amiss.",
+    "Ulrich suffers a sudden, intense internal burning pain and collapses, suspected to be poisoned."
+   ],
+   "active_characters": [
+    "Ulrich",
+    "Louise",
+    "Ayram",
+    "Hermione",
+    "Esther",
+    "Female Healers",
+    "Kalianta",
+    "Camelia"
+   ]
+  },
+  {
+   "chapter": 177,
+   "title": "The Aftermath of the Citadel Attack",
+   "summary": "During Princess Camelia's coming-of-age ceremony, five demons attempt to assassinate Queen Kalianta, but Count Ulrich van Rubenhart protects her and defeats all attackers. Ulrich is poisoned by a toxin meant for elvish blood, but his strong human constitution helps him survive, and his fever breaks by morning. His adopted witch wards—Hermione, Esther, and Airam—are granted royal guest rooms near his chamber. The next morning, Princess Camelia visits the sisters and invites them to breakfast, reassuring Esther about Ulrich's steady recovery.",
+   "key_events": [
+    "Count Ulrich van Rubenhart defends Queen Kalianta from a demon assassination attempt during the ceremony, eliminating all five attackers while sustaining wounds.",
+    "Ulrich is poisoned by a toxin intended for the Queen's elvish blood, but his strong physical constitution allows him to survive the night as his fever begins to recede.",
+    "The three adopted witch wards (Hermione, Esther, and Airam) are given royal guest rooms close to Ulrich's chamber and choose to stay together in a single room.",
+    "Princess Camelia visits the sisters the following morning, invites them to breakfast, and comforts Esther with news of Ulrich's ongoing recovery."
+   ],
+   "active_characters": [
+    "Camelia van Scargardia",
+    "Kalianta",
+    "Ulrich van Rubenhart",
+    "Esther",
+    "Hermione",
+    "Airam"
+   ]
+  },
+  {
+   "chapter": 178,
+   "title": "Morning Breakfast with the Princess",
+   "summary": "Princess Camelia shares a breakfast with Esther, Hermione, and Ayram under heavy guard the morning after the attack. She apologizes for her previous prejudices against witches, thanks the sisters for their compassion toward Lord Ulrich, and builds a genuine friendship with them. At the end of the meal, Hermione reminds Camelia about the gifts the sisters prepared, which were forgotten during the chaos.",
+   "key_events": [
+    "Princess Camelia shares a heavily guarded breakfast with Esther, Hermione, and Ayram.",
+    "Camelia thanks the sisters for caring for Lord Ulrich and apologizes for her initial bias against witches.",
+    "The group bonds over Ulrich's encouraging words and shared mutual respect.",
+    "Hermione reminds Camelia about the gifts the sisters prepared, prompting Camelia to ask to see them."
+   ],
+   "active_characters": [
+    "Princess Camelia",
+    "Esther",
+    "Hermione",
+    "Ayram"
+   ]
+  },
+  {
+   "chapter": 179,
+   "title": "The Rubenhart Gifts",
+   "summary": "Princess Camellia escorts Hermione, Esther, and Airam through the castle to the east wing reception hall to retrieve their family's gifts from the ceremony. After a guard explains that gifts are undergoing security inspections by royal magicians, he retrieves the Rubenhart family's red lacquer box. The group takes the box back to Camellia's private chambers, dismisses the guards, and opens it to find their three distinct packages, leaving them ready to open the gifts.",
+   "key_events": [
+    "Camellia escorts the three Rubenhart sisters to the east wing reception hall.",
+    "A castle guard informs them that ceremonial gifts are being inspected for safety and magical hazards by royal magicians.",
+    "The guard retrieves a large red lacquer gift box bearing the Rubenhart crest.",
+    "The group brings the box back to Camellia's private quarters and dismisses the guards.",
+    "Camellia opens the box, revealing the three wrapped packages belonging to Esther, Hermione, and Airam."
+   ],
+   "active_characters": [
+    "Camellia",
+    "Hermione",
+    "Esther",
+    "Airam",
+    "Guard"
+   ]
+  },
+  {
+   "chapter": 180,
+   "title": "Gifts of the Heart",
+   "summary": "Princess Camelia opens deeply personal gifts from Esther, Hermione, and Ayram—a comforting music box, a meaningful fountain pen, and a magical mirror showing her unburdened by fear. Deeply moved by their thoughtfulness, she expresses hope for their friendship before discovering an unexpected hidden item at the bottom of the box.",
+   "key_events": [
+    "Camelia opens Esther's handmade music box, meant to comfort her when she feels lonely.",
+    "Hermione presents a fountain pen and stationery set, symbolizing the importance of Camelia's own voice and thoughts.",
+    "Ayram gifts a magical silver mirror that reflects Camelia's face free from fear and fatigue.",
+    "Camelia expresses heartfelt gratitude, noting these are the first gifts chosen truly for her, and hopes for a lasting friendship.",
+    "Camelia discovers an unexpected hidden item beneath the lining of the gift box."
+   ],
+   "active_characters": [
+    "Camelia",
+    "Esther",
+    "Hermione",
+    "Ayram"
+   ]
+  },
+  {
+   "chapter": 181,
+   "title": "The Hidden Gift",
+   "summary": "At the bottom of her gift box, Princess Camellia discovers a mysterious dark-red package from Lord Ulrich von Rubenhart containing a camellia-shaped crystal pendant. A note from Ulrich reveals that the jewelry is a magical protective artifact designed to shield her from mortal danger and alert trusted allies. While her sisters debate its romantic or pragmatic nature, Camellia is deeply and genuinely moved by his quiet, protective gesture.",
+   "key_events": [
+    "Camellia discovers a hidden dark-red package at the bottom of her gift box.",
+    "The sisters realize the gift is secretly from Lord Ulrich von Rubenhart.",
+    "Camellia unwraps the box to find a camellia-shaped crystal pendant and a note from Ulrich.",
+    "The note explains the pendant's magical protective functions and signaling runes for emergencies.",
+    "The sisters react with romantic and pragmatic interpretations, while Camellia is sincerely touched."
+   ],
+   "active_characters": [
+    "Camellia",
+    "Esther",
+    "Hermione",
+    "Ayram",
+    "Ulrich von Rubenhart"
+   ]
+  },
+  {
+   "chapter": 182,
+   "title": "У постели Ульриха",
+   "summary": "Калиanta навещает выздоравливающего Ульриха в его комнате. Наблюдая за ним, она погружается в воспоминания о том, как он защитил ее во время недавней опасности в бальном зале. Поддавшись порыву, она касается его руки, их пальцы переплетаются, и в самый неожиданный момент Ульрих приходит в сознание.",
+   "key_events": [
+    "Калианта приходит в гостевую комнату к раненому Ульриху.",
+    "Она вспоминает события ночного бального зала и то, как Ульрих закрыл ее собой.",
+    "Калианта трогает руку Ульриха, и они переплетают пальцы.",
+    "Ульрих просыпается и смотрит на Калианту."
+   ],
+   "active_characters": [
+    "Калианта",
+    "Ульрих"
+   ]
+  },
+  {
+   "chapter": 183,
+   "title": "Awakening and Interrogation",
+   "summary": "Ulrich wakes up a day after the demonic attack to find Queen Kalianta sitting by his bedside. During a tense conversation, she interrogates him regarding his foreknowledge of the assassination attempt and his orchestration of the king's absence, seeing right through his flimsy excuses about a suspicious, terrible musician.",
+   "key_events": [
+    "Ulrich wakes up and finds Queen Kalianta holding his hand to her chest.",
+    "Ulrich learns that his wards, the Rubenhart sisters, are safe in the castle.",
+    "Kalianta questions Ulrich about how he anticipated the attack and manipulated the king's absence.",
+    "Ulrich gives a weak excuse blaming a bad musician's mask and violin playing, which Kalianta clearly doubts.",
+    "Approaching footsteps announce the arrival of Ulrich's wards, prompting Kalianta to leave him to rest."
+   ],
+   "active_characters": [
+    "Ulrich Rubenhart",
+    "Kalianta"
+   ]
+  },
+  {
+   "chapter": 184,
+   "title": "Ulrich's Awakening",
+   "summary": "Ulrich regains consciousness following his battle, prompting emotional visits from Ester, Hermione, Ayram, Queen Kalianta, and Princess Camelia. The atmosphere shifts when Camelia displays a protective pendant gifted to her by Ulrich, causing a mix of quiet jealousy, misunderstanding, and inquiry from the other women.",
+   "key_events": [
+    "Ulrich wakes up and is emotionally embraced by a crying Ester.",
+    "Hermione and Ayram arrive to check on Ulrich, masking their worry.",
+    "Princess Camelia visits and shows the magical pendant Ulrich secretly gave her.",
+    "Hermione feels slighted and Ester feels envious over the personal nature of the gift.",
+    "Queen Kalianta questions Ulrich about the gift to her daughter before departing."
+   ],
+   "active_characters": [
+    "Ulrich",
+    "Ester",
+    "Hermione",
+    "Ayram",
+    "Princess Camelia",
+    "Queen Kalianta"
+   ]
+  },
+  {
+   "chapter": 185,
+   "title": "Shadows and Sisters",
+   "summary": "Following the thwarted assassination attempt on the Queen, Ulrich recovers and speaks briefly with Princess Camellia, then with his adopted sisters. He startles them by revealing that his estate is willed to them, prompting deep loyalty from Esther and Hermione, while Airam contemplates her future as a witch. Afterward, Ulrich meets with his commander Hendrick, ordering him to secretly protect the sisters and watch out for a mysterious black-haired man, while pondering his precarious political position.",
+   "key_events": [
+    "Princess Camellia checks on Ulrich's recovery and departs.",
+    "Ulrich informs the sisters of his plan to leave at night and reveals they are his legal heirs.",
+    "Esther and Hermione express deep attachment and loyalty to Ulrich, whereas Airam wrestles with her nature as a witch.",
+    "Hendrick reports on the Citadel lockdown and confirms the sisters are safe under guard.",
+    "Ulrich commands Hendrick to secretly protect the sisters and look out for a suspicious black-haired man.",
+    "Ulrich reflects on the consequences of interfering with the assassination plot and his standing with Zagon."
+   ],
+   "active_characters": [
+    "Ulrich",
+    "Camellia",
+    "Esther",
+    "Hermione",
+    "Airam",
+    "Hendrick"
+   ]
+  },
+  {
+   "chapter": 186,
+   "title": "Recovery and the Royal Dinner",
+   "summary": "Ulrich leaves his bed despite medical advice and dresses himself, reflecting on the long-term physical toll of abusing fast-acting healing potions during past injuries. Afterward, a guard escorts him to the royal dining hall, where he joins Queen Kalianta, Princess Camelia, and the three sisters for dinner.",
+   "key_events": [
+    "Ulrich ignores the doctors' recommendations to stay in bed and gets dressed independently.",
+    "He reflects on the severe exhaustion and side effects caused by overusing healing potions after the incident in the Forgotten Depths.",
+    "A royal guard escorts Ulrich to the castle's dining hall.",
+    "Ulrich joins Queen Kalianta, Princess Camelia, Ester, Hermione, and Airam for dinner while King Antonius remains absent."
+   ],
+   "active_characters": [
+    "Ulrich",
+    "Maids",
+    "Royal Guard",
+    "Queen Kalianta",
+    "Princess Camelia",
+    "Ester",
+    "Hermione",
+    "Airam"
+   ]
+  },
+  {
+   "chapter": 187,
+   "title": "Обед в королевском замке",
+   "summary": "Во время изысканного обеда в замке Ульрих сообщает королеве Калианте, что покинет его вместе с сестрами сегодняшней ночью. В ходе трапезы обсуждаются планы поступления девочек в Академию Аркадия. Ульрих проявляет скрытую заботу и строгость к подопечным, после чего уединяется с королевой для беседы перед их отъездом.",
+   "key_events": [
+    "Совместный обед Ульриха, сестер, королевы Калианты и принцессы Камелии.",
+    "Ульрих решает перенести отъезд на сегодняшнюю ночь, удивляя королеву.",
+    "Обсуждение будущего девочек и их поступления в Академию Аркадия.",
+    "Ульрих проявляет строгость и заботу, контролируя поведение Айрам и Гермионы за столом.",
+    "Калианта вызывает Ульриха на разговор тет-а-тет перед отъездом."
+   ],
+   "active_characters": [
+    "Калианта",
+    "Ульрих",
+    "Гермиона",
+    "Эстер",
+    "Айрам",
+    "Камелия"
+   ]
+  },
+  {
+   "chapter": 188,
+   "title": "The Queen's Private Audience",
+   "summary": "Queen Calianta pulls Ulrich aside for a private conversation in her chambers. They discuss Ulrich's secret information network regarding demons, his unexpected protection of three young witches, and King Antonias's hostile wrath. Calianta acknowledges his vital help to the Crown, and they align on the escalating threat of the demons.",
+   "key_events": [
+    "Ulrich and Queen Calianta move to her private chambers for a confidential discussion.",
+    "Calianta and Ulrich discuss his intelligence network, which relies on a controlled, secretive arrangement with demons to thwart their plans.",
+    "Calianta questions Ulrich's defense and adoption of the three witch girls, contrasting his actions with King Antonias's cruel campaign against peaceful villagers.",
+    "Calianta assures Ulrich she will protect him from the King's anger, especially after Ulrich saved her life.",
+    "They agree on the rising and mysterious threat posed by the demons."
+   ],
+   "active_characters": [
+    "Ulrich von Rubenhart",
+    "Calianta van Skargardia"
+   ]
+  }
+ ],
+ "proposals": [
+  {
+   "english_term": "mana core",
+   "russian_term": "магическое ядро / мана-ядро",
+   "category": "other",
+   "confidence": 0.7,
+   "status": "candidate",
+   "source_chapter": "Chapter 6 Seeking a New Core",
+   "reason": "QA synonym update",
+   "declension_policy": "auto"
+  },
+  {
+   "english_term": "Father of Magic",
+   "russian_term": "Отец Магии / Отцом Магии",
+   "category": "other",
+   "confidence": 0.7,
+   "status": "candidate",
+   "source_chapter": "Chapter 6 Seeking a New Core",
+   "reason": "QA synonym update",
+   "declension_policy": "auto"
+  },
+  {
+   "english_term": "Estate",
+   "russian_term": "Поместье / Поместья",
+   "category": "other",
+   "confidence": 0.7,
+   "status": "candidate",
+   "source_chapter": "Chapter 91 Thoughtful Ulrich",
+   "reason": "QA synonym update",
+   "declension_policy": "auto"
+  },
+  {
+   "english_term": "Witches",
+   "russian_term": "Ведьмы / ведьм",
+   "category": "other",
+   "confidence": 0.7,
+   "status": "candidate",
+   "source_chapter": "Chapter 106 If Ulrich Dies...",
+   "reason": "QA synonym update",
+   "declension_policy": "auto"
+  },
+  {
+   "english_term": "runes",
+   "russian_term": "руны / Рун",
+   "category": "other",
+   "confidence": 0.7,
+   "status": "candidate",
+   "source_chapter": "Chapter 91 Thoughtful Ulrich",
+   "reason": "QA synonym update",
+   "declension_policy": "auto"
+  },
+  {
+   "english_term": "Count",
+   "russian_term": "Граф / графа",
+   "category": "other",
+   "confidence": 0.7,
+   "status": "candidate",
+   "source_chapter": "Chapter 115 Unwanted Attention",
+   "reason": "QA synonym update",
+   "declension_policy": "auto"
+  },
+  {
+   "english_term": "Rubenhart House",
+   "russian_term": "Дом Рубенхарт / Дома Рубенхарт",
+   "category": "other",
+   "confidence": 0.7,
+   "status": "candidate",
+   "source_chapter": "Chapter 103 Reaching the Skargardian Capital",
+   "reason": "QA synonym update",
+   "declension_policy": "auto"
+  },
+  {
+   "english_term": "Skargardian",
+   "russian_term": "скаргардский / скаргардскую",
+   "category": "other",
+   "confidence": 0.7,
+   "status": "candidate",
+   "source_chapter": "Chapter 104 Copper Guild",
+   "reason": "QA synonym update",
+   "declension_policy": "auto"
+  },
+  {
+   "english_term": "Listener",
+   "russian_term": "Слушатель / Слушателем",
+   "category": "other",
+   "confidence": 0.7,
+   "status": "candidate",
+   "source_chapter": "Chapter 104 Copper Guild",
+   "reason": "QA synonym update",
+   "declension_policy": "auto"
+  },
+  {
+   "english_term": "Skargardian Kingdom",
+   "russian_term": "Скардарское королевство / скаргардское королевство",
+   "category": "other",
+   "confidence": 0.7,
+   "status": "candidate",
+   "source_chapter": "Chapter 105 Ashen Stag",
+   "reason": "QA synonym update",
+   "declension_policy": "auto"
+  },
+  {
+   "english_term": "Duke",
+   "russian_term": "герцог / герцогом",
+   "category": "other",
+   "confidence": 0.7,
+   "status": "candidate",
+   "source_chapter": "Chapter 115 Unwanted Attention",
+   "reason": "QA synonym update",
+   "declension_policy": "auto"
+  },
+  {
+   "english_term": "The Crown",
+   "russian_term": "Корона / престол",
+   "category": "other",
+   "confidence": 0.7,
+   "status": "candidate",
+   "source_chapter": "Chapter 116 Duke Gravenberg",
+   "reason": "QA synonym update",
+   "declension_policy": "auto"
+  },
+  {
+   "english_term": "Marquis Rommels",
+   "russian_term": "Маркиз Роммельс",
+   "category": "Person",
+   "confidence": 0.8,
+   "status": "candidate",
+   "source_chapter": null,
+   "reason": null,
+   "declension_policy": "auto"
+  },
+  {
+   "english_term": "Silas",
+   "russian_term": "Силас",
+   "category": "Person",
+   "confidence": 0.8,
+   "status": "candidate",
+   "source_chapter": null,
+   "reason": null,
+   "declension_policy": "auto"
+  },
+  {
+   "english_term": "Ceres",
+   "russian_term": "Церера",
+   "category": "Person",
+   "confidence": 0.8,
+   "status": "candidate",
+   "source_chapter": null,
+   "reason": null,
+   "declension_policy": "auto"
+  },
+  {
+   "english_term": "Duke Gravenberg",
+   "russian_term": "герцог Гравенберг",
+   "category": "Title",
+   "confidence": 0.8,
+   "status": "candidate",
+   "source_chapter": null,
+   "reason": null,
+   "declension_policy": "auto"
+  },
+  {
+   "english_term": "Crown Prince",
+   "russian_term": "наследный принц",
+   "category": "Title",
+   "confidence": 0.8,
+   "status": "candidate",
+   "source_chapter": null,
+   "reason": null,
+   "declension_policy": "auto"
+  },
+  {
+   "english_term": "Skargardian Keep",
+   "russian_term": "Скаргардская цитадель",
+   "category": "Location",
+   "confidence": 0.8,
+   "status": "candidate",
+   "source_chapter": null,
+   "reason": null,
+   "declension_policy": "auto"
+  },
+  {
+   "english_term": "mana stone",
+   "russian_term": "камень маны",
+   "category": "Item",
+   "confidence": 0.8,
+   "status": "candidate",
+   "source_chapter": null,
+   "reason": null,
+   "declension_policy": "auto"
+  },
+  {
+   "english_term": "Blue Scar",
+   "russian_term": "Голубой Шрам",
+   "category": "Location",
+   "confidence": 0.8,
+   "status": "candidate",
+   "source_chapter": null,
+   "reason": null,
+   "declension_policy": "auto"
+  }
+ ],
+ "operator_queue": [
+  {
+   "english": "The Maelstrom of Forgotten Depths",
+   "russian": "Водоворот Забытых Глубин",
+   "variants": [
+    "Водоворот Забытых Глубин"
+   ],
+   "category": "Location",
+   "reason": "article_term"
+  },
+  {
+   "english": "The Scar",
+   "russian": "Шрам",
+   "variants": [
+    "Шрам"
+   ],
+   "category": "Location",
+   "reason": "article_term"
+  },
+  {
+   "english": "the Maelstrom",
+   "russian": "Водоворот",
+   "variants": [
+    "Водоворот"
+   ],
+   "category": "Location",
+   "reason": "article_term"
+  },
+  {
+   "english": "Mark",
+   "russian": "Марк",
+   "variants": [
+    "Марк"
+   ],
+   "category": "Person",
+   "reason": "common_word"
+  },
+  {
+   "english": "The Den",
+   "russian": "Логово",
+   "variants": [
+    "Логово"
+   ],
+   "category": "Location",
+   "reason": "article_term"
+  },
+  {
+   "english": "The Crown",
+   "russian": "Корона",
+   "variants": [
+    "Корона"
+   ],
+   "category": "Concept",
+   "reason": "article_term"
+  },
+  {
+   "english": "The Coven",
+   "russian": "Ковен",
+   "variants": [
+    "Ковен"
+   ],
+   "category": "Faction",
+   "reason": "article_term"
+  },
+  {
+   "english": "The Witch",
+   "russian": "Ведьма",
+   "variants": [
+    "Ведьма"
+   ],
+   "category": "Title",
+   "reason": "article_term"
+  },
+  {
+   "english": "The Ashen Stag",
+   "russian": "«Пепельный олень»",
+   "variants": [
+    "«Пепельный олень»"
+   ],
+   "category": "Location",
+   "reason": "article_term"
+  },
+  {
+   "english": "the kingdom",
+   "russian": "королевство",
+   "variants": [
+    "королевство"
+   ],
+   "category": "Location",
+   "reason": "article_term"
+  },
+  {
+   "english": "dance",
+   "russian": "танец",
+   "variants": [
+    "танец",
+    "танцпола",
+    "танцевальный паркет, паркет",
+    "танец, танцевать",
+    "на танец",
+    "паркет",
+    "танцевальный пол"
+   ],
+   "category": "Concept",
+   "reason": "common_word"
+  },
+  {
+   "english": "the sisters",
+   "russian": "сёстры",
+   "variants": [
+    "сёстры",
+    "сестёры"
+   ],
+   "category": "Concept",
+   "reason": "article_term"
+  },
+  {
+   "english": "the novel",
+   "russian": "роман",
+   "variants": [
+    "роман",
+    "первоисточнике"
+   ],
+   "category": "Concept",
+   "reason": "article_term"
+  },
+  {
+   "english": "the protagonist",
+   "russian": "протагонист",
+   "variants": [
+    "протагонист"
+   ],
+   "category": "Concept",
+   "reason": "article_term"
+  },
+  {
+   "english": "the Queen's image",
+   "russian": "образ королевы",
+   "variants": [
+    "образ королевы"
+   ],
+   "category": "Concept",
+   "reason": "article_term"
+  },
+  {
+   "english": "the Queen",
+   "russian": "Королева",
+   "variants": [
+    "Королева",
+    "правительницу"
+   ],
+   "category": "Title",
+   "reason": "article_term"
+  },
+  {
+   "english": "the traditional dance",
+   "russian": "традиционный танец",
+   "variants": [
+    "традиционный танец",
+    "в традиционном танце",
+    "до традиционного танца"
+   ],
+   "category": "Concept",
+   "reason": "article_term"
+  },
+  {
+   "english": "the ballroom",
+   "russian": "бальный зал",
+   "variants": [
+    "бальный зал",
+    "танцевального зала",
+    "бальный зал, зал",
+    "зала",
+    "танцевального зала, бального зала, танцевальной площадки",
+    "из бального зала",
+    "бальному залу",
+    "по залу"
+   ],
+   "category": "Location",
+   "reason": "article_term"
+  },
+  {
+   "english": "the corridor",
+   "russian": "коридор",
+   "variants": [
+    "коридор"
+   ],
+   "category": "Location",
+   "reason": "article_term"
+  },
+  {
+   "english": "the dais",
+   "russian": "помост",
+   "variants": [
+    "помост"
+   ],
+   "category": "Location",
+   "reason": "article_term"
+  },
+  {
+   "english": "the King",
+   "russian": "король",
+   "variants": [
+    "король"
+   ],
+   "category": "Title",
+   "reason": "article_term"
+  },
+  {
+   "english": "the masked musician",
+   "russian": "музыкант в маске",
+   "variants": [
+    "музыкант в маске",
+    "полумаскированного музыканта",
+    "полумаскированный скрипач",
+    "человек в маске"
+   ],
+   "category": "Person",
+   "reason": "article_term"
+  },
+  {
+   "english": "the false violinist",
+   "russian": "фальшивый скрипач",
+   "variants": [
+    "фальшивый скрипач",
+    "фальшивый музыкант"
+   ],
+   "category": "Person",
+   "reason": "article_term"
+  },
+  {
+   "english": "the assassin",
+   "russian": "убийца",
+   "variants": [
+    "убийца"
+   ],
+   "category": "Person",
+   "reason": "article_term"
+  },
+  {
+   "english": "the royal dance",
+   "russian": "королевский танец",
+   "variants": [
+    "королевский танец"
+   ],
+   "category": "Concept",
+   "reason": "article_term"
+  },
+  {
+   "english": "the royal dais",
+   "russian": "королевский помост",
+   "variants": [
+    "королевский помост",
+    "королевское возвышение"
+   ],
+   "category": "Other",
+   "reason": "article_term"
+  },
+  {
+   "english": "The Phoenix Heart",
+   "russian": "Сердце Феникса",
+   "variants": [
+    "Сердце Феникса"
+   ],
+   "category": "Item",
+   "reason": "article_term"
+  },
+  {
+   "english": "The Keep",
+   "russian": "Цитадель",
+   "variants": [
+    "Цитадель"
+   ],
+   "category": "Location",
+   "reason": "article_term"
+  },
+  {
+   "english": "The Camellia Ward",
+   "russian": "Оберег «Камелия»",
+   "variants": [
+    "Оберег «Камелия»"
+   ],
+   "category": "Item",
+   "reason": "article_term"
+  }
+ ],
+ "verdicts": [
+  {
+   "chapter": 138,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Paragraph count mismatch: 71 source paragraphs vs 73 translated.",
+     "Narrative em-dash density is high (5.4/1000 words). Prefer commas, periods, or restructuring over dashes.",
+     "Gerund density is high (4.3/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "Consider varying the rhythm of short paragraphs for smoother flow in long dialogue passages.",
+     "In a few places, the translation uses 'она' for Airam (e.g., 'она отказывалась опускать охрану'), which is grammatically correct but could be made clearer to avoid momentary ambiguity."
+    ],
+    "score": 8.5,
+    "synonym_updates": [
+     {
+      "english_term": "Witch",
+      "found_translation": "ведьм"
+     },
+     {
+      "english_term": "Witches",
+      "found_translation": "ведьм"
+     },
+     {
+      "english_term": "talent",
+      "found_translation": "дар"
+     },
+     {
+      "english_term": "past life",
+      "found_translation": "прошлая жизнь"
+     },
+     {
+      "english_term": "novel",
+      "found_translation": "роман"
+     },
+     {
+      "english_term": "estate",
+      "found_translation": "поместье"
+     }
+    ],
+    "semantic_checks": [],
+    "issue_codes": [],
+    "title": "Chapter 138 A Dance with Airam [4]",
+    "judged_text_sha256": "f2cb46e76cb0f1dd0f3dca7187096a82b698de670587b8938db53b5b1554927d",
+    "approved_effects_done": true
+   }
+  },
+  {
+   "chapter": 139,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Remove generic AI-style phrasing: несмотря на то, что.",
+     "Consider whether 'Так жить было добрее.' perfectly captures the nuance of 'That was a kinder way to live.' in this context.",
+     "Check the phrase 'выстланную сомнением' for naturalness; 'lined with doubt' might be rendered more idiomatically, though it is not incorrect."
+    ],
+    "score": 8.0,
+    "synonym_updates": [
+     {
+      "english_term": "demons",
+      "found_translation": "Демоны"
+     },
+     {
+      "english_term": "Knights",
+      "found_translation": "рыцари"
+     },
+     {
+      "english_term": "Resistance",
+      "found_translation": "сопротивление"
+     }
+    ],
+    "semantic_checks": [],
+    "issue_codes": [],
+    "title": "Chapter 139 A Dance with Airam [5]",
+    "judged_text_sha256": "86f6422a21335f50c50d5a3fe67edf8c721afd0c211e5d2b8a7dd314bc59782a",
+    "approved_effects_done": true
+   }
+  },
+  {
+   "chapter": 140,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Gender inconsistency for 'Ulrich': 13 translated sentence(s) use the opposite gender of the source's 'femn' — verify these sentences.",
+     "Gerund density is high (5.0/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "Consider using 'однако' instead of 'но' in a few places to vary sentence rhythm, but current use is natural.",
+     "In the sentence 'Сказала она.', consider merging with previous paragraph for smoother flow: '— Тогда я применю колдовство, — сказала она.'"
+    ],
+    "score": 8.5,
+    "synonym_updates": [
+     {
+      "english_term": "Witch",
+      "found_translation": "удочерённая ведьма"
+     },
+     {
+      "english_term": "magic",
+      "found_translation": "магия"
+     },
+     {
+      "english_term": "witchcraft",
+      "found_translation": "колдовство"
+     }
+    ],
+    "semantic_checks": [],
+    "issue_codes": [],
+    "title": "Chapter 140 A Dance with Airam [6]",
+    "judged_text_sha256": "f154307f841536233d8a624fb38fb7193933d148761e30df2c5a8e632322f1fc"
+   }
+  },
+  {
+   "chapter": 141,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Dialogue line count differs from the original (29 vs 21); check for dropped or merged dialogue lines.",
+     "Gerund density is high (4.3/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "Consider varying sentence openings to avoid repetitive 'Он' and 'Она' at the beginning of consecutive paragraphs.",
+     "The phrase 'Он позволял ей прибегать к колдовству...' is a bit long; could be split for better rhythm."
+    ],
+    "score": 8.5,
+    "synonym_updates": [
+     {
+      "english_term": "past life",
+      "found_translation": "прошлая жизнь"
+     },
+     {
+      "english_term": "talent",
+      "found_translation": "дар"
+     },
+     {
+      "english_term": "house",
+      "found_translation": "Дом"
+     },
+     {
+      "english_term": "hypocrites",
+      "found_translation": "Лицемеры"
+     },
+     {
+      "english_term": "witchcraft",
+      "found_translation": "колдовство"
+     }
+    ],
+    "semantic_checks": [],
+    "issue_codes": [],
+    "title": "Chapter 141 Hypocrites",
+    "judged_text_sha256": "74ffc9e68122a0c9bd122c124fe77b22c336ff1d92cc9bcd6a52bbf30a580fb5"
+   }
+  },
+  {
+   "chapter": 142,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Gerund density is high (3.5/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "The translation is faithful and fluent. Minor consideration: the use of 'напротив' for 'on the other hand' is acceptable; 'впрочем' could be reconsidered for variety, but no action needed."
+    ],
+    "score": 8.5,
+    "synonym_updates": [
+     {
+      "english_term": "dance floor",
+      "found_translation": "танцевального зала"
+     },
+     {
+      "english_term": "the dance floor",
+      "found_translation": "танцпола"
+     },
+     {
+      "english_term": "ballroom",
+      "found_translation": "бального зала"
+     },
+     {
+      "english_term": "the ballroom",
+      "found_translation": "бальному залу"
+     },
+     {
+      "english_term": "dance",
+      "found_translation": "паркет"
+     },
+     {
+      "english_term": "dance floor",
+      "found_translation": "паркет"
+     }
+    ],
+    "semantic_checks": [],
+    "issue_codes": [],
+    "title": "Chapter 142 Ulrich Searching The Assassin",
+    "judged_text_sha256": "5b8998e0b02d9618125469f9bcf0509992118a1cd29e9f891f21e496a9e9aeb2",
+    "approved_effects_done": true
+   }
+  },
+  {
+   "chapter": 143,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Dialogue line count differs from the original (53 vs 34); check for dropped or merged dialogue lines.",
+     "Gender inconsistency for 'Ulrich': 12 translated sentence(s) use the opposite gender of the source's 'femn' — verify these sentences.",
+     "Consider revising the phrase 'Невозможным в угоду' to a more natural Russian expression.",
+     "The sentence 'Он не говорил ей бросить своё положение...' is good, but 'пожирать каждую её частицу' could be slightly more idiomatic."
+    ],
+    "score": 8.5,
+    "synonym_updates": [
+     {
+      "english_term": "Shallowness",
+      "found_translation": "Показная покорность"
+     }
+    ],
+    "semantic_checks": [],
+    "issue_codes": [],
+    "title": "Chapter 143 You Are Not The Queen",
+    "judged_text_sha256": "bc53e72ef584ddfeb25789a2a05038a6c364197be43a0b74b9d76c8b88f3de5f"
+   }
+  },
+  {
+   "chapter": 145,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Canonical dictionary terms are missing from translation (names/characters — the LLM judge verifies Names/Gender): Julian -> Джулиан.",
+     "Canonical dictionary terms appear only partially in translation (possible synonym or shortened form): Crown Prince Albert -> кронпринц Альберт, royal dais -> королевское возвышение.",
+     "The phrase 'Не то чтобы Ульрих этого не знал, прочитал роман' feels slightly awkward in Russian; consider 'Ульрих, прочитавший роман, знал об этом' or a more natural construction."
+    ],
+    "score": 8.5,
+    "synonym_updates": [],
+    "semantic_checks": [],
+    "issue_codes": [],
+    "title": "Chapter 145 Astrid’s Theory",
+    "judged_text_sha256": "6ce6fe1e552dfcfe99821956351eaea87f799ad3bca32f7d16d8d55886cdd2e7"
+   }
+  },
+  {
+   "chapter": 146,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Gerund density is high (7.3/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "Simile density is high (4.2/1000 words: словно/будто/подобно). Keep at most one comparison per paragraph.",
+     "Consider varying sentence openings to avoid repetitive gerund constructions, though current usage is within acceptable literary norms.",
+     "Review the use of 'Умно.' at the beginning: ensure it carries the same sarcastic or admiring tone as the source 'Smart.'"
+    ],
+    "score": 8.5,
+    "synonym_updates": [
+     {
+      "english_term": "dance",
+      "found_translation": "танец"
+     },
+     {
+      "english_term": "quartet",
+      "found_translation": "квартет"
+     },
+     {
+      "english_term": "Skargardian royal crest",
+      "found_translation": "королевский герб Скаргардии"
+     }
+    ],
+    "semantic_checks": [],
+    "issue_codes": [],
+    "title": "Chapter 146 Spy Musician",
+    "judged_text_sha256": "47f51a520f988555a53464037f6c21ee401bba507309e45fcd12e0ee283b8257"
+   }
+  },
+  {
+   "chapter": 148,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Gender inconsistency for 'Astrid': 2 translated sentence(s) use the opposite gender of the source's 'femn' — verify these sentences.",
+     "Gerund density is high (4.7/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "The translation is fluent and natural. No changes needed."
+    ],
+    "score": 8.5,
+    "synonym_updates": [
+     {
+      "english_term": "royal dais",
+      "found_translation": "королевский помост"
+     },
+     {
+      "english_term": "the dais",
+      "found_translation": "помост"
+     },
+     {
+      "english_term": "the royal dais",
+      "found_translation": "королевский помост"
+     },
+     {
+      "english_term": "violin case",
+      "found_translation": "футляр для скрипки"
+     },
+     {
+      "english_term": "wineglass",
+      "found_translation": "бокал"
+     }
+    ],
+    "semantic_checks": [],
+    "issue_codes": [],
+    "title": "Chapter 148 How To Prevent Kaliantha’s Assassination Attempt [3]",
+    "judged_text_sha256": "81fbb37e7e7c8cf48416c670232f4d424b75fe149e4478d808dd8b11790f1ebc"
+   }
+  },
+  {
+   "chapter": 149,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Canonical dictionary terms appear only partially in translation (possible synonym or shortened form): royal dais -> королевское возвышение.",
+     "Consider replacing 'К счастью,' with a more neutral connector like 'К его удаче,' to reduce filler connector density.",
+     "Consider varying the use of 'И всё же' to avoid repetition.",
+     "Check that the character 'Джулиан' is consistently masculine in future chapters, as his role as heir might be gender-specific."
+    ],
+    "score": 8.5,
+    "synonym_updates": [
+     {
+      "english_term": "Lady",
+      "found_translation": "леди"
+     },
+     {
+      "english_term": "Princess",
+      "found_translation": "принцесса"
+     },
+     {
+      "english_term": "Count Rubenhart",
+      "found_translation": "граф Рубенхарт"
+     },
+     {
+      "english_term": "Duke Markus",
+      "found_translation": "герцог Маркус"
+     },
+     {
+      "english_term": "the masked musician",
+      "found_translation": "человек в маске"
+     },
+     {
+      "english_term": "the false violinist",
+      "found_translation": "фальшивый скрипач"
+     },
+     {
+      "english_term": "royal dance",
+      "found_translation": "королевский танец"
+     }
+    ],
+    "semantic_checks": [],
+    "issue_codes": [],
+    "title": "Chapter 149 Astrid Wants To Help [1]",
+    "judged_text_sha256": "850f6de8dd055c265bcf83da1dcb03a29878857a5446c79741774bc5c2a4c26f",
+    "approved_effects_done": true
+   }
+  },
+  {
+   "chapter": 150,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Consider replacing 'полумаскированного музыканта' with 'музыкант в маске' to align more closely with the canonical dictionary term and maintain consistency in descriptions."
+    ],
+    "score": 9.0,
+    "synonym_updates": [],
+    "semantic_checks": [],
+    "issue_codes": [],
+    "title": "Chapter 150 Astrid Wants To Help [2]",
+    "judged_text_sha256": "34c31034fbe6ea2659da22827365f136f40e252c5029b7c26e78c8b0d9072e28"
+   }
+  },
+  {
+   "chapter": 151,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Canonical dictionary terms are missing from translation (names/characters — the LLM judge verifies Names/Gender): Mark -> Марк, Gravenberg -> Графенберг.",
+     "Gerund density is high (3.5/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "Consider reducing the number of gerund clauses (деепричастные обороты) for a more natural Russian literary style."
+    ],
+    "score": 8.5,
+    "synonym_updates": [
+     {
+      "english_term": "masked musician",
+      "found_translation": "музыкант в маске"
+     },
+     {
+      "english_term": "false violinist",
+      "found_translation": "фальшивый скрипач"
+     },
+     {
+      "english_term": "half-mask",
+      "found_translation": "полумаска"
+     },
+     {
+      "english_term": "silver cord",
+      "found_translation": "серебряный шнур"
+     },
+     {
+      "english_term": "violin case",
+      "found_translation": "футляр для скрипки"
+     },
+     {
+      "english_term": "dais",
+      "found_translation": "помост"
+     },
+     {
+      "english_term": "refreshment table",
+      "found_translation": "стол с закусками"
+     },
+     {
+      "english_term": "noble children",
+      "found_translation": "дети знати"
+     },
+     {
+      "english_term": "the ballroom",
+      "found_translation": "бальный зал"
+     },
+     {
+      "english_term": "formal waltz",
+      "found_translation": "официальный вальс"
+     }
+    ],
+    "semantic_checks": [],
+    "issue_codes": [],
+    "title": "Chapter 151 Astrid Wants To Help [3]",
+    "judged_text_sha256": "670e8acb63ede59b88d511cf91132d0deee200ecdb10c714840811752df2e9ee",
+    "approved_effects_done": true
+   }
+  },
+  {
+   "chapter": 152,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Gender inconsistency for 'Kaliantha': 3 translated sentence(s) use the opposite gender of the source's 'masc' — verify these sentences.",
+     "Gerund density is high (4.2/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "Consider varying sentence rhythm in the scene where Ulrich reflects on Zagon's plan to reduce monotony."
+    ],
+    "score": 8.5,
+    "synonym_updates": [
+     {
+      "english_term": "royal platform",
+      "found_translation": "королевская платформа"
+     },
+     {
+      "english_term": "the dais",
+      "found_translation": "помост"
+     }
+    ],
+    "semantic_checks": [],
+    "issue_codes": [],
+    "title": "Chapter 152 How To Dance with the Skargardian Queen",
+    "judged_text_sha256": "c33ddb68803d9ea5f7d97069f347ebe11b810335042014613efacc2ffee1bb37"
+   }
+  },
+  {
+   "chapter": 153,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Dialogue line count differs from the original (98 vs 72); check for dropped or merged dialogue lines.",
+     "Gerund density is high (4.8/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "The translation is fluent and literary. Minor improvements could be considered, such as varying sentence structure in a few places, but overall the prose reads naturally."
+    ],
+    "score": 8.5,
+    "synonym_updates": [
+     {
+      "english_term": "dais",
+      "found_translation": "королевское возвышение"
+     }
+    ],
+    "semantic_checks": [],
+    "issue_codes": [],
+    "title": "Chapter 153 The Sisters and Louise [1]",
+    "judged_text_sha256": "860673b52f586588dfb8b0074dc4c5048049941ae0a1eb3f71a0a4335a53f3e9",
+    "approved_effects_done": true
+   }
+  },
+  {
+   "chapter": 155,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Canonical dictionary terms appear only partially in translation (possible synonym or shortened form): royal dais -> королевское возвышение.",
+     "Gerund density is high (4.0/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "Minor: 'якшается' in Hermione's line is colloquial; a literary alternative like 'общается' or 'проводит время' might be considered.",
+     "Minor: 'Истинно так' is a literal translation of 'Indeed' — 'Верно' or 'Вот именно' would be more natural.",
+     "Minor: 'Он не станет колебаться, если ты его позовёшь.' — The source says 'He will not hesitate to follow you.' More precise: 'Он не станет колебаться и последует за тобой.'"
+    ],
+    "score": 8.5,
+    "synonym_updates": [
+     {
+      "english_term": "harpist",
+      "found_translation": "арфисткой"
+     }
+    ],
+    "semantic_checks": [],
+    "issue_codes": [],
+    "title": "Chapter 155 Hurt Louise",
+    "judged_text_sha256": "7612f9e1500f2496edd02fcf7b880c33b0856b5bbfbeb7f53925137b8c884cd8",
+    "approved_effects_done": true
+   }
+  },
+  {
+   "chapter": 156,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Gerund density is high (3.6/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "Consider breaking up a few longer sentences for pacing, e.g., 'Caramel' is not present, but the sentence 'Спина оставалась прямой у трона, руки лежали на коленях.' could be slightly rephrased for smoother flow.",
+     "Minor: 'И вина Рубенхартов тоже' — could use a slightly more natural connector like 'А также вина Рубенхартов' to match the source's casual tone."
+    ],
+    "score": 8.5,
+    "synonym_updates": [
+     {
+      "english_term": "the royal dais",
+      "found_translation": "королевскому помосту"
+     },
+     {
+      "english_term": "the dais",
+      "found_translation": "помосту"
+     },
+     {
+      "english_term": "dance",
+      "found_translation": "танец"
+     },
+     {
+      "english_term": "the ballroom",
+      "found_translation": "бальный зал"
+     }
+    ],
+    "semantic_checks": [],
+    "issue_codes": [],
+    "title": "Chapter 156 Louise Dealing with the Drunk King [1]",
+    "judged_text_sha256": "da05726dae5004f874158ebc1feee71e8beede4e76f8d0b57474904ced377d3f"
+   }
+  },
+  {
+   "chapter": 157,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Gerund density is high (4.1/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "Minor: Consider reducing gerund usage slightly for smoother flow (e.g., 'привлечь внимание' instead of 'привлечение внимания'), but current frequency is within acceptable limits."
+    ],
+    "score": 8.5,
+    "synonym_updates": [
+     {
+      "english_term": "Skargardian Keep",
+      "found_translation": "Крепости Скаргард"
+     },
+     {
+      "english_term": "Crown Prince",
+      "found_translation": "кронпринцы"
+     }
+    ],
+    "semantic_checks": [],
+    "issue_codes": [],
+    "title": "Chapter 157 Louise Dealing with the Drunk King [2]",
+    "judged_text_sha256": "c5f6f31df304282bd5536f0c374d22b4916060f83074d8eb4d4b629f7de1e223",
+    "approved_effects_done": true
+   }
+  },
+  {
+   "chapter": 158,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Dialogue line count differs from the original (49 vs 36); check for dropped or merged dialogue lines.",
+     "Consider adding a brief pause or transitional phrase after 'Ульрих остался у стены.' to enhance narrative flow.",
+     "The translation is very faithful; minor adjustments could make it slightly more idiomatic in a few places (e.g., 'Он обдумывал вопрос дольше, чем следовало' could be 'Он раздумывал над вопросом дольше, чем следовало')."
+    ],
+    "score": 10.0,
+    "synonym_updates": [],
+    "semantic_checks": [],
+    "issue_codes": [],
+    "title": "Chapter 158 There, That Makes Me Feel Better",
+    "judged_text_sha256": "0f3569c98e926ca77544c8a913a7c2ae90afdcf5eb1b311c598f8b79f195d064",
+    "approved_effects_done": true
+   }
+  },
+  {
+   "chapter": 159,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Gerund density is high (3.4/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "Consider varying the use of 'она сказала' / 'сказала она' in dialogue tags where appropriate.",
+     "The translation is faithful and fluent; a few minor word choices can be refined for more natural Russian literary style."
+    ],
+    "score": 8.5,
+    "synonym_updates": [
+     {
+      "english_term": "the false violinist",
+      "found_translation": "Фальшивого скрипача"
+     },
+     {
+      "english_term": "the masked musician",
+      "found_translation": "Музыкант в маске"
+     },
+     {
+      "english_term": "royal dais",
+      "found_translation": "королевскому помосту"
+     }
+    ],
+    "semantic_checks": [],
+    "issue_codes": [],
+    "title": "Chapter 159 Communication is Important",
+    "judged_text_sha256": "f154a7e53fa8eece3e323ecc512d1b26f0cd5c70d339a74149b4e36a62a44224",
+    "approved_effects_done": true
+   }
+  },
+  {
+   "chapter": 160,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Canonical dictionary terms are missing from translation (names/characters — the LLM judge verifies Names/Gender): Faith -> Фейт.",
+     "Gender inconsistency for 'Louise': 2 translated sentence(s) use the opposite gender of the source's 'masc' — verify these sentences.",
+     "Consider varying sentence lengths in the opening paragraphs to enhance rhythm.",
+     "In the phrase 'Затем она исчезла', clarify the subject to avoid ambiguity.",
+     "Minor: 'человек в маске' for 'masked violinist' is acceptable, but 'полумаскированный скрипач' is used elsewhere; consistency preferable."
+    ],
+    "score": 8.5,
+    "synonym_updates": [
+     {
+      "english_term": "Skargardia",
+      "found_translation": "Скаргардия"
+     },
+     {
+      "english_term": "the kingdom",
+      "found_translation": "королевство"
+     },
+     {
+      "english_term": "demons",
+      "found_translation": "демоны"
+     },
+     {
+      "english_term": "magic",
+      "found_translation": "магия"
+     }
+    ],
+    "semantic_checks": [],
+    "issue_codes": [],
+    "title": "Chapter 160 The Princess’ and Queen’s Speeches",
+    "judged_text_sha256": "42484a80591f8aec0482aac14c513b8dc44588e27cd0541f24576bdb647cc796"
+   }
+  },
+  {
+   "chapter": 161,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Canonical dictionary terms are missing from translation (common words, likely not terms of this novel): Veins -> Жилы.",
+     "Dialogue line count differs from the original (51 vs 36); check for dropped or merged dialogue lines.",
+     "Gender inconsistency for 'Kaliantha': 6 translated sentence(s) use the opposite gender of the source's 'masc' — verify these sentences.",
+     "Gerund density is high (3.6/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "Simile density is high (5.8/1000 words: словно/будто/подобно). Keep at most one comparison per paragraph.",
+     "The translation is fluent and natural. No changes needed."
+    ],
+    "score": 8.5,
+    "synonym_updates": [],
+    "semantic_checks": [],
+    "issue_codes": [],
+    "title": "Chapter 161 Furious King Antonias",
+    "judged_text_sha256": "848c4b79d00a66a2eeb7e04b19a5f88518cd408af806ac5607931e21e88ee80f"
+   }
+  },
+  {
+   "chapter": 162,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Dialogue line count differs from the original (22 vs 16); check for dropped or merged dialogue lines.",
+     "Gerund density is high (4.2/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "В предложении 'Калианта отшатнулась — такого она не ожидала' можно заменить тире на двоеточие или переформулировать для более плавного повествования.",
+     "Фраза 'Ульрих держал её прямо и не притягивал ближе, чем было необходимо' звучит немного сухо; можно добавить лёгкий оттенок осторожности или напряжённости в жесте.",
+     "В 'Он прервал её так мягко, что слова не прозвучали дальше узкого пространства между ними' — 'не прозвучали' можно заменить на 'не разнеслись' или 'не вышли за пределы' для естественности."
+    ],
+    "score": 8.5,
+    "synonym_updates": [
+     {
+      "english_term": "ballroom",
+      "found_translation": "зал"
+     },
+     {
+      "english_term": "dance floor",
+      "found_translation": "танцевальный пол"
+     },
+     {
+      "english_term": "ceremonial dance",
+      "found_translation": "церемониальный танец"
+     }
+    ],
+    "semantic_checks": [],
+    "issue_codes": [],
+    "title": "Chapter 162 We may speak now, through a dance",
+    "judged_text_sha256": "d381dfdd8153c87a53c946070547e62fddbabfa6a9695a68d634a69ae29932ef"
+   }
+  },
+  {
+   "chapter": 163,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Canonical dictionary terms are missing from translation (model used a synonym or variant — verify with AUTO-GLOSSARY): bow -> смычок.",
+     "Canonical dictionary terms are missing from translation (common words, likely not terms of this novel): Lady -> Леди / госпожа.",
+     "Gerund density is high (3.6/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "Consider breaking up some of the longer sentences for better pacing, especially in the middle paragraphs where multiple clauses are joined by commas.",
+     "The phrase 'следов лет, проведённых со сжатым оружием' is slightly awkward; consider 'следы лет, когда он сжимал оружие' for improved flow."
+    ],
+    "score": 8.5,
+    "synonym_updates": [
+     {
+      "english_term": "Skargardian history",
+      "found_translation": "история Скаргарда"
+     }
+    ],
+    "semantic_checks": [],
+    "issue_codes": [],
+    "title": "Chapter 163 A Dance With Queen Kaliantha [1]",
+    "judged_text_sha256": "402ef3099c2d7f71f7e22b94f2b89e317a2d8e1fc65a2f324d3dc8b94052ca45"
+   }
+  },
+  {
+   "chapter": 167,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Narrative em-dash density is high (7.1/1000 words). Prefer commas, periods, or restructuring over dashes.",
+     "Gerund density is high (4.4/1000 words). Vary sentence openings instead of leaning on деепричастные обороты."
+    ],
+    "score": 8.5,
+    "synonym_updates": [],
+    "semantic_checks": [],
+    "title": "Chapter 167 A Dance With Queen Kaliantha [5]",
+    "judged_text_sha256": "64f4b97f5567ed19789005337d08fdc1bc638e46f6c727b294cbe418af6d0634",
+    "confidence": 1.0,
+    "issue_codes": [],
+    "qa_fingerprint": "e85f8147295eea788736219d322ec2212d3f1215589c71afa5aab6db45daade7",
+    "resume_policy_signature": "cc6f380b3d1d72478ec1264d85036066b229dd407334da71026cff50dcdb6af2",
+    "approved_effects_done": true
+   }
+  },
+  {
+   "chapter": 168,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "В предложении «Освободи полумаскированный музыкант...» можно рассмотреть вариант «выпусти музыкант в маске» для более естественного звучания при описании применения магии."
+    ],
+    "score": 9.8,
+    "synonym_updates": [
+     {
+      "english_term": "novel",
+      "found_translation": "книги"
+     },
+     {
+      "english_term": "the novel",
+      "found_translation": "первоисточнике"
+     },
+     {
+      "english_term": "the Queen",
+      "found_translation": "правительницу"
+     },
+     {
+      "english_term": "the Queen",
+      "found_translation": "королевы"
+     }
+    ],
+    "semantic_checks": [],
+    "title": "Chapter 168 A Dance With Queen Kaliantha [6]",
+    "judged_text_sha256": "71187cf7664cdb596aa617310a433825619f2f9e306008debcfb07a874215534",
+    "confidence": 1.0,
+    "issue_codes": [],
+    "qa_fingerprint": "40c7a5ba15a6433b078a36180958b805f1b1122c4d5d4979034cd9c5393d5ae2",
+    "resume_policy_signature": "ced325931f176781bd30060aedaf2a1d277bf77f0016be37da259aa9ece236cf",
+    "approved_effects_done": true
+   }
+  },
+  {
+   "chapter": 169,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Gerund density is high (5.2/1000 words). Vary sentence openings instead of leaning on деепричастные обороты."
+    ],
+    "score": 8.5,
+    "synonym_updates": [],
+    "semantic_checks": [],
+    "title": "Chapter 169 A Dance With Queen Kaliantha [7]",
+    "judged_text_sha256": "e66665a0e2eff2bade23b9ee8eb7d32f1f54bce814f00e64809d0fae058e9077",
+    "confidence": 1.0,
+    "issue_codes": [],
+    "qa_fingerprint": "fbcc15e030495687fdba62a2e902fe711631a8136d8dc629440d413e30a09d15",
+    "resume_policy_signature": "096adadb51dec09e7b918feb829f0a748e096498fb8cc23013cf048ff87c3f4c",
+    "approved_effects_done": true
+   }
+  },
+  {
+   "chapter": 170,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [],
+    "score": 10.0,
+    "synonym_updates": [],
+    "semantic_checks": [],
+    "title": "Chapter 170 A Deadly Dance With The Assassins [1]",
+    "judged_text_sha256": "6a91020d375e07d2a5eb2b447211c5b994002e54abeefa3606ff4e1f66c2089d",
+    "confidence": 1.0,
+    "issue_codes": [],
+    "qa_fingerprint": "766a44c00e9df5e19875335c49e9d9a9ee7e7aa929c1ba1dfe5afce9fce8dc45",
+    "resume_policy_signature": "6e5ce7d67ea28614042560f9f57a734d6e137619d43be33be1b51761da7d6f6c",
+    "checkpoint_reused": true
+   }
+  },
+  {
+   "chapter": 171,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [],
+    "score": 10.0,
+    "synonym_updates": [],
+    "semantic_checks": [],
+    "title": "Chapter 171 A Deadly Dance With The Assassins [2]",
+    "judged_text_sha256": "be5979c9ad7d5f850965320d97a65168c7a4bf11327c0260aa3178786883e9c7",
+    "confidence": 1.0,
+    "issue_codes": [],
+    "qa_fingerprint": "8355b29d1eb4b66c807fc8e17d52973a0c257e42b4136988d6ef580fbc941d0c",
+    "resume_policy_signature": "6e5ce7d67ea28614042560f9f57a734d6e137619d43be33be1b51761da7d6f6c",
+    "checkpoint_reused": true
+   }
+  },
+  {
+   "chapter": 172,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Dialogue line count differs from the original (31 vs 23); check for dropped or merged dialogue lines.",
+     "Gender inconsistency for 'Kaliantha': 9 translated sentence(s) use the opposite gender of the source's 'masc' — verify these sentences.",
+     "Gerund density is high (7.5/1000 words). Vary sentence openings instead of leaning on деепричастные обороты."
+    ],
+    "score": 8.5,
+    "synonym_updates": [],
+    "semantic_checks": [],
+    "title": "Chapter 172 A Deadly Dance With The Assassins [3]",
+    "judged_text_sha256": "87c1b2d1f9ed7c54d1095a80d413552fb4bb68c96f642ecf42b7c376208e2fce",
+    "confidence": 1.0,
+    "issue_codes": [],
+    "qa_fingerprint": "eb570497abf062fbba047cf94dfd2b29c784f5fc2c8a7d2af8bb3f887df6c62f",
+    "resume_policy_signature": "6e5ce7d67ea28614042560f9f57a734d6e137619d43be33be1b51761da7d6f6c",
+    "checkpoint_reused": true
+   }
+  },
+  {
+   "chapter": 173,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Gerund density is high (5.7/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "The translation is of exceptionally high quality, demonstrating complete adherence to the canonical dictionary, perfect semantic alignment with the source text, and natural, elegant Russian prose."
+    ],
+    "score": 8.5,
+    "synonym_updates": [],
+    "semantic_checks": [],
+    "title": "Chapter 173 A Deadly Dance With The Assassins [4]",
+    "judged_text_sha256": "ff6f44fefc4cc914035921d21bc21214fc72e784a1ef894489e914a654c975c3",
+    "confidence": 1.0,
+    "issue_codes": [],
+    "qa_fingerprint": "38b5254bfc3dccc1e405902d0f543d079872611ffdfa24b8d5b360dedab7c905",
+    "resume_policy_signature": "6e5ce7d67ea28614042560f9f57a734d6e137619d43be33be1b51761da7d6f6c",
+    "approved_effects_done": true,
+    "checkpoint_reused": true
+   }
+  },
+  {
+   "chapter": 174,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Gender inconsistency for 'Kaliantha': 3 translated sentence(s) use the opposite gender of the source's 'masc' — verify these sentences.",
+     "Gerund density is high (7.4/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "Перевод выполнен на высоком художественном уровне, лексика точная, термины соблюдены безупречно."
+    ],
+    "score": 8.5,
+    "synonym_updates": [],
+    "semantic_checks": [],
+    "title": "Chapter 174 Aftermath of the Dance [1]",
+    "judged_text_sha256": "c55c54f14dac97efb939cacfe7e413946b0f50be52d22e67826e8edc6501a170",
+    "confidence": 1.0,
+    "issue_codes": [],
+    "qa_fingerprint": "1af3fcb63d55297ac87548a47679cbcfe75f0e7b1aaf0275416df0231702ba5c",
+    "resume_policy_signature": "6e5ce7d67ea28614042560f9f57a734d6e137619d43be33be1b51761da7d6f6c",
+    "approved_effects_done": true
+   }
+  },
+  {
+   "chapter": 175,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Gerund density is high (4.5/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "The translation is exceptionally fluent, natural, and accurate, strictly adhering to all canonical dictionary terms and maintaining proper narrative tone without machine-style markers."
+    ],
+    "score": 8.5,
+    "synonym_updates": [],
+    "semantic_checks": [],
+    "title": "Chapter 175 Aftermath of the Dance [2]",
+    "judged_text_sha256": "329c8e9722a1b6493d97c78fe2b517d9a8de026a658782438ff40602e85c3af7",
+    "confidence": 1.0,
+    "issue_codes": [],
+    "qa_fingerprint": "0830411ddf23ecbcb6fc7b25ce8be40205efa8a2025c576dbaedfeb4e648b49e",
+    "resume_policy_signature": "096adadb51dec09e7b918feb829f0a748e096498fb8cc23013cf048ff87c3f4c",
+    "approved_effects_done": true
+   }
+  },
+  {
+   "chapter": 176,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Canonical dictionary terms are missing from translation (common words, likely not terms of this novel): Veins -> Жилы.",
+     "Gerund density is high (6.4/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "Перевод выполнен на высоком литературном уровне, все термины соблюдены, смысловых искажений и маркеров машинного перевода не обнаружено."
+    ],
+    "score": 8.5,
+    "synonym_updates": [],
+    "semantic_checks": [],
+    "title": "Chapter 176 Aftermath of the Dance [3]",
+    "judged_text_sha256": "3f2a3eb5dddcadb785be3fee99f1f0b8e14fa41159d119fe8fd6552544007e1b",
+    "confidence": 1.0,
+    "issue_codes": [],
+    "qa_fingerprint": "08a66d7bff470ba2a3d6c0faf869f3565a10a3872b6d485ba7511ebdca20a03a",
+    "resume_policy_signature": "6e5ce7d67ea28614042560f9f57a734d6e137619d43be33be1b51761da7d6f6c",
+    "approved_effects_done": true,
+    "checkpoint_reused": true
+   }
+  },
+  {
+   "chapter": 177,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Dialogue line count differs from the original (20 vs 14); check for dropped or merged dialogue lines.",
+     "Gerund density is high (6.9/1000 words). Vary sentence openings instead of leaning on деепричастные обороты."
+    ],
+    "score": 8.5,
+    "synonym_updates": [
+     {
+      "english_term": "daggers",
+      "found_translation": "клинки"
+     }
+    ],
+    "semantic_checks": [],
+    "title": "Chapter 177 Aftermath of the Dance [4]",
+    "judged_text_sha256": "7c57b53f7bdc4b3e8ddec9efa9e953da69a28bee68490fc466f26de04f487963",
+    "confidence": 1.0,
+    "issue_codes": [],
+    "qa_fingerprint": "8a093ae3031ab22fe6a9478ef18012d903a47586fc1d1f2df8e477aeda1936bb",
+    "resume_policy_signature": "96aa2f8fef0577a5de61e871672a25da9aab765839e318a44b72db9e175f2300"
+   }
+  },
+  {
+   "chapter": 178,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [
+     {
+      "code": "semantic_other",
+      "severity": "low",
+      "message": "Grammatical declension error in the surname 'Рубенхарт': 'на графа Рубенхартом' uses the instrumental case instead of the accusative case.",
+      "source_evidence": "looking at Count Rubenhart as though he was hurt",
+      "translation_evidence": "смотрели на графа Рубенхартом так, будто он пострадал",
+      "terms": [],
+      "is_grounded": false
+     }
+    ],
+    "suggestions": [
+     "Dialogue line count differs from the original (76 vs 56); check for dropped or merged dialogue lines.",
+     "Paragraph count mismatch: 136 source paragraphs vs 144 translated.",
+     "Gerund density is high (5.4/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "Change 'на графа Рубенхартом' to 'на графа Рубенхарта' to fix case agreement.",
+     "Ungrounded issue requires re-check: Grammatical declension error in the surname 'Рубенхарт': 'на графа Рубенхартом' uses the instrumental case instead of the accusative case."
+    ],
+    "score": 8.5,
+    "synonym_updates": [],
+    "semantic_checks": [],
+    "title": "Chapter 178 Camellia’s Apologies",
+    "judged_text_sha256": "aa873c5a9255003757d8bb1d5a47c3878a79c59be582a5e06a2c6eb55ac8e730",
+    "confidence": 0.0,
+    "issue_codes": [],
+    "qa_fingerprint": "ea8bc7c0eb7640ed4febe6629df5847f6a0965ef77d38e2d9cf94833e5e30624",
+    "resume_policy_signature": "6e5ce7d67ea28614042560f9f57a734d6e137619d43be33be1b51761da7d6f6c",
+    "checkpoint_reused": true
+   }
+  },
+  {
+   "chapter": 179,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [
+     {
+      "code": "semantic_other",
+      "severity": "low",
+      "message": "Minor grammatical and agreement glitches: a dangling gerund ('Оказавшись там, толстое дерево...') where the door is grammatically the subject of the gerund instead of the knight, and pronoun gender mismatch ('Какое мне открыть первым?' referring to masculine packages/gifts).",
+      "source_evidence": "Once inside, the thick wood shut behind him with a loud sound. / Which should I open first?",
+      "translation_evidence": "Оказавшись там, толстое дерево за его спиной громко захлопнулось. / Какое мне открыть первым?",
+      "terms": [],
+      "is_grounded": false
+     }
+    ],
+    "suggestions": [
+     "Gerund density is high (6.8/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "Restructure the door closing sentence to avoid the dangling gerund (e.g., 'Оказавшись внутри, он услышал, как тяжёлая дверь захлопнулась' or 'Стоило ему войти, как толстое дерево за его спиной громко захлопнулось').",
+     "Adjust the pronoun agreement for the gifts/packages to masculine ('Какой мне открыть первым?' or 'Какой из них открыть первым?').",
+     "Ungrounded issue requires re-check: Minor grammatical and agreement glitches: a dangling gerund ('Оказавшись там, толстое дерево...') where the door is grammatically the subject of the gerund instead of the knight, and pronoun gender mismatch ('Какое мне открыть первым?' referring to masculine packages/gifts)."
+    ],
+    "score": 8.5,
+    "synonym_updates": [],
+    "semantic_checks": [],
+    "title": "Chapter 179 The Sisters’ Gifts For Camellia [1]",
+    "judged_text_sha256": "afb08b7a3808e158cfa1228cba491cf99e9a46c3d7a63f7cf2f4fb1d5ddaaca3",
+    "confidence": 0.0,
+    "issue_codes": [],
+    "qa_fingerprint": "efdd1145d13aa74ffb683e70396ebe4552de7e093e9844ff30edced372cab1d5",
+    "resume_policy_signature": "426419f35642382355d49a6c01ce6cf018cff808d15037bfaaa9fa033b0ce85a",
+    "checkpoint_reused": true
+   }
+  },
+  {
+   "chapter": 180,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Simile density is high (4.0/1000 words: словно/будто/подобно). Keep at most one comparison per paragraph.",
+     "Ensure proper Russian dialogue punctuation when author's words precede direct speech (use quotation marks inline or a newline with an em-dash instead of ': —')."
+    ],
+    "score": 8.5,
+    "synonym_updates": [],
+    "semantic_checks": [],
+    "title": "Chapter 180 The Sisters’ Gifts For Camellia [2]",
+    "judged_text_sha256": "c45708a80395c10bd678d2987f2a7712e48bcb53bcbb06eaac19ab24d2416ae3",
+    "confidence": 1.0,
+    "issue_codes": [],
+    "qa_fingerprint": "708b0f1e6d85e3266bfee747f2579543b914151c851cd0d38ddddcca8c83ba86",
+    "resume_policy_signature": "6e5ce7d67ea28614042560f9f57a734d6e137619d43be33be1b51761da7d6f6c",
+    "checkpoint_reused": true
+   }
+  },
+  {
+   "chapter": 181,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [
+     {
+      "code": "semantic_other",
+      "severity": "low",
+      "message": "Airam's reaction was rendered with a slight inaccuracy, adding a head shake not present in the source sentence.",
+      "source_evidence": "Airam’s gaze narrowed as her attention sharpened at once, her dark eyes fixed upon the crimson wrapping as if the parcel itself had become suspicious.",
+      "translation_evidence": "Айрам сузила глаза и осмотрела его, но тоже коротко покачала головой.",
+      "terms": [],
+      "is_grounded": false
+     }
+    ],
+    "suggestions": [
+     "Canonical dictionary terms are missing from translation (common words, likely not terms of this novel): Veins -> Жилы.",
+     "Gerund density is high (4.2/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "Ensure Airam's first reaction precisely mirrors the English source description regarding her narrowing gaze and fixed attention.",
+     "Ungrounded issue requires re-check: Airam's reaction was rendered with a slight inaccuracy, adding a head shake not present in the source sentence."
+    ],
+    "score": 8.5,
+    "synonym_updates": [],
+    "semantic_checks": [],
+    "title": "Chapter 181 Ulrich’s Gift For Camellia",
+    "judged_text_sha256": "d4b9879d86a0eb10cf433ae1eb2128990984bcec746d3c94ffde6ebe0a3cfea4",
+    "confidence": 0.0,
+    "issue_codes": [],
+    "qa_fingerprint": "f12d58459c8274cc17dc783ceb878c9c224872cf97bb5af904adc178390ec96e",
+    "resume_policy_signature": "096adadb51dec09e7b918feb829f0a748e096498fb8cc23013cf048ff87c3f4c",
+    "approved_effects_done": true
+   }
+  },
+  {
+   "chapter": 182,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Paragraph count mismatch: 139 source paragraphs vs 142 translated.",
+     "Narrative em-dash density is high (5.5/1000 words). Prefer commas, periods, or restructuring over dashes."
+    ],
+    "score": 8.5,
+    "synonym_updates": [],
+    "semantic_checks": [],
+    "title": "Chapter 182 Kaliantha Visits The Bedridden Ulrich [1]",
+    "judged_text_sha256": "c3f48b0aa96574a3274f2d68d99f70b6590d2afe1c2d76d1a622d0beeff9b5e3",
+    "confidence": 1.0,
+    "issue_codes": [],
+    "qa_fingerprint": "8bab66f89ed99b703162bbd2708f54523360781d1c6940ec2fb9b665ab6fe742",
+    "resume_policy_signature": "6e5ce7d67ea28614042560f9f57a734d6e137619d43be33be1b51761da7d6f6c",
+    "approved_effects_done": true,
+    "checkpoint_reused": true
+   }
+  },
+  {
+   "chapter": 183,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Dialogue line count differs from the original (80 vs 59); check for dropped or merged dialogue lines.",
+     "Paragraph count mismatch: 187 source paragraphs vs 190 translated.",
+     "Filler connector density is high (4.6/1000 words: впрочем/однако/ведь/разумеется и т.п.). Remove connectors where the sentence works without them.",
+     "The translation is exceptionally fluent, natural, and maintains a high literary standard while strictly adhering to the canonical terminology and source text."
+    ],
+    "score": 8.5,
+    "synonym_updates": [],
+    "semantic_checks": [],
+    "title": "Chapter 183 Kaliantha Visits The Bedridden Ulrich [2]",
+    "judged_text_sha256": "02cbf89737ff1c65c09eec95aa4713e804a15b3782aec684aa8a60dd2addfb25",
+    "confidence": 1.0,
+    "issue_codes": [],
+    "qa_fingerprint": "8a2e35bba418d62ff5df68ec4f5e9adc7ef90919ebd30b93cd42109d91ce10bd",
+    "resume_policy_signature": "6e5ce7d67ea28614042560f9f57a734d6e137619d43be33be1b51761da7d6f6c",
+    "approved_effects_done": true,
+    "checkpoint_reused": true
+   }
+  },
+  {
+   "chapter": 184,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Gerund density is high (6.8/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "The translation is exceptionally well-written, maintaining high literary quality, precise emotional beats, and correct terminology throughout."
+    ],
+    "score": 8.5,
+    "synonym_updates": [],
+    "semantic_checks": [],
+    "title": "Chapter 184 Jealous Esther",
+    "judged_text_sha256": "746b236c8db57174afaec3ce529b474e1ed2dc55d32a6c11e45d3a3e5fcf14c0",
+    "confidence": 1.0,
+    "issue_codes": [],
+    "qa_fingerprint": "3ed4a3e949368dc769f25525722ede78d41f4bacbcfbf416cc1cf02b746d5049",
+    "resume_policy_signature": "6e5ce7d67ea28614042560f9f57a734d6e137619d43be33be1b51761da7d6f6c",
+    "approved_effects_done": true,
+    "checkpoint_reused": true
+   }
+  },
+  {
+   "chapter": 185,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Narrative em-dash density is high (5.0/1000 words). Prefer commas, periods, or restructuring over dashes.",
+     "Gerund density is high (5.0/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "The translation is of exceptionally high literary quality, capturing the tone, emotional depth, and precise terminology of the original English text."
+    ],
+    "score": 8.5,
+    "synonym_updates": [
+     {
+      "english_term": "Camellia pendant",
+      "found_translation": "кулон-камелию"
+     },
+     {
+      "english_term": "Rubenhart County",
+      "found_translation": "Графство Рубенхарт"
+     },
+     {
+      "english_term": "The Keep",
+      "found_translation": "Цитадель"
+     },
+     {
+      "english_term": "Her Majesty",
+      "found_translation": "Её Величество"
+     },
+     {
+      "english_term": "Zagon",
+      "found_translation": "Загон"
+     }
+    ],
+    "semantic_checks": [],
+    "title": "Chapter 185 You Have Us!",
+    "judged_text_sha256": "6fda2337748d2ed9d4325c7c55f7eda32cc13087ffff48c09ea5070387e16e14",
+    "confidence": 1.0,
+    "issue_codes": [],
+    "qa_fingerprint": "1c95b5e8d471df3b932332fca482c40711dc9685c6bdee00ec452fd787be6523",
+    "resume_policy_signature": "096adadb51dec09e7b918feb829f0a748e096498fb8cc23013cf048ff87c3f4c",
+    "approved_effects_done": true
+   }
+  },
+  {
+   "chapter": 186,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Gerund density is high (6.1/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "The translation is exceptionally fluent, accurate, and faithful to the original text while maintaining natural Russian phrasing."
+    ],
+    "score": 8.5,
+    "synonym_updates": [],
+    "semantic_checks": [],
+    "title": "Chapter 186 A Lunch With The Queen [1]",
+    "judged_text_sha256": "5f117f724331c75d14038aa6d19b040b702a8b7164df82c1ee9dce85bd83f9ce",
+    "confidence": 1.0,
+    "issue_codes": [],
+    "qa_fingerprint": "83c37c4d889376a9651f3a56e86fb6db7c87b754249bc68337ffa9799f11ac36",
+    "resume_policy_signature": "6e5ce7d67ea28614042560f9f57a734d6e137619d43be33be1b51761da7d6f6c",
+    "checkpoint_reused": true
+   }
+  },
+  {
+   "chapter": 187,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Canonical dictionary terms are missing from translation (common words, likely not terms of this novel): Root -> Корень.",
+     "Gender inconsistency for 'Ulrich': 19 translated sentence(s) use the opposite gender of the source's 'femn' — verify these sentences.",
+     "Gerund density is high (7.8/1000 words). Vary sentence openings instead of leaning on деепричастные обороты.",
+     "Consider rendering 'serving spoon' as 'сервировочная ложка' rather than 'ложка для подачи' for slightly more natural culinary phrasing in Russian."
+    ],
+    "score": 8.5,
+    "synonym_updates": [],
+    "semantic_checks": [],
+    "title": "Chapter 187 A Lunch With The Queen [2]",
+    "judged_text_sha256": "99029e64b1583c34e6d0ff9510ea23907267a10ddb63791935de88e0f17f099d",
+    "confidence": 1.0,
+    "issue_codes": [],
+    "qa_fingerprint": "1228e64d819894a0849a49a9317f2c6cd596acf000112e82b3e964c0a9dd424a",
+    "resume_policy_signature": "6e5ce7d67ea28614042560f9f57a734d6e137619d43be33be1b51761da7d6f6c",
+    "approved_effects_done": true,
+    "checkpoint_reused": true
+   }
+  },
+  {
+   "chapter": 188,
+   "verdict": {
+    "pass_check": true,
+    "severity": "low",
+    "blocking_issues": [],
+    "issues": [],
+    "suggestions": [
+     "Dialogue line count differs from the original (42 vs 31); check for dropped or merged dialogue lines.",
+     "Narrative em-dash density is high (5.9/1000 words). Prefer commas, periods, or restructuring over dashes.",
+     "The translation is exceptionally fluent, faithful to the source, and adheres precisely to all canonical dictionary terms and stylistic constraints."
+    ],
+    "score": 8.5,
+    "synonym_updates": [],
+    "semantic_checks": [],
+    "title": "Chapter 188 Discussion with Kaliantha [1]",
+    "judged_text_sha256": "26b53da6ab7a07f15ba4197990a4e1ca7a3673df133d0391b08b809ef8282f95",
+    "confidence": 1.0,
+    "issue_codes": [],
+    "qa_fingerprint": "cbcf3e02f4f4b68c06ab8400f93d08fc994e566391b2a1978031b25d9727f793",
+    "resume_policy_signature": "6e5ce7d67ea28614042560f9f57a734d6e137619d43be33be1b51761da7d6f6c",
+    "approved_effects_done": true,
+    "checkpoint_reused": true
+   }
+  }
+ ]
+}
