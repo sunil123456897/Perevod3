@@ -28,6 +28,8 @@ import {
   repairSplitAndGluedParagraphs,
   checkNegationPolarity,
   repairNegationPolarityWithSource,
+  splitChapterParagraphs,
+  validateColabEndpointUrl,
   DEFAULT_LLM_PROVIDER_CONFIG,
   type CanonicalGlossary,
   type PipelineTransportAdapter,
@@ -893,5 +895,81 @@ test('Audit Phase 7 (DTW Unequal Alignment, Negation Polarity Check & Server GPU
   assert.ok(
     batchOut.updatedNovel.chapters[0]!.rusText.includes('Она не отступила.'),
     'Server verifyAndRepair must auto-heal dropped negation'
+  );
+});
+
+test('Audit Phase 8: splitChapterParagraphs index parity after system boxes, SSRF guard & versionHistory cap', async () => {
+  const testGlossary: CanonicalGlossary = {
+    realms: {},
+    characters: { 'Han Li': 'Хань Ли' },
+    sects_and_places: {},
+    system_and_terms: {},
+    units: {},
+  };
+
+  // 1. Multi-line system box joined with single \n, followed by narrative paragraph joined with \n\n
+  const chapterWithSystemBox = [
+    '---',
+    '[Система активирована]',
+    '[Уровень: 5]',
+    '---',
+    '',
+    'Хань Ли шагнул вперёд и посмотрел на клинок.',
+  ].join('\n');
+
+  const paras = splitChapterParagraphs(chapterWithSystemBox);
+  assert.equal(
+    paras.length,
+    5,
+    'splitChapterParagraphs must produce 5 line-indexed elements matching verifyAndRollbackStylistPass'
+  );
+  assert.equal(paras[4], 'Хань Ли шагнул вперёд и посмотрел на клинок.');
+
+  // Verify Pass 3 rollback checks index 4 against the narrative paragraph (not shifted to index 1)
+  const stylistRes = verifyAndRollbackStylistPass({
+    verifiedRusText: chapterWithSystemBox,
+    styledParagraphs: [
+      {
+        index: 4,
+        styledRusText: 'Хань Ли решительно шагнул вперёд и взглянул на клинок.',
+      },
+    ],
+    glossary: testGlossary,
+  });
+  assert.deepEqual(
+    stylistRes.acceptedParagraphIndices,
+    [4],
+    'Pass 3 must accept styled narrative paragraph at index 4 without system-box index shift'
+  );
+  assert.ok(
+    stylistRes.finalRusText.includes('Хань Ли решительно шагнул вперёд и взглянул на клинок.'),
+    'Styled paragraph at index 4 must be merged at the exact narrative position'
+  );
+
+  // 2. SSRF guard in validateColabEndpointUrl
+  assert.equal(
+    validateColabEndpointUrl('http://169.254.169.254/latest/meta-data').ok,
+    false,
+    'Cloud metadata link-local IP must be blocked'
+  );
+  assert.equal(
+    validateColabEndpointUrl('file:///etc/passwd').ok,
+    false,
+    'Non-HTTP schemes must be blocked'
+  );
+  assert.equal(
+    validateColabEndpointUrl('http://10.0.0.15:8080').ok,
+    false,
+    'RFC1918 LAN IP on arbitrary port must be blocked'
+  );
+  assert.equal(
+    validateColabEndpointUrl('https://demo-tunnel.trycloudflare.com').ok,
+    true,
+    'Valid Cloudflare tunnel URL must be allowed'
+  );
+  assert.equal(
+    validateColabEndpointUrl('http://localhost:11434').ok,
+    true,
+    'Local Ollama port 11434 must be allowed'
   );
 });

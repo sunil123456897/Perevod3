@@ -992,6 +992,9 @@ export async function runPipelineBatchOnNovel<TNovel extends NovelProject = Nove
         qaPassed: verified.verified,
         qaErrorCount: verified.lintReport.errorCount,
       });
+      if (workingHistory.length > 10) {
+        workingHistory.splice(0, workingHistory.length - 10);
+      }
     }
 
     const updatedChapter: ChapterRecord = {

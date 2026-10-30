@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sparkles,
   BookOpen,
@@ -41,12 +41,30 @@ export default function QuickStartWizard({
 }: QuickStartWizardProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
+  const [serverHasKey, setServerHasKey] = useState<boolean>(
+    Boolean(process.env.NEXT_PUBLIC_GEMINI_API_KEY)
+  );
+
+  useEffect(() => {
+    let mounted = true;
+    fetch('/api/pipeline')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (mounted && data && typeof data.hasServerApiKey === 'boolean') {
+          setServerHasKey(data.hasServerApiKey);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Find first untranslated chapter, or first chapter if all are translated
   const nextTargetChapter =
     activeNovel.chapters.find((c) => !c.translated) || activeNovel.chapters[0];
 
-  const hasApiKey = Boolean(process.env.NEXT_PUBLIC_GEMINI_API_KEY || true); // server-side env handled via API
+  const hasApiKey = Boolean(process.env.NEXT_PUBLIC_GEMINI_API_KEY) || serverHasKey;
   const isColabActive = llmConfig.provider === 'colab_ollama' && Boolean(llmConfig.colabEndpointUrl);
 
   if (isDismissed) {

@@ -546,6 +546,18 @@ export function normalizeRussianBookLayout(text: string): string {
   return joinParagraphsPreservingSystemBoxes(normalizedLines);
 }
 
+/**
+ * Canonical 0-based paragraph/line splitter compatible with `joinParagraphsPreservingSystemBoxes`
+ * (where system frames `--- ... ---` use single `\n` while narrative paragraphs use `\n\n`).
+ */
+export function splitChapterParagraphs(text: string): string[] {
+  return (text || '')
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+}
+
 export function alignChapterParagraphs(
   engText: string,
   rusText: string
@@ -555,16 +567,8 @@ export function alignChapterParagraphs(
   rusCount: number;
   hasDrift: boolean;
 } {
-  const engLines = engText
-    .replace(/\r\n/g, '\n')
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean);
-  const rusLines = rusText
-    .replace(/\r\n/g, '\n')
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean);
+  const engLines = splitChapterParagraphs(engText);
+  const rusLines = splitChapterParagraphs(rusText);
 
   const maxLen = Math.max(engLines.length, rusLines.length);
   const pairs: AlignedParagraphPair[] = [];
@@ -3784,10 +3788,53 @@ export const DEFAULT_LLM_PROVIDER_CONFIG: LlmProviderConfig = {
 export function normalizeColabEndpointUrl(rawUrl: string): string {
   const trimmed = (rawUrl || '').trim();
   if (!trimmed) return '';
+  if (/^(?:file|ftp|gopher|ws|wss|javascript|data):/i.test(trimmed)) return '';
   const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
   return withProto
     .replace(/\/+(?:v1\/chat\/completions|v1\/models|v1|api\/chat|api\/generate|api\/tags)\/?$/i, '')
     .replace(/\/+$/, '');
+}
+
+/**
+ * Validates a Colab / Ollama endpoint URL against SSRF to cloud metadata or non-HTTP schemes.
+ */
+export function validateColabEndpointUrl(rawUrl: string): {
+  ok: boolean;
+  normalizedUrl: string;
+  error?: string;
+} {
+  const normalized = normalizeColabEndpointUrl(rawUrl);
+  if (!normalized) {
+    return { ok: false, normalizedUrl: '', error: 'Empty or unsupported URL scheme' };
+  }
+  try {
+    const parsed = new URL(normalized);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return { ok: false, normalizedUrl: '', error: 'Only http:// and https:// are allowed' };
+    }
+    const host = parsed.hostname.toLowerCase();
+    // Block cloud metadata services, unspecified addresses & RFC1918 private LAN IPs (SSRF protection)
+    const isRfc1918 =
+      /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host) ||
+      /^192\.168\.\d{1,3}\.\d{1,3}$/.test(host) ||
+      /^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(host);
+    if (
+      host === '169.254.169.254' ||
+      host === 'metadata.google.internal' ||
+      host === '0.0.0.0' ||
+      host.startsWith('169.254.') ||
+      isRfc1918
+    ) {
+      return {
+        ok: false,
+        normalizedUrl: '',
+        error: 'Blocked internal metadata or private LAN host (SSRF guard)',
+      };
+    }
+    return { ok: true, normalizedUrl: normalized };
+  } catch {
+    return { ok: false, normalizedUrl: '', error: 'Invalid URL format' };
+  }
 }
 
 /**

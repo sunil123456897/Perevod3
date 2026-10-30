@@ -70,6 +70,7 @@ import {
   type DitingQualityReport,
   type SlidingWindowQueueTelemetry,
   type LlmProviderConfig,
+  type LintReport,
 } from '@/lib/qa-linter';
 import {
   INITIAL_NOVELS,
@@ -297,9 +298,11 @@ export default function PipelineStudioApp() {
   }, []);
 
   useEffect(() => {
-    if (isHydrated) {
+    if (!isHydrated) return;
+    const timer = setTimeout(() => {
       saveNovelsToStorage(novels);
-    }
+    }, 600);
+    return () => clearTimeout(timer);
   }, [novels, isHydrated]);
 
   const activeNovel = novels.find((n) => n.id === activeNovelId) || novels[0];
@@ -326,14 +329,28 @@ export default function PipelineStudioApp() {
     ]);
   };
 
+  const qaCacheRef = useRef<Map<string, { key: string; report: LintReport | null }>>(new Map());
+
   const chaptersWithQa = useMemo(() => {
+    const glossaryKey = JSON.stringify({
+      g: activeNovel.glossary,
+      m: activeNovel.glossaryMeta,
+      r: activeNovel.enabledRuleIds,
+    });
     return activeNovel.chapters.map((ch) => {
-      const report = ch.rusText.trim()
-        ? runQaLinter(ch.engText, ch.rusText, activeNovel.glossary, {
-            enabledRuleIds: activeNovel.enabledRuleIds,
-            glossaryMeta: activeNovel.glossaryMeta,
-          })
-        : null;
+      if (!ch.rusText.trim()) {
+        return { chapter: ch, report: null };
+      }
+      const cacheKey = `${ch.id}:${ch.engText.length}:${ch.rusText.length}:${ch.lastUpdated || ''}:${glossaryKey}`;
+      const cached = qaCacheRef.current.get(ch.id);
+      if (cached && cached.key === cacheKey) {
+        return { chapter: ch, report: cached.report };
+      }
+      const report = runQaLinter(ch.engText, ch.rusText, activeNovel.glossary, {
+        enabledRuleIds: activeNovel.enabledRuleIds,
+        glossaryMeta: activeNovel.glossaryMeta,
+      });
+      qaCacheRef.current.set(ch.id, { key: cacheKey, report });
       return {
         chapter: ch,
         report,
@@ -466,9 +483,11 @@ export default function PipelineStudioApp() {
 
   const executePipelineOnChapters = async (
     targetChapters: ChapterRecord[],
-    mode: PipelineMode
+    mode: PipelineMode,
+    novelOverride?: NovelProject
   ) => {
     if (targetChapters.length === 0 || isRunningPipeline) return;
+    const targetNovel = novelOverride || activeNovel;
     setIsRunningPipeline(true);
     abortRef.current = false;
 
@@ -479,7 +498,7 @@ export default function PipelineStudioApp() {
 
     try {
       const res = await runPipelineBatchOnNovel({
-        novel: activeNovel,
+        novel: targetNovel,
         targetChapterIds: targetChapters.map((c) => c.id),
         mode,
         autoCanonEnabled,
@@ -580,26 +599,26 @@ export default function PipelineStudioApp() {
   };
 
   const handleApproveStopGateAndTranslate = () => {
-    updateActiveNovel((novel) => {
-      const nextGlossary = { ...novel.glossary };
-      const nextMeta = { ...novel.glossaryMeta };
-      for (const term of stopGateTerms) {
-        if (!term.eng.trim() || !term.rus_suggested.trim()) continue;
-        nextGlossary[term.category] = {
-          ...(nextGlossary[term.category] || {}),
-          [term.eng.trim()]: term.rus_suggested.trim(),
-        };
-        nextMeta[term.eng.trim()] = {
-          ...nextMeta[term.eng.trim()],
-          gender: term.gender || 'M',
-        };
-      }
-      return {
-        ...novel,
-        glossary: nextGlossary,
-        glossaryMeta: nextMeta,
+    const nextGlossary = { ...activeNovel.glossary };
+    const nextMeta = { ...activeNovel.glossaryMeta };
+    for (const term of stopGateTerms) {
+      if (!term.eng.trim() || !term.rus_suggested.trim()) continue;
+      nextGlossary[term.category] = {
+        ...(nextGlossary[term.category] || {}),
+        [term.eng.trim()]: term.rus_suggested.trim(),
       };
-    });
+      nextMeta[term.eng.trim()] = {
+        ...nextMeta[term.eng.trim()],
+        gender: term.gender || 'M',
+      };
+    }
+    const nextNovel: NovelProject = {
+      ...activeNovel,
+      glossary: nextGlossary,
+      glossaryMeta: nextMeta,
+    };
+
+    updateActiveNovel(() => nextNovel);
 
     setShowStopGateModal(false);
     appendLog(
@@ -608,12 +627,10 @@ export default function PipelineStudioApp() {
       'success'
     );
 
-    setTimeout(() => {
-      const targets = activeNovel.chapters.filter(
-        (c) => c.number >= startChapter && c.number <= endChapter
-      );
-      executePipelineOnChapters(targets, 'full_5_phase');
-    }, 50);
+    const targets = nextNovel.chapters.filter(
+      (c) => c.number >= startChapter && c.number <= endChapter
+    );
+    executePipelineOnChapters(targets, 'full_5_phase', nextNovel);
   };
 
   /**

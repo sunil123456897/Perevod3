@@ -4,6 +4,7 @@ import {
   repairNegationPolarityWithSource,
   surgicalRepairDriftedParagraphs,
   alignChapterParagraphs,
+  splitChapterParagraphs,
   applySurgicalPatches,
   extractCsiCulturalNotes,
   evaluateDitingQuality,
@@ -96,14 +97,8 @@ export function repairSplitAndGluedParagraphs(
   appliedFixes: string[];
   repairedIndices: number[];
 } {
-  const engParas = engText
-    .split(/\r?\n\s*\r?\n/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  const rusParas = rusText
-    .split(/\r?\n\s*\r?\n/)
-    .map((p) => p.trim())
-    .filter(Boolean);
+  const engParas = splitChapterParagraphs(engText);
+  const rusParas = splitChapterParagraphs(rusText);
 
   if (engParas.length < 2 || rusParas.length < 2) {
     return { repairedRusText: rusText, appliedFixes: [], repairedIndices: [] };
@@ -1053,14 +1048,8 @@ export async function verifyAndRepairChapterAsync(
 
   const evaluateNeural = async (rusCandidate: string): Promise<ChapterNeuralAuditResult | undefined> => {
     if (!enableNeural) return undefined;
-    const engParas = input.engText
-      .split(/\r?\n\s*\r?\n/)
-      .map((p) => p.trim())
-      .filter(Boolean);
-    const rusParas = rusCandidate
-      .split(/\r?\n\s*\r?\n/)
-      .map((p) => p.trim())
-      .filter(Boolean);
+    const engParas = splitChapterParagraphs(input.engText);
+    const rusParas = splitChapterParagraphs(rusCandidate);
     if (options?.customNeuralEvaluator) {
       return options.customNeuralEvaluator(input.chapterNumber, engParas, rusParas, threshold);
     }
@@ -1129,14 +1118,8 @@ export async function verifyAndRepairChapterAsync(
       );
       if (targetIndices.length === 0) break;
 
-      const engParas = input.engText
-        .split(/\r?\n\s*\r?\n/)
-        .map((p) => p.trim())
-        .filter(Boolean);
-      const rusParas = currentVerif.rusText
-        .split(/\r?\n\s*\r?\n/)
-        .map((p) => p.trim())
-        .filter(Boolean);
+      const engParas = splitChapterParagraphs(input.engText);
+      const rusParas = splitChapterParagraphs(currentVerif.rusText);
 
       const promptBlock = targetIndices
         .filter((idx) => idx >= 0 && idx < engParas.length && idx < rusParas.length)

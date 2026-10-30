@@ -1,6 +1,7 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import {
   normalizeColabEndpointUrl,
+  validateColabEndpointUrl,
   extractResilientJsonFromLlm,
   applySurgicalPatches,
   type CanonicalGlossary,
@@ -185,10 +186,11 @@ export async function pingColabServer(endpointUrl: string): Promise<{
   serverType?: string;
   error?: string;
 }> {
-  const baseUrl = normalizeColabEndpointUrl(endpointUrl);
-  if (!baseUrl) {
-    return { ok: false, error: 'Endpoint URL is empty or invalid' };
+  const validation = validateColabEndpointUrl(endpointUrl);
+  if (!validation.ok) {
+    return { ok: false, error: validation.error || 'Endpoint URL is empty or invalid' };
   }
+  const baseUrl = validation.normalizedUrl;
 
   const t0 = Date.now();
   try {
@@ -262,6 +264,10 @@ export class ColabOllamaAdapter implements LlmInferencePort {
   async complete(req: LlmCompletionRequest): Promise<LlmCompletionResponse> {
     if (!this.endpointUrl) {
       throw new Error('Colab L4 endpoint URL is not configured');
+    }
+    const validation = validateColabEndpointUrl(this.endpointUrl);
+    if (!validation.ok) {
+      throw new Error(validation.error || 'Invalid Colab L4 endpoint URL');
     }
 
     const model = this.modelId;

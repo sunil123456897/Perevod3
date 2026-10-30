@@ -9,6 +9,8 @@ import {
   filterScoutedTermsWithAgentS,
   extractResilientJsonFromLlm,
   alignChapterParagraphs,
+  splitChapterParagraphs,
+  validateColabEndpointUrl,
   createPipelineLlmPort,
   pingColabServer,
   buildScoutPrompts,
@@ -42,6 +44,18 @@ import {
   type StylisticSpanDirective,
   type LiTransProQaRubricScores,
 } from '@/lib/qa-linter';
+
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    hasServerApiKey: Boolean(
+      process.env.GEMINI_API_KEY ||
+        process.env.GOOGLE_API_KEY ||
+        process.env.NEXT_PUBLIC_GEMINI_API_KEY
+    ),
+    hasColabUrl: Boolean(process.env.COLAB_OLLAMA_URL),
+  });
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -110,6 +124,17 @@ export async function POST(req: NextRequest) {
             ok: false,
             error:
               'Укажите URL туннеля Google Colab (например, https://xxxx.trycloudflare.com или http://localhost:11434).',
+          },
+          { status: 400 }
+        );
+      }
+
+      const urlValidation = validateColabEndpointUrl(colabUrl);
+      if (!urlValidation.ok) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: urlValidation.error,
           },
           { status: 400 }
         );
@@ -403,7 +428,7 @@ export async function POST(req: NextRequest) {
         twoPassCritic !== false &&
         (cappedDirectives.length > 0 || (otqsScore !== undefined && otqsScore < 8.5))
       ) {
-        const paragraphs = verifiedRusIntermediate.split(/\n\n+/).map((p) => p.trim());
+        const paragraphs = splitChapterParagraphs(verifiedRusIntermediate);
         const flawedForStylist = paragraphs
           .map((p, idx) => {
             const dirs = cappedDirectives.filter((d) => d.paragraphIndex === idx);

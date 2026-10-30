@@ -5,6 +5,8 @@ import {
   filterGlossaryForChapter,
   generateChapterMemorySummary,
   alignChapterParagraphs,
+  splitChapterParagraphs,
+  joinParagraphsPreservingSystemBoxes,
   detectTautologies,
   runQaLinter,
 } from './qa-linter.ts';
@@ -347,14 +349,8 @@ export function checkNegationPolarity(
   rusText: string
 ): NegationPolarityViolation[] {
   if (!engText || !rusText) return [];
-  const engParas = engText
-    .split(/\r?\n\s*\r?\n/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  const rusParas = rusText
-    .split(/\r?\n\s*\r?\n/)
-    .map((p) => p.trim())
-    .filter(Boolean);
+  const engParas = splitChapterParagraphs(engText);
+  const rusParas = splitChapterParagraphs(rusText);
 
   if (engParas.length === 0 || rusParas.length === 0) return [];
   const violations: NegationPolarityViolation[] = [];
@@ -408,14 +404,8 @@ export function repairNegationPolarityWithSource(
   if (!engText || !rusText) {
     return { repairedRusText: rusText, appliedFixes: [], repairedIndices: [] };
   }
-  const engParas = engText
-    .split(/\r?\n\s*\r?\n/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  const rusParas = rusText
-    .split(/\r?\n\s*\r?\n/)
-    .map((p) => p.trim())
-    .filter(Boolean);
+  const engParas = splitChapterParagraphs(engText);
+  const rusParas = splitChapterParagraphs(rusText);
 
   if (engParas.length === 0 || rusParas.length === 0) {
     return { repairedRusText: rusText, appliedFixes: [], repairedIndices: [] };
@@ -471,7 +461,7 @@ export function repairNegationPolarityWithSource(
   }
 
   return {
-    repairedRusText: rusParas.join('\n\n'),
+    repairedRusText: joinParagraphsPreservingSystemBoxes(rusParas),
     appliedFixes,
     repairedIndices,
   };
@@ -601,7 +591,7 @@ export function computeStylometricMetrics(rusText: string, engText = ''): Stylom
   const nominalizationPer100Words = (nominalCount / wordCount) * 100;
 
   // 5. Non-dialogue internal dash density per 100 words & paragraph-level nominalization hotspots
-  const paragraphs = rusText.split(/\r?\n\s*\r?\n/).filter((p) => p.trim().length > 0);
+  const paragraphs = splitChapterParagraphs(rusText);
   let internalDashes = 0;
   const nominalizationHotspotParagraphs: number[] = [];
   const BUREAUCRATIC_MARKERS =

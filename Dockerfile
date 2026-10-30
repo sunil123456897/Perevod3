@@ -1,7 +1,7 @@
 # Production Dockerfile for Autonomous Translation Studio (Next.js 15)
-# Zero-dependency, pure Alpine Node.js 20 multi-stage build
+# Zero-dependency, pure Alpine Node.js 22 multi-stage build
 
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 
 # Step 1: Install dependencies
 FROM base AS deps

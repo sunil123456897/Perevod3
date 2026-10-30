@@ -17,6 +17,7 @@ import {
   type PipelineTransportScoutResponse,
   type PipelineTransportTranslateRequest,
   type PipelineTransportTranslateResponse,
+  type PipelineTransportVerifyRequest,
 } from '../lib/pipeline-run-engine.ts';
 import {
   createPipelineLlmPort,
@@ -24,6 +25,7 @@ import {
   buildTranslatePass1Prompts,
   buildSurgicalCriticPass2Prompts,
   buildBlindStylistPass3Prompts,
+  buildSelfRepairPrompts,
   annotateSceneDialogueAndZeroPronouns,
   classifyScenePacingMode,
   selectContrastiveFewShotTriplets,
@@ -39,6 +41,7 @@ import {
   normalizeKoreanOneLineParagraphs,
   applySurgicalPatches,
   extractResilientJsonFromLlm,
+  splitChapterParagraphs,
   DEFAULT_LLM_PROVIDER_CONFIG,
   buildCharacterVoicePromptBlock,
   GENRE_PRESET_LABELS,
@@ -50,7 +53,7 @@ import {
 } from '../lib/qa-linter.ts';
 import {
   verifyAndRollbackStylistPass,
-  finalizeAndVerifyChapter,
+  verifyAndRepairChapterAsync,
 } from '../lib/chapter-verifier.ts';
 import {
   parseDiskDatabasePayload,
@@ -216,8 +219,10 @@ export class DirectEngineTransportAdapter implements PipelineTransportAdapter {
     const genderRulesList: string[] = [];
     Object.entries(req.glossary.characters || {}).forEach(([eng, rus]) => {
       const meta = req.glossaryMeta?.[eng];
-      if (meta?.gender) {
-        genderRulesList.push(`${eng} -> ${rus} (Пол: ${meta.gender})`);
+      if (meta) {
+        genderRulesList.push(
+          `${eng} → ${rus} (Род: ${meta.gender || 'M'}${meta.declensionNote ? `, Склонение: ${meta.declensionNote}` : ''}${meta.voiceNote ? `, Речь и регистр: ${meta.voiceNote}` : ''})`
+        );
       }
     });
 
@@ -368,7 +373,7 @@ export class DirectEngineTransportAdapter implements PipelineTransportAdapter {
       req.twoPassCritic !== false &&
       (cappedDirectives.length > 0 || (otqsScore !== undefined && otqsScore < 8.5))
     ) {
-      const paragraphs = verifiedRusIntermediate.split(/\n\n+/).map((p) => p.trim());
+      const paragraphs = splitChapterParagraphs(verifiedRusIntermediate);
       const flawedForStylist = paragraphs
         .map((p, idx) => {
           const dirs = cappedDirectives.filter((d) => d.paragraphIndex === idx);
@@ -427,21 +432,47 @@ export class DirectEngineTransportAdapter implements PipelineTransportAdapter {
       }
     }
 
-    // Step 4: Finalize and verify chapter (Stages 1 invariant order & Diting report)
-    const verifiedOutput = finalizeAndVerifyChapter({
-      chapterNumber: req.chapterNumber,
-      titleEng: req.titleEng,
-      titleRus: parsed.titleRus,
-      engText: normalizedSource,
-      candidateRusText: verifiedRusIntermediate,
-      glossary: req.glossary,
-      glossaryMeta: req.glossaryMeta,
-      enabledRuleIds: req.enabledRuleIds,
-      surgicalPatches: [],
-      aiCsiNotes: parsed.csiNotes,
-      existingSummaryRus: parsed.summary,
-      existingSummaryEng: parsed.summaryEng,
-    });
+    // Step 4: Finalize and verify chapter via 3-Stage Self-Repair & Prose Quality Gate
+    const verifiedOutput = await verifyAndRepairChapterAsync(
+      {
+        chapterNumber: req.chapterNumber,
+        titleEng: req.titleEng,
+        titleRus: parsed.titleRus,
+        engText: normalizedSource,
+        candidateRusText: verifiedRusIntermediate,
+        glossary: req.glossary,
+        glossaryMeta: req.glossaryMeta,
+        enabledRuleIds: req.enabledRuleIds,
+        surgicalPatches: [],
+        aiCsiNotes: parsed.csiNotes,
+        existingSummaryRus: parsed.summary,
+        existingSummaryEng: parsed.summaryEng,
+      },
+      {
+        enableNeuralAudit: true,
+        llmParagraphRepairFn: async ({ promptBlock }) => {
+          const repairPrompts = buildSelfRepairPrompts({
+            engText: normalizedSource,
+            rusText: verifiedRusIntermediate,
+            glossary: req.glossary,
+            linterIssues: [],
+            genreTitle: genreInfo.title,
+            toneTitle: toneInfo.title,
+            flawedPromptBlock: promptBlock,
+          });
+          const resp = await llmPort.complete({
+            task: 'self_repair',
+            systemInstruction: repairPrompts.systemPrompt,
+            userPrompt: repairPrompts.userPrompt,
+            expectJson: false,
+            temperature: 0.2,
+            numCtx: config.numCtx ?? 16384,
+            geminiModel: config.modelId || 'gemini-3.8-flash',
+          });
+          return resp.text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+        },
+      }
+    );
 
     return {
       rusText: verifiedOutput.rusText,
@@ -450,6 +481,8 @@ export class DirectEngineTransportAdapter implements PipelineTransportAdapter {
       summaryEng: verifiedOutput.summaryEng,
       csiNotes: verifiedOutput.csiNotes,
       ditingReport: verifiedOutput.ditingReport,
+      proseGateReport: verifiedOutput.proseGateReport,
+      neuralAudit: verifiedOutput.neuralAudit,
       alreadyVerified: true,
       verified: verifiedOutput.verified,
       appliedFixes: verifiedOutput.appliedFixes,
@@ -462,6 +495,55 @@ export class DirectEngineTransportAdapter implements PipelineTransportAdapter {
       stylistRolledBackCount,
       rubyGikunCount: rubyParsed.foundCount,
     };
+  }
+
+  async verifyAndRepair(req: PipelineTransportVerifyRequest) {
+    const config = req.llmConfig || this.llmConfig;
+    const llmPort = createPipelineLlmPort(config, req.glossary, req.proseTone);
+    const genrePreset = (req.genrePreset || 'xianxia') as GenrePreset;
+    const proseTone = (req.proseTone || 'classic') as ProseTone;
+    const genreInfo = GENRE_PRESET_LABELS[genrePreset] || GENRE_PRESET_LABELS['xianxia'];
+    const toneInfo = PROSE_TONE_LABELS[proseTone] || PROSE_TONE_LABELS['classic'];
+
+    return verifyAndRepairChapterAsync(
+      {
+        chapterNumber: req.chapterNumber,
+        titleEng: req.titleEng,
+        titleRus: req.titleRus,
+        engText: req.engText,
+        candidateRusText: req.rusText,
+        glossary: req.glossary,
+        glossaryMeta: req.glossaryMeta,
+        enabledRuleIds: req.enabledRuleIds,
+        existingSummaryRus: req.existingSummaryRus,
+        existingSummaryEng: req.existingSummaryEng,
+        aiCsiNotes: req.aiCsiNotes,
+      },
+      {
+        enableNeuralAudit: true,
+        llmParagraphRepairFn: async ({ promptBlock }) => {
+          const repairPrompts = buildSelfRepairPrompts({
+            engText: req.engText,
+            rusText: req.rusText,
+            glossary: req.glossary,
+            linterIssues: [],
+            genreTitle: genreInfo.title,
+            toneTitle: toneInfo.title,
+            flawedPromptBlock: promptBlock,
+          });
+          const resp = await llmPort.complete({
+            task: 'self_repair',
+            systemInstruction: repairPrompts.systemPrompt,
+            userPrompt: repairPrompts.userPrompt,
+            expectJson: false,
+            temperature: 0.2,
+            numCtx: config.numCtx ?? 16384,
+            geminiModel: config.modelId || 'gemini-3.8-flash',
+          });
+          return resp.text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+        },
+      }
+    );
   }
 }
 
