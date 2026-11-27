@@ -79,15 +79,15 @@ export function GeminiCloudConfigPanel({
   const decisionBar = (
     <div
       className={`flex flex-wrap items-center justify-between gap-3 ${
-        hybridOnly ? '' : 'pt-2 border-t border-white/[0.08]'
+        hybridOnly ? '' : 'pt-3 border-t border-white/[0.08]'
       }`}
     >
       <div className="space-y-0.5 max-w-2xl">
-        <div className="text-xs font-semibold text-slate-100 tabular-nums">
-          Радар и арбитр Gemini Decision 1 (Decisions API · до 10 000 RPD и 200 RPM на проект)
+        <div className="text-xs font-semibold text-[#F3F4F6] tabular-nums">
+          Радар и арбитр Gemini Decision 1 (Decisions API · до 10 000 RPD и 200 RPM)
         </div>
-        <p className="text-[11px] text-slate-400 leading-relaxed">
-          За один проход оценивает 10 критериев LiTransProQA, фильтрует ложные термины и род, отсекает лишний Pass 2 на чистых главах и откатывает неудачные правки Стилиста в A/B-арбитраже.
+        <p className="text-[11px] text-[#8893A8] leading-relaxed">
+          За один проход оценивает 10 критериев LiTransProQA, фильтрует ложные термины и род, отсекает лишний Pass 2 и откатывает неудачные правки Стилиста в A/B-арбитраже.
         </p>
       </div>
 
@@ -101,10 +101,10 @@ export function GeminiCloudConfigPanel({
             useDecisionEngine: !(prev.useDecisionEngine !== false),
           }))
         }
-        className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D99B26]/60 ${
+        className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
           decisionEnabled
             ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
-            : 'border-white/[0.15] bg-[#090A0F] text-slate-300 hover:bg-white/[0.06]'
+            : 'border-white/[0.15] bg-[#10131C] text-[#B0B8C9] hover:border-white/[0.25]'
         }`}
       >
         {decisionEnabled ? 'Decision 1 включён' : 'Включить Decision 1'}
@@ -116,7 +116,7 @@ export function GeminiCloudConfigPanel({
     return (
       <section
         aria-label="Гибридная экспертиза Gemini Decision 1"
-        className="rounded-lg border border-white/[0.09] bg-[#0D1017] p-3.5"
+        className="rounded-xl border border-white/[0.09] bg-[#0A0C12] p-4"
       >
         {decisionBar}
       </section>
@@ -126,14 +126,14 @@ export function GeminiCloudConfigPanel({
   return (
     <section
       aria-label="Облачная маршрутизация Google AI Studio"
-      className="rounded-lg border border-amber-500/35 bg-[#0D1017] p-4 space-y-4"
+      className="rounded-xl border border-[#D99B26]/35 bg-[#0A0C12] p-4 space-y-4"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold text-slate-100">
+        <h2 className="font-display text-sm font-semibold text-[#F3F4F6]">
           Облачная связка Gemini 4 Hydrogen и Gemini Decision 1
-        </h3>
+        </h2>
         <span className="font-mono text-[11px] text-emerald-300 tabular-nums">
-          Ротация по ключам и GCP-проектам · Перелив Hydrogen → 3.8 Flash → Gemma 4 31B
+          Ротация ключей и проектов · Hydrogen → 3.8 Flash → Gemma 4 31B
         </span>
       </div>
 
@@ -141,7 +141,7 @@ export function GeminiCloudConfigPanel({
         <div>
           <label
             htmlFor="gemini-cloud-primary-select"
-            className="block text-[11px] font-medium text-slate-300 mb-1"
+            className="block text-[11px] font-medium text-[#B0B8C9] mb-1.5"
           >
             Переводчик (Pass 1)
           </label>
@@ -155,7 +155,7 @@ export function GeminiCloudConfigPanel({
                 modelId: e.target.value,
               }))
             }
-            className="w-full rounded border border-white/[0.12] bg-[#090A0F] px-2.5 py-1.5 font-mono text-xs text-amber-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D99B26]/60"
+            className="w-full rounded-lg border border-white/[0.12] bg-[#10131C] px-2.5 py-1.5 font-mono text-xs text-[#E5AC3D] focus:border-[#D99B26] focus:outline-none"
           >
             {GEMINI_CLOUD_MODEL_CATALOG.filter((m) => m.role !== 'scout').map((m) => (
               <option key={m.id} value={m.id}>
@@ -168,7 +168,7 @@ export function GeminiCloudConfigPanel({
         <div>
           <label
             htmlFor="gemini-thinking-level-select"
-            className="block text-[11px] font-medium text-slate-300 mb-1"
+            className="block text-[11px] font-medium text-[#B0B8C9] mb-1.5"
           >
             Глубина мышления (ThinkingConfig)
           </label>
@@ -181,7 +181,7 @@ export function GeminiCloudConfigPanel({
                 thinkingLevel: e.target.value as GeminiThinkingLevel,
               }))
             }
-            className="w-full rounded border border-white/[0.12] bg-[#090A0F] px-2.5 py-1.5 font-mono text-xs text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D99B26]/60"
+            className="w-full rounded-lg border border-white/[0.12] bg-[#10131C] px-2.5 py-1.5 font-mono text-xs text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none"
           >
             {THINKING_LEVEL_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -194,7 +194,7 @@ export function GeminiCloudConfigPanel({
         <div>
           <label
             htmlFor="gemini-cloud-critic-select"
-            className="block text-[11px] font-medium text-slate-300 mb-1"
+            className="block text-[11px] font-medium text-[#B0B8C9] mb-1.5"
           >
             Хирург (Pass 2 и Self-Repair)
           </label>
@@ -207,7 +207,7 @@ export function GeminiCloudConfigPanel({
                 criticModelId: e.target.value,
               }))
             }
-            className="w-full rounded border border-white/[0.12] bg-[#090A0F] px-2.5 py-1.5 font-mono text-xs text-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D99B26]/60"
+            className="w-full rounded-lg border border-white/[0.12] bg-[#10131C] px-2.5 py-1.5 font-mono text-xs text-emerald-300 focus:border-[#D99B26] focus:outline-none"
           >
             {GEMINI_CLOUD_MODEL_CATALOG.filter((m) => m.role !== 'scout').map((m) => (
               <option key={m.id} value={m.id}>
@@ -220,7 +220,7 @@ export function GeminiCloudConfigPanel({
         <div>
           <label
             htmlFor="gemini-cloud-stylist-select"
-            className="block text-[11px] font-medium text-slate-300 mb-1"
+            className="block text-[11px] font-medium text-[#B0B8C9] mb-1.5"
           >
             Слепой стилист (Pass 3)
           </label>
@@ -233,7 +233,7 @@ export function GeminiCloudConfigPanel({
                 stylistModelId: e.target.value,
               }))
             }
-            className="w-full rounded border border-white/[0.12] bg-[#090A0F] px-2.5 py-1.5 font-mono text-xs text-cyan-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D99B26]/60"
+            className="w-full rounded-lg border border-white/[0.12] bg-[#10131C] px-2.5 py-1.5 font-mono text-xs text-sky-300 focus:border-[#D99B26] focus:outline-none"
           >
             {GEMINI_CLOUD_MODEL_CATALOG.filter((m) => m.role !== 'scout').map((m) => (
               <option key={m.id} value={m.id}>
@@ -246,7 +246,7 @@ export function GeminiCloudConfigPanel({
         <div>
           <label
             htmlFor="gemini-cloud-scout-select"
-            className="block text-[11px] font-medium text-slate-300 mb-1"
+            className="block text-[11px] font-medium text-[#B0B8C9] mb-1.5"
           >
             Пре-скаут терминов (Pass 0)
           </label>
@@ -259,7 +259,7 @@ export function GeminiCloudConfigPanel({
                 scoutModelId: e.target.value,
               }))
             }
-            className="w-full rounded border border-white/[0.12] bg-[#090A0F] px-2.5 py-1.5 font-mono text-xs text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D99B26]/60"
+            className="w-full rounded-lg border border-white/[0.12] bg-[#10131C] px-2.5 py-1.5 font-mono text-xs text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none"
           >
             {GEMINI_CLOUD_MODEL_CATALOG.map((m) => (
               <option key={m.id} value={m.id}>
@@ -271,11 +271,11 @@ export function GeminiCloudConfigPanel({
       </div>
 
       {activePrimarySpec && (
-        <p className="text-[11px] text-slate-300 leading-relaxed tabular-nums">
-          <span className="font-semibold text-slate-100">{activePrimarySpec.title}</span> —{' '}
+        <p className="text-[11px] text-[#B0B8C9] leading-relaxed tabular-nums">
+          <span className="font-semibold text-[#F3F4F6]">{activePrimarySpec.title}</span> —{' '}
           {activePrimarySpec.quotaPerProject}, контекст {activePrimarySpec.contextWindow}.{' '}
           {activeThinkingMeta?.hint || activePrimarySpec.descriptionRus}{' '}
-          Stage 3 Self-Repair идёт через слот Хирурга (<code className="font-mono text-emerald-300">{criticValue}</code>), экономя дневной лимит Hydrogen; Pass 3 Стилист — <code className="font-mono text-cyan-300">{stylistValue}</code>.
+          Stage 3 Self-Repair идёт через слот Хирурга (<code className="font-mono text-emerald-300">{criticValue}</code>), экономя лимит Hydrogen; Pass 3 Стилист — <code className="font-mono text-sky-300">{stylistValue}</code>.
         </p>
       )}
 

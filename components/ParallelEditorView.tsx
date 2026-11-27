@@ -6,26 +6,26 @@ import {
   AlertTriangle,
   Wand2,
   Sparkles,
-  BookOpen,
   Eye,
   Save,
   RotateCcw,
-  ChevronDown,
-  ChevronUp,
-  History,
   Columns2,
-  Radar,
   GitCompare,
   Undo2,
-  Clock,
   Maximize2,
   Minimize2,
   Type,
   BookmarkPlus,
+  ArrowLeft,
+  ArrowRight,
+  PanelRight,
+  Link2,
+  X,
 } from 'lucide-react';
 import { useToast } from './ToastProvider';
-import EditorInspectorPanels from './editor/EditorInspectorPanels';
+import EditorInspectorPanels, { type InspectorTab } from './editor/EditorInspectorPanels';
 import EditorModes from './editor/EditorModes';
+import { StudioDialog } from './studio/StudioDialog';
 import {
   runQaLinter,
   generateChapterMemorySummary,
@@ -110,13 +110,14 @@ export default function ParallelEditorView({
   const [editorMode, setEditorMode] = useState<'split' | 'aligned_1to1' | 'inline_diff'>(
     'split'
   );
-  const [showContextDrawer, setShowContextDrawer] = useState(false);
-  const [showMemoryBar, setShowMemoryBar] = useState(false);
-  const [showCsiDitingPanel, setShowCsiDitingPanel] = useState(false);
-  const [showVersionHistoryPanel, setShowVersionHistoryPanel] = useState(false);
+  const [activeInspectorTab, setActiveInspectorTab] = useState<InspectorTab | null>(null);
+  const lastInspectorTabRef = useRef<InspectorTab>('qa');
   const [comparedVersionLabel, setComparedVersionLabel] = useState<string | null>(null);
-  const [showIssuesPanel, setShowIssuesPanel] = useState(false);
-  const [showTautologyPanel, setShowTautologyPanel] = useState(false);
+  const [syncScroll, setSyncScroll] = useState<boolean>(true);
+  const engScrollRef = useRef<HTMLDivElement | null>(null);
+  const rusTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const isSyncingScrollRef = useRef<boolean>(false);
+  const typoMenuRef = useRef<HTMLDivElement | null>(null);
   const [editStyleMd, setEditStyleMd] = useState(styleGuideMd);
   const [editContextMd, setEditContextMd] = useState(contextMd);
   const [repairNotice, setRepairNotice] = useState<string>('');
@@ -238,6 +239,75 @@ export default function ParallelEditorView({
     debouncedDraftRus,
   ]);
 
+  const sortedChapters = useMemo(
+    () => [...allChapters].sort((a, b) => a.number - b.number),
+    [allChapters]
+  );
+  const currentChapterIndex = sortedChapters.findIndex((c) => c.id === chapter.id);
+  const previousChapter =
+    currentChapterIndex > 0 ? sortedChapters[currentChapterIndex - 1] : null;
+  const nextChapter =
+    currentChapterIndex >= 0 && currentChapterIndex < sortedChapters.length - 1
+      ? sortedChapters[currentChapterIndex + 1]
+      : null;
+
+  const isDirty =
+    draftRus !== chapter.rusText ||
+    draftTitleRus !== chapter.titleRus ||
+    draftSummary !== (chapter.summary || '');
+
+  const selectInspectorTab = useCallback((tab: InspectorTab) => {
+    lastInspectorTabRef.current = tab;
+    setActiveInspectorTab(tab);
+  }, []);
+
+  const toggleInspector = useCallback(() => {
+    setActiveInspectorTab((prev) =>
+      prev ? null : lastInspectorTabRef.current
+    );
+  }, []);
+
+  const handleEngPaneScroll = useCallback(() => {
+    if (!syncScroll || isSyncingScrollRef.current) return;
+    const src = engScrollRef.current;
+    const dst = rusTextareaRef.current;
+    if (!src || !dst) return;
+    const maxSrc = src.scrollHeight - src.clientHeight;
+    const maxDst = dst.scrollHeight - dst.clientHeight;
+    if (maxSrc <= 0 || maxDst <= 0) return;
+    isSyncingScrollRef.current = true;
+    dst.scrollTop = (src.scrollTop / maxSrc) * maxDst;
+    requestAnimationFrame(() => {
+      isSyncingScrollRef.current = false;
+    });
+  }, [syncScroll]);
+
+  const handleRusPaneScroll = useCallback(() => {
+    if (!syncScroll || isSyncingScrollRef.current) return;
+    const src = rusTextareaRef.current;
+    const dst = engScrollRef.current;
+    if (!src || !dst) return;
+    const maxSrc = src.scrollHeight - src.clientHeight;
+    const maxDst = dst.scrollHeight - dst.clientHeight;
+    if (maxSrc <= 0 || maxDst <= 0) return;
+    isSyncingScrollRef.current = true;
+    dst.scrollTop = (src.scrollTop / maxSrc) * maxDst;
+    requestAnimationFrame(() => {
+      isSyncingScrollRef.current = false;
+    });
+  }, [syncScroll]);
+
+  useEffect(() => {
+    if (!showTypoMenu) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (typoMenuRef.current && !typoMenuRef.current.contains(e.target as Node)) {
+        setShowTypoMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [showTypoMenu]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const isModifier = e.ctrlKey || e.metaKey;
@@ -248,13 +318,23 @@ export default function ParallelEditorView({
         e.preventDefault();
         const sel = window.getSelection()?.toString().trim() || '';
         openQuickTermFromSelection(sel);
-      } else if (e.key === 'Escape' && isZenMode) {
-        setIsZenMode(false);
+      } else if (e.altKey && !isModifier && !e.shiftKey && e.key === 'ArrowLeft' && previousChapter) {
+        e.preventDefault();
+        onSelectChapter(previousChapter.id);
+      } else if (e.altKey && !isModifier && !e.shiftKey && e.key === 'ArrowRight' && nextChapter) {
+        e.preventDefault();
+        onSelectChapter(nextChapter.id);
+      } else if (e.key === 'Escape') {
+        if (showTypoMenu) {
+          setShowTypoMenu(false);
+        } else if (isZenMode) {
+          setIsZenMode(false);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isZenMode, openQuickTermFromSelection]);
+  }, [isZenMode, showTypoMenu, openQuickTermFromSelection, previousChapter, nextChapter, onSelectChapter]);
 
   if (syncedChapterId !== chapter.id) {
     setSyncedChapterId(chapter.id);
@@ -281,20 +361,12 @@ export default function ParallelEditorView({
     }
   }
 
-  // Previous chapter memory for continuity
-  const previousChapter = useMemo(() => {
-    const sorted = [...allChapters].sort((a, b) => a.number - b.number);
-    const idx = sorted.findIndex((c) => c.id === chapter.id);
-    return idx > 0 ? sorted[idx - 1] : null;
-  }, [allChapters, chapter.id]);
-
   // 4-Component DelTA Context Packet (R^(i), A_s/A_t, M^(i) 3 paragraphs, N^(i))
   const deltaContextPacket = useMemo(() => {
-    const sorted = [...allChapters].sort((a, b) => a.number - b.number);
-    const idx = sorted.findIndex((c) => c.id === chapter.id);
-    const earlier = idx > 0 ? sorted.slice(0, idx) : [];
+    const idx = sortedChapters.findIndex((c) => c.id === chapter.id);
+    const earlier = idx > 0 ? sortedChapters.slice(0, idx) : [];
     return buildDelTAContextPacket(debouncedDraftEng, previousChapter, earlier, glossary, 3);
-  }, [allChapters, chapter.id, debouncedDraftEng, previousChapter, glossary]);
+  }, [sortedChapters, chapter.id, debouncedDraftEng, previousChapter, glossary]);
 
   // CHORUS C3 Cultural Footnotes & Rationales (debounced)
   const csiCulturalNotes = useMemo(() => {
@@ -981,213 +1053,266 @@ export default function ParallelEditorView({
     draftRus.trim().length > 0 &&
     (lintReport.errorCount > 0 || lintReport.warningCount > 0);
 
+  const inspectorBadgeCount =
+    lintReport.errorCount + lintReport.warningCount + tautologyItems.length;
+
+  const splitHeightClass = isZenMode
+    ? 'h-[calc(100dvh-13.5rem)] min-h-[460px]'
+    : 'h-[min(68dvh,740px)] min-h-[460px]';
+
   return (
     <div
       className={
         isZenMode
-          ? 'fixed inset-0 z-50 bg-[#090A0F] p-4 sm:p-6 overflow-y-auto flex flex-col space-y-4'
+          ? 'fixed inset-0 z-50 bg-[#090A0F] p-4 sm:p-6 overflow-y-auto studio-scroll flex flex-col space-y-4'
           : 'space-y-4'
       }
     >
       {/* Zen Mode Quick Status Bar */}
       {isZenMode && (
-        <div className="flex items-center justify-between p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs shrink-0 backdrop-blur-md">
-          <div className="flex items-center gap-2.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
-            <span className="font-semibold text-amber-300">Zen-режим (Focus)</span>
-            <span className="text-slate-400 hidden sm:inline">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#D99B26]/35 bg-[#10131C] px-4 py-2.5 text-xs shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="h-2 w-2 rounded-full bg-[#D99B26]" aria-hidden="true" />
+            <span className="font-semibold text-[#E5AC3D]">Zen-режим</span>
+            <span className="text-[#B0B8C9] hidden sm:inline truncate">
               · Глава {chapter.subPart || chapter.number}: {draftTitleRus || chapter.titleEng}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={handleManualSave}
-              className="inline-flex items-center gap-1 px-3 py-1 rounded-md bg-amber-500 text-black font-semibold hover:bg-amber-400 transition"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#D99B26] px-3 py-1.5 font-semibold text-[#090A0F] hover:bg-[#E5AC3D] transition-colors"
             >
-              <Save className="w-3.5 h-3.5" />
-              Сохранить (Ctrl+S)
+              <Save className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Сохранить (Ctrl+S)</span>
             </button>
             <button
               type="button"
               onClick={() => setIsZenMode(false)}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white transition font-medium"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.12] bg-[#151925] px-2.5 py-1.5 font-medium text-[#F3F4F6] hover:border-white/[0.25] transition-colors"
             >
-              <Minimize2 className="w-3.5 h-3.5" />
-              Выход (Esc)
+              <Minimize2 className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Выход (Esc)</span>
             </button>
           </div>
         </div>
       )}
-      {/* Minimalist Editor Toolbar: Ghost Utilities + Single Primary Action */}
-      <div className="flex flex-col gap-3 pb-4 border-b border-white/[0.06] lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <select
-            aria-label="Выбор главы в редакторе"
-            value={chapter.id}
-            onChange={(e) => onSelectChapter(e.target.value)}
-            className="rounded-md border border-white/[0.07] bg-[#11131C] px-3 py-1.5 text-xs font-medium text-[#F1F5F9] focus:border-[#D99B26] focus:outline-none cursor-pointer"
-          >
-            {allChapters.map((c) => (
-              <option key={c.id} value={c.id} className="bg-[#11131C] text-[#F1F5F9]">
-                Глава {c.subPart || c.number}: {c.titleRus || c.titleEng}
-              </option>
-            ))}
-          </select>
 
-          {/* 3 Editor View Modes: Split, 1:1 Paragraph Grid, Inline Diff */}
-          <div className="flex items-center gap-0.5 rounded-md border border-white/[0.07] bg-[#11131C] p-0.5">
+      {/* Streamlined Editorial Toolbar */}
+      <div
+        role="toolbar"
+        aria-label="Инструменты редактора"
+        className="flex flex-wrap items-center justify-between gap-2.5 pb-3.5 border-b border-white/[0.07]"
+      >
+        <div role="group" aria-label="Навигация по главам и режим" className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex items-center gap-1">
             <button
               type="button"
+              disabled={!previousChapter}
+              onClick={() => previousChapter && onSelectChapter(previousChapter.id)}
+              aria-label="Предыдущая глава"
+              title="Предыдущая глава (Alt+←)"
+              className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-lg border border-white/[0.09] bg-[#10131C] text-[#B0B8C9] hover:border-white/[0.2] hover:text-[#F3F4F6] disabled:opacity-35 disabled:pointer-events-none transition-colors"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+
+            <select
+              aria-label="Выбор главы в редакторе"
+              value={chapter.id}
+              onChange={(e) => onSelectChapter(e.target.value)}
+              className="max-w-[230px] sm:max-w-[300px] truncate rounded-lg border border-white/[0.09] bg-[#10131C] px-3 py-1.5 text-xs font-medium text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none cursor-pointer"
+            >
+              {sortedChapters.map((c) => {
+                const rawTitle = (c.titleRus || c.titleEng || '').trim();
+                const hasPrefix = /^(Глава|Chapter)\s+/i.test(rawTitle);
+                const label = hasPrefix
+                  ? rawTitle
+                  : `Глава ${c.subPart || c.number}: ${rawTitle}`;
+                return (
+                  <option key={c.id} value={c.id} className="bg-[#10131C] text-[#F3F4F6]">
+                    {label}
+                  </option>
+                );
+              })}
+            </select>
+
+            <button
+              type="button"
+              disabled={!nextChapter}
+              onClick={() => nextChapter && onSelectChapter(nextChapter.id)}
+              aria-label="Следующая глава"
+              title="Следующая глава (Alt+→)"
+              className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-lg border border-white/[0.09] bg-[#10131C] text-[#B0B8C9] hover:border-white/[0.2] hover:text-[#F3F4F6] disabled:opacity-35 disabled:pointer-events-none transition-colors"
+            >
+              <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </div>
+
+          <span role="separator" aria-orientation="vertical" className="hidden sm:inline-block h-5 w-px bg-white/[0.09]" />
+
+          {/* View Modes */}
+          <div className="inline-flex items-center gap-0.5 rounded-lg border border-white/[0.08] bg-[#10131C] p-0.5">
+            <button
+              type="button"
+              aria-pressed={editorMode === 'split'}
               onClick={() => setEditorMode('split')}
-              className={`rounded px-2.5 py-1 text-xs font-medium transition ${
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
                 editorMode === 'split'
-                  ? 'bg-white/[0.1] text-[#F1F5F9]'
-                  : 'text-[#64748B] hover:text-[#94A3B8]'
+                  ? 'bg-[#151925] text-[#F3F4F6] border border-white/[0.12]'
+                  : 'border border-transparent text-[#8893A8] hover:text-[#F3F4F6]'
               }`}
             >
               2 колонки
             </button>
             <button
               type="button"
+              aria-pressed={editorMode === 'aligned_1to1'}
               onClick={() => setEditorMode('aligned_1to1')}
-              className={`inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition ${
+              className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
                 editorMode === 'aligned_1to1'
-                  ? 'bg-white/[0.1] text-[#F1F5F9]'
-                  : 'text-[#64748B] hover:text-[#94A3B8]'
+                  ? 'bg-[#151925] text-[#F3F4F6] border border-white/[0.12]'
+                  : 'border border-transparent text-[#8893A8] hover:text-[#F3F4F6]'
               }`}
-              title="Поабзацная синхронизация 1:1 с контролем пропусков"
+              title="Поабзацная матрица выравнивания 1:1"
             >
-              <Columns2 className="h-3.5 w-3.5" />
-              Абзацы 1:1 ({alignmentGrid.engCount}/{alignmentGrid.rusCount})
+              <Columns2 className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Абзацы 1:1 ({alignmentGrid.engCount}/{alignmentGrid.rusCount})</span>
             </button>
             {lastPreRepairSnapshot && (
               <button
                 type="button"
+                aria-pressed={editorMode === 'inline_diff'}
                 onClick={() => setEditorMode('inline_diff')}
-                className={`inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition ${
+                className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
                   editorMode === 'inline_diff'
-                    ? 'bg-white/[0.1] text-[#F1F5F9]'
-                    : 'text-[#D99B26] hover:text-[#F1F5F9]'
+                    ? 'bg-[#151925] text-[#E5AC3D] border border-[#D99B26]/40'
+                    : 'border border-transparent text-[#D99B26] hover:text-[#F3F4F6]'
                 }`}
               >
-                <GitCompare className="h-3.5 w-3.5" />
-                Diff правок
+                <GitCompare className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Diff</span>
               </button>
             )}
           </div>
+        </div>
 
-          {/* Live QA Status Indicator */}
+        {/* Right Group: QA Badge, View Toggles, Inspector & Actions */}
+        <div
+          role="group"
+          aria-label="Оформление, инспектор и сохранение"
+          className="flex flex-wrap items-center gap-1.5"
+        >
+          {/* Clickable Live QA Pill -> opens Inspector directly to QA tab */}
           {draftRus.trim().length === 0 ? (
-            <span className="text-xs text-[#64748B]">Ожидает перевода</span>
+            <span className="px-2 py-1 text-xs text-[#8893A8]">Ожидает перевода</span>
           ) : lintReport.passed ? (
-            <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400/90">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              Канон соблюдён (100%)
-            </span>
+            <button
+              type="button"
+              onClick={() => selectInspectorTab('qa')}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/20 transition-colors"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>QA 100%</span>
+            </button>
           ) : (
             <button
               type="button"
-              onClick={() => setShowIssuesPanel((v) => !v)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-xs font-medium text-rose-300 hover:bg-rose-500/20"
+              onClick={() => selectInspectorTab('qa')}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/35 bg-rose-500/10 px-2.5 py-1.5 text-xs font-medium text-rose-300 hover:bg-rose-500/20 transition-colors tabular-nums"
             >
-              <AlertTriangle className="h-3.5 w-3.5" />
-              Ошибок: {lintReport.errorCount} · Предупр.: {lintReport.warningCount}
-              {showIssuesPanel ? (
-                <ChevronUp className="h-3.5 w-3.5" />
-              ) : (
-                <ChevronDown className="h-3.5 w-3.5" />
-              )}
+              <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>
+                QA: {lintReport.errorCount} ош. · {lintReport.warningCount} пред.
+              </span>
             </button>
           )}
-        </div>
 
-        {/* Single-Line Ghost Utilities + Primary Action */}
-        <div className="flex flex-wrap lg:flex-nowrap items-center gap-1 shrink-0">
-          {/* Typography Controls Popover */}
-          <div className="relative">
+          {/* Typography Popover */}
+          <div className="relative" ref={typoMenuRef}>
             <button
               type="button"
+              aria-expanded={showTypoMenu}
+              aria-haspopup="true"
               onClick={() => setShowTypoMenu((prev) => !prev)}
-              className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition whitespace-nowrap ${
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
                 showTypoMenu
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                  : 'text-[#94A3B8] hover:bg-white/[0.04] hover:text-[#F1F5F9]'
+                  ? 'border-[#D99B26]/50 bg-[#151925] text-[#F3F4F6]'
+                  : 'border-white/[0.08] bg-[#10131C] text-[#B0B8C9] hover:border-white/[0.16] hover:text-[#F3F4F6]'
               }`}
               title="Настройки книжной типографики"
             >
-              <Type className="h-3.5 w-3.5 text-amber-400" />
-              Шрифт
+              <Type className="h-3.5 w-3.5 text-[#D99B26]" aria-hidden="true" />
+              <span>Шрифт</span>
             </button>
 
             {showTypoMenu && (
-              <div className="absolute top-full right-0 mt-1.5 z-40 w-72 rounded-xl border border-white/10 bg-[#0c1017] p-3.5 shadow-2xl space-y-3 animate-in fade-in">
-                <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                  <span className="text-xs font-semibold text-slate-200">Книжная типографика</span>
+              <div className="absolute top-full left-0 mt-1.5 z-40 w-72 rounded-xl border border-white/[0.12] bg-[#151925] p-4 shadow-[0_20px_48px_rgba(0,0,0,0.78)] space-y-3.5">
+                <div className="flex items-center justify-between border-b border-white/[0.08] pb-2">
+                  <span className="text-xs font-semibold text-[#F3F4F6]">Книжная типографика</span>
                   <button
                     type="button"
+                    aria-label="Закрыть настройки шрифта"
                     onClick={() => setShowTypoMenu(false)}
-                    className="text-slate-400 hover:text-white text-xs px-1"
+                    className="inline-flex min-h-6 min-w-6 items-center justify-center rounded text-[#8893A8] hover:text-[#F3F4F6]"
                   >
-                    ✕
+                    <X className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
                 </div>
 
-                {/* Гарнитура */}
-                <div className="space-y-1">
-                  <label className="text-[11px] text-slate-400">Гарнитура</label>
+                <div className="space-y-1.5">
+                  <span className="block text-[11px] text-[#8893A8]">Гарнитура</span>
                   <div className="grid grid-cols-3 gap-1">
                     {(['serif', 'sans', 'mono'] as const).map((f) => (
                       <button
                         key={f}
                         type="button"
                         onClick={() => setFontFamily(f)}
-                        className={`py-1 text-xs rounded border text-center transition ${
+                        className={`py-1.5 text-xs rounded-lg border text-center transition-colors ${
                           fontFamily === f
-                            ? 'border-amber-500 bg-amber-500/20 text-amber-200 font-semibold'
-                            : 'border-white/5 bg-white/[0.02] text-slate-400 hover:text-white'
+                            ? 'border-[#D99B26] bg-[#D99B26]/15 text-[#E5AC3D] font-semibold'
+                            : 'border-white/[0.07] bg-[#0A0C12] text-[#B0B8C9] hover:text-[#F3F4F6]'
                         }`}
                       >
-                        {f === 'serif' ? 'Роман (Serif)' : f === 'sans' ? 'Гротеск' : 'Моно'}
+                        {f === 'serif' ? 'Literata' : f === 'sans' ? 'Inter' : 'Mono'}
                       </button>
                     ))}
                   </div>
                 </div>
 
-                {/* Размер шрифта */}
-                <div className="space-y-1">
-                  <label className="text-[11px] text-slate-400">Размер кегля</label>
+                <div className="space-y-1.5">
+                  <span className="block text-[11px] text-[#8893A8]">Размер кегля</span>
                   <div className="grid grid-cols-4 gap-1">
                     {(['sm', 'base', 'lg', 'xl'] as const).map((s) => (
                       <button
                         key={s}
                         type="button"
                         onClick={() => setFontSize(s)}
-                        className={`py-1 text-xs rounded border text-center font-mono transition ${
+                        className={`py-1.5 text-xs rounded-lg border text-center font-mono transition-colors ${
                           fontSize === s
-                            ? 'border-amber-500 bg-amber-500/20 text-amber-200 font-bold'
-                            : 'border-white/5 bg-white/[0.02] text-slate-400 hover:text-white'
+                            ? 'border-[#D99B26] bg-[#D99B26]/15 text-[#E5AC3D] font-bold'
+                            : 'border-white/[0.07] bg-[#0A0C12] text-[#B0B8C9] hover:text-[#F3F4F6]'
                         }`}
                       >
-                        {s === 'sm' ? '14px' : s === 'base' ? '16px' : s === 'lg' ? '18px' : '20px'}
+                        {s === 'sm' ? '14' : s === 'base' ? '16' : s === 'lg' ? '18' : '20'}
                       </button>
                     ))}
                   </div>
                 </div>
 
-                {/* Интервал */}
-                <div className="space-y-1">
-                  <label className="text-[11px] text-slate-400">Интерлиньяж</label>
+                <div className="space-y-1.5">
+                  <span className="block text-[11px] text-[#8893A8]">Интерлиньяж</span>
                   <div className="grid grid-cols-3 gap-1">
                     {(['normal', 'relaxed', 'loose'] as const).map((l) => (
                       <button
                         key={l}
                         type="button"
                         onClick={() => setLineHeight(l)}
-                        className={`py-1 text-[11px] rounded border text-center transition ${
+                        className={`py-1.5 text-[11px] rounded-lg border text-center font-mono transition-colors ${
                           lineHeight === l
-                            ? 'border-amber-500 bg-amber-500/20 text-amber-200 font-semibold'
-                            : 'border-white/5 bg-white/[0.02] text-slate-400 hover:text-white'
+                            ? 'border-[#D99B26] bg-[#D99B26]/15 text-[#E5AC3D] font-semibold'
+                            : 'border-white/[0.07] bg-[#0A0C12] text-[#B0B8C9] hover:text-[#F3F4F6]'
                         }`}
                       >
                         {l === 'normal' ? '1.5' : l === 'relaxed' ? '1.75' : '2.0'}
@@ -1196,22 +1321,21 @@ export default function ParallelEditorView({
                   </div>
                 </div>
 
-                {/* Ширина колонки */}
-                <div className="space-y-1">
-                  <label className="text-[11px] text-slate-400">Ширина полосы текста</label>
+                <div className="space-y-1.5">
+                  <span className="block text-[11px] text-[#8893A8]">Полоса набора</span>
                   <div className="grid grid-cols-2 gap-1">
                     {(['prose', 'full'] as const).map((w) => (
                       <button
                         key={w}
                         type="button"
                         onClick={() => setColumnWidth(w)}
-                        className={`py-1 text-[11px] rounded border text-center transition ${
+                        className={`py-1.5 text-[11px] rounded-lg border text-center transition-colors ${
                           columnWidth === w
-                            ? 'border-amber-500 bg-amber-500/20 text-amber-200 font-semibold'
-                            : 'border-white/5 bg-white/[0.02] text-slate-400 hover:text-white'
+                            ? 'border-[#D99B26] bg-[#D99B26]/15 text-[#E5AC3D] font-semibold'
+                            : 'border-white/[0.07] bg-[#0A0C12] text-[#B0B8C9] hover:text-[#F3F4F6]'
                         }`}
                       >
-                        {w === 'prose' ? 'Книжная (68ch)' : 'Во всю ширину'}
+                        {w === 'prose' ? 'Книжная (68ch)' : 'На всю ширину'}
                       </button>
                     ))}
                   </div>
@@ -1220,122 +1344,98 @@ export default function ParallelEditorView({
             )}
           </div>
 
-          {/* Zen / Focus Mode Toggle */}
           <button
             type="button"
-            onClick={() => setIsZenMode((prev) => !prev)}
-            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition whitespace-nowrap ${
-              isZenMode
-                ? 'bg-amber-500/25 text-amber-300 border border-amber-500/40'
-                : 'text-[#94A3B8] hover:bg-white/[0.04] hover:text-[#F1F5F9]'
-            }`}
-            title={isZenMode ? 'Выйти из Zen-режима (Esc)' : 'Включить полноэкранный Zen-режим (Focus)'}
-          >
-            {isZenMode ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5 text-amber-400" />}
-            Zen
-          </button>
-
-          <button
-            type="button"
+            aria-pressed={highlightTerms}
             onClick={() => setHighlightTerms((prev) => !prev)}
-            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition whitespace-nowrap ${
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
               highlightTerms
-                ? 'bg-white/[0.08] text-[#F1F5F9]'
-                : 'text-[#94A3B8] hover:bg-white/[0.04] hover:text-[#F1F5F9]'
+                ? 'border-[#D99B26]/50 bg-[#D99B26]/15 text-[#E5AC3D]'
+                : 'border-white/[0.08] bg-[#10131C] text-[#B0B8C9] hover:border-white/[0.16] hover:text-[#F3F4F6]'
             }`}
+            title="Подсвечивать термины глоссария в оригинале"
           >
-            <Eye className="h-3.5 w-3.5" />
-            Термины
+            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Термины</span>
+          </button>
+
+          {editorMode === 'split' && (
+            <button
+              type="button"
+              aria-pressed={syncScroll}
+              onClick={() => setSyncScroll((v) => !v)}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
+                syncScroll
+                  ? 'border-white/[0.18] bg-[#151925] text-[#F3F4F6]'
+                  : 'border-white/[0.08] bg-[#10131C] text-[#8893A8] hover:text-[#F3F4F6]'
+              }`}
+              title="Синхронная прокрутка оригинала и перевода"
+            >
+              <Link2 className="h-3.5 w-3.5 text-[#D99B26]" aria-hidden="true" />
+              <span className="hidden sm:inline">Синхр.</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            aria-pressed={isZenMode}
+            onClick={() => setIsZenMode((prev) => !prev)}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
+              isZenMode
+                ? 'border-[#D99B26]/50 bg-[#D99B26]/15 text-[#E5AC3D]'
+                : 'border-white/[0.08] bg-[#10131C] text-[#B0B8C9] hover:border-white/[0.16] hover:text-[#F3F4F6]'
+            }`}
+            title={isZenMode ? 'Выйти из Zen-режима (Esc)' : 'Полноэкранный режим редактирования'}
+          >
+            {isZenMode ? (
+              <Minimize2 className="h-3.5 w-3.5" aria-hidden="true" />
+            ) : (
+              <Maximize2 className="h-3.5 w-3.5 text-[#D99B26]" aria-hidden="true" />
+            )}
+            <span>Zen</span>
           </button>
 
           <button
             type="button"
-            onClick={() => setShowTautologyPanel((v) => !v)}
-            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition whitespace-nowrap ${
-              showTautologyPanel
-                ? 'bg-white/[0.08] text-[#F1F5F9]'
-                : 'text-[#94A3B8] hover:bg-white/[0.04] hover:text-[#F1F5F9]'
+            aria-pressed={activeInspectorTab !== null}
+            onClick={toggleInspector}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
+              activeInspectorTab !== null
+                ? 'border-[#D99B26]/50 bg-[#151925] text-[#F3F4F6]'
+                : 'border-white/[0.08] bg-[#10131C] text-[#B0B8C9] hover:border-white/[0.16] hover:text-[#F3F4F6]'
             }`}
-            title="Радар лексических повторов и тавтологий в соседних предложениях"
+            title="Инспектор главы: QA, повторы, CSI/DITING, DelTA-память, история версий, гид"
           >
-            <Radar className="h-3.5 w-3.5" />
-            Тавтологии ({tautologyItems.length})
+            <PanelRight className="h-3.5 w-3.5 text-[#D99B26]" aria-hidden="true" />
+            <span>Инспектор</span>
+            {inspectorBadgeCount > 0 && (
+              <span className="rounded-full bg-[#D99B26]/20 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[#E5AC3D] leading-none tabular-nums">
+                {inspectorBadgeCount}
+              </span>
+            )}
           </button>
 
-          <button
-            type="button"
-            onClick={() => setShowVersionHistoryPanel((prev) => !prev)}
-            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition whitespace-nowrap ${
-              showVersionHistoryPanel
-                ? 'bg-white/[0.08] text-[#F1F5F9]'
-                : 'text-[#94A3B8] hover:bg-white/[0.04] hover:text-[#F1F5F9]'
-            }`}
-            title="Открыть историю версий прохождения конвейера для сравнения и отката"
-          >
-            <Clock className="h-3.5 w-3.5" />
-            История версий ({versionHistoryList.length})
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowCsiDitingPanel((prev) => !prev)}
-            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition whitespace-nowrap ${
-              showCsiDitingPanel
-                ? 'bg-white/[0.08] text-[#F1F5F9]'
-                : 'text-[#94A3B8] hover:bg-white/[0.04] hover:text-[#F1F5F9]'
-            }`}
-            title="Культурные сноски CSI (CHORUS C3) и 6-мерная оценка DITING / MQM"
-          >
-            <Sparkles className="h-3.5 w-3.5 text-[#D99B26]" />
-            CSI & DITING ({csiCulturalNotes.length})
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowMemoryBar((prev) => !prev)}
-            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition whitespace-nowrap ${
-              showMemoryBar
-                ? 'bg-white/[0.08] text-[#F1F5F9]'
-                : 'text-[#94A3B8] hover:bg-white/[0.04] hover:text-[#F1F5F9]'
-            }`}
-            title="Четырёхкомпонентная память DelTA: 3 абзаца ENG-RUS + двуязычное резюме"
-          >
-            <History className="h-3.5 w-3.5" />
-            Память DelTA ({deltaContextPacket.shortTermWindow.length})
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowContextDrawer((prev) => !prev)}
-            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition whitespace-nowrap ${
-              showContextDrawer
-                ? 'bg-white/[0.08] text-[#F1F5F9]'
-                : 'text-[#94A3B8] hover:bg-white/[0.04] hover:text-[#F1F5F9]'
-            }`}
-          >
-            <BookOpen className="h-3.5 w-3.5" />
-            Гид
-          </button>
+          <span role="separator" aria-orientation="vertical" className="hidden sm:inline-block h-5 w-px bg-white/[0.09]" />
 
           {draftRus.trim().length > 0 && (
             <>
               <button
                 type="button"
                 onClick={handleInstantDeterministicRepair}
-                className="inline-flex items-center gap-1 rounded-md border border-white/[0.09] bg-white/[0.04] px-2.5 py-1 text-xs font-medium text-[#F1F5F9] transition hover:bg-white/[0.08] whitespace-nowrap"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.1] bg-[#151925] px-2.5 py-1.5 text-xs font-medium text-[#F3F4F6] hover:border-[#D99B26]/50 transition-colors whitespace-nowrap"
               >
-                <Wand2 className="h-3.5 w-3.5 text-[#D99B26]" />
-                Авто-ремонт QA
+                <Wand2 className="h-3.5 w-3.5 text-[#D99B26]" aria-hidden="true" />
+                <span>Авто-ремонт</span>
               </button>
 
               <button
                 type="button"
                 onClick={handleAiVerifierRepair}
                 disabled={isAiRepairing || isPipelineBusy}
-                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-[#94A3B8] transition hover:bg-white/[0.04] hover:text-[#F1F5F9] disabled:opacity-50 whitespace-nowrap"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#10131C] px-2.5 py-1.5 text-xs font-medium text-[#B0B8C9] hover:border-white/[0.18] hover:text-[#F3F4F6] disabled:opacity-50 transition-colors whitespace-nowrap"
               >
-                <Sparkles className="h-3.5 w-3.5 text-[#D99B26]" />
-                {isAiRepairing ? 'Вычитка...' : 'Критик'}
+                <Sparkles className="h-3.5 w-3.5 text-[#D99B26]" aria-hidden="true" />
+                <span>{isAiRepairing ? 'Вычитка...' : 'Критик'}</span>
               </button>
             </>
           )}
@@ -1344,11 +1444,11 @@ export default function ParallelEditorView({
             <button
               type="button"
               onClick={handleUndoRepair}
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-[#94A3B8] hover:bg-white/[0.04] hover:text-[#F1F5F9] whitespace-nowrap"
-              title="Откатить последнее авто-исправление"
+              className="inline-flex items-center gap-1 rounded-lg border border-white/[0.08] bg-[#10131C] px-2.5 py-1.5 text-xs font-medium text-[#B0B8C9] hover:text-[#F3F4F6] whitespace-nowrap"
+              title="Откатить последнее исправление"
             >
-              <Undo2 className="h-3.5 w-3.5" />
-              Откатить
+              <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Откат</span>
             </button>
           )}
 
@@ -1357,329 +1457,292 @@ export default function ParallelEditorView({
               type="button"
               onClick={() => onRunSingleChapterPipeline(chapter.id)}
               disabled={isPipelineBusy}
-              className="inline-flex items-center gap-1.5 rounded-md bg-[#D99B26] px-3 py-1 text-xs font-semibold text-[#090A0F] transition hover:bg-[#E3A836] disabled:opacity-50 whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#D99B26]/50 bg-[#D99B26]/15 px-3 py-1.5 text-xs font-semibold text-[#E5AC3D] hover:bg-[#D99B26]/25 disabled:opacity-50 whitespace-nowrap"
             >
-              <Sparkles className="h-3.5 w-3.5" />
-              Перевести главу
+              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Перевести главу</span>
             </button>
           )}
 
           <button
             type="button"
             onClick={handleManualSave}
-            className="inline-flex items-center gap-1.5 rounded-md bg-[#D99B26] px-3 py-1 text-xs font-semibold text-[#090A0F] transition hover:bg-[#E3A836] whitespace-nowrap"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#D99B26] px-3.5 py-1.5 text-xs font-semibold text-[#090A0F] transition-colors hover:bg-[#E5AC3D] whitespace-nowrap"
+            title="Сохранить главу (Ctrl+S)"
           >
-            <Save className="h-3.5 w-3.5" />
-            Сохранить
+            {isDirty && (
+              <span
+                aria-label="Есть несохранённые изменения"
+                className="h-1.5 w-1.5 rounded-full bg-[#090A0F]"
+              />
+            )}
+            <Save className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>{isDirty ? 'Сохранить' : 'Сохранено'}</span>
           </button>
         </div>
       </div>
 
       {/* Feedback Banner */}
       {repairNotice && (
-        <div className="flex items-center justify-between rounded-lg border border-emerald-500/30 bg-emerald-950/30 px-4 py-2 text-xs text-emerald-200">
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-500/35 bg-[#10131C] px-4 py-2.5 text-xs text-emerald-200">
           <span>{repairNotice}</span>
           <button
             type="button"
             onClick={() => setRepairNotice('')}
-            className="text-emerald-400 hover:text-white"
+            className="text-emerald-300 hover:text-[#F3F4F6] shrink-0"
           >
             Скрыть
           </button>
         </div>
       )}
 
-      <EditorInspectorPanels
-        chapter={chapter}
-        previousChapter={previousChapter}
-        draftTitleRus={draftTitleRus}
-        draftEng={draftEng}
-        draftRus={draftRus}
-        draftSummary={draftSummary}
-        setDraftSummary={setDraftSummary}
-        showVersionHistoryPanel={showVersionHistoryPanel}
-        onCloseVersionHistory={() => setShowVersionHistoryPanel(false)}
-        versionHistoryList={versionHistoryList}
-        onCompareWithVersion={handleCompareWithVersion}
-        onRollbackToVersion={handleRollbackToVersion}
-        showTautologyPanel={showTautologyPanel}
-        onCloseTautology={() => setShowTautologyPanel(false)}
-        tautologyItems={tautologyItems}
-        showCsiDitingPanel={showCsiDitingPanel}
-        onCloseCsiDiting={() => setShowCsiDitingPanel(false)}
-        ditingReport={ditingReport}
-        csiCulturalNotes={csiCulturalNotes}
-        showMemoryBar={showMemoryBar}
-        onCloseMemoryBar={() => setShowMemoryBar(false)}
-        deltaContextPacket={deltaContextPacket}
-        hasIssues={hasIssues}
-        showIssuesPanel={showIssuesPanel}
-        genrePreset={genrePreset}
-        proseTone={proseTone}
-        lintReport={lintReport}
-        onInstantRepair={handleInstantDeterministicRepair}
-        showContextDrawer={showContextDrawer}
-        editStyleMd={editStyleMd}
-        setEditStyleMd={setEditStyleMd}
-        editContextMd={editContextMd}
-        setEditContextMd={setEditContextMd}
-        onApplyStyleAndContext={() => {
-          onUpdateStyleAndContext(editStyleMd, editContextMd);
-          setRepairNotice('Стилевой гид и контекст обновлены.');
-        }}
-      />
-
-      {/* MODE 1: Unified Minimalist 2-Column Editorial Sheet */}
-      {editorMode === 'split' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 rounded-xl border border-white/[0.07] bg-[#11131C]/70 divide-y lg:divide-y-0 lg:divide-x divide-white/[0.06] overflow-hidden">
-          {/* Left Pane: English Source */}
-          <div className="flex flex-col">
-            <div className="flex items-center justify-between border-b border-white/[0.06] px-6 py-3">
-              <span className="text-xs font-medium text-[#94A3B8]">
-                Оригинал (ENG) — {chapter.titleEng}
-              </span>
-              <span className="font-mono text-xs tabular-nums text-[#64748B]">
-                {draftEng.trim().split(/\s+/).filter(Boolean).length} слов
-              </span>
-            </div>
-            <div
-              onMouseUp={handleEditorMouseUp}
-              className={`p-6 sm:p-8 text-[#F1F5F9]/90 min-h-[440px] ${typoClass}`}
-            >
-              {renderHighlightedEnglish(draftEng)}
-            </div>
-          </div>
-
-          {/* Right Pane: Russian Translation */}
-          <div className="flex flex-col">
-            <div className="flex flex-wrap items-center justify-between border-b border-white/[0.06] px-6 py-2.5 gap-2">
-              <input
-                type="text"
-                aria-label="Заголовок главы на русском"
-                value={draftTitleRus}
-                onChange={(e) => setDraftTitleRus(e.target.value)}
-                placeholder="Название главы на русском..."
-                className="w-full sm:w-auto flex-1 bg-transparent text-xs font-medium text-[#F1F5F9] focus:outline-none"
-              />
-
-              {/* Pass 2 vs Pass 3 Stylist Switcher */}
-              <div className="flex items-center gap-1 bg-black/40 p-0.5 rounded-lg border border-white/5">
-                <button
-                  type="button"
-                  onClick={() => setStylistViewMode('final')}
-                  className={`px-2 py-0.5 text-[10px] rounded transition ${
-                    stylistViewMode === 'final'
-                      ? 'bg-emerald-500/20 text-emerald-300 font-semibold'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                  title="Финальный текст после прохода слепого стилиста Норы Галь и шлюза отката"
+      {/* Workspace Area: Prose Sheet + Dockable Tabbed Inspector */}
+      <div
+        className={
+          activeInspectorTab !== null
+            ? 'grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_390px] gap-4 items-start'
+            : 'space-y-4'
+        }
+      >
+        <div className="min-w-0 space-y-4 order-2 xl:order-1">
+          {/* MODE 1: Unified Minimalist 2-Column Editorial Sheet */}
+          {editorMode === 'split' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 rounded-xl border border-white/[0.09] bg-[#10131C] divide-y lg:divide-y-0 lg:divide-x divide-white/[0.07] overflow-hidden">
+              {/* Left Pane: English Source */}
+              <div className="flex flex-col min-w-0">
+                <div className="flex items-center justify-between gap-3 border-b border-white/[0.07] bg-[#0D1017] px-5 py-2.5">
+                  <span className="text-xs font-medium text-[#B0B8C9] truncate">
+                    Оригинал (ENG) — {chapter.titleEng}
+                  </span>
+                  <span className="font-mono text-xs tabular-nums text-[#8893A8] shrink-0">
+                    {draftEng.trim().split(/\s+/).filter(Boolean).length} сл.
+                  </span>
+                </div>
+                <div
+                  ref={engScrollRef}
+                  onScroll={handleEngPaneScroll}
+                  onMouseUp={handleEditorMouseUp}
+                  className={`${splitHeightClass} overflow-y-auto studio-scroll p-6 sm:p-7 text-[#F3F4F6]/90`}
                 >
-                  Финал (Pass 3)
-                </button>
-                {preStylistSnapshot && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setStylistViewMode('pre_stylist')}
-                      className={`px-2 py-0.5 text-[10px] rounded transition ${
-                        stylistViewMode === 'pre_stylist'
-                          ? 'bg-amber-500/20 text-amber-300 font-semibold'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                      title="Черновик до прохода стилиста"
-                    >
-                      Черновик (Pass 2)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setStylistViewMode('stylist_diff')}
-                      className={`px-2 py-0.5 text-[10px] rounded transition ${
-                        stylistViewMode === 'stylist_diff'
-                          ? 'bg-cyan-500/20 text-cyan-300 font-semibold'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                      title="Дифф правок стилиста"
-                    >
-                      Дифф стилиста
-                    </button>
-                  </>
+                  <div className={`mx-auto ${typoClass}`}>
+                    {renderHighlightedEnglish(draftEng)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Pane: Russian Translation */}
+              <div className="flex flex-col min-w-0">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.07] bg-[#0D1017] px-5 py-2">
+                  <div className="flex items-center gap-2 flex-1 min-w-[160px]">
+                    {isDirty && (
+                      <span
+                        className="h-2 w-2 rounded-full bg-[#D99B26] shrink-0"
+                        title="Несохранённые изменения"
+                      />
+                    )}
+                    <input
+                      type="text"
+                      aria-label="Заголовок главы на русском"
+                      value={draftTitleRus}
+                      onChange={(e) => setDraftTitleRus(e.target.value)}
+                      placeholder="Название главы на русском..."
+                      className="w-full bg-transparent text-xs font-semibold text-[#F3F4F6] placeholder:text-[#8893A8] focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {preStylistSnapshot && (
+                      <div className="inline-flex items-center gap-0.5 rounded-lg border border-white/[0.08] bg-[#0A0C12] p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setStylistViewMode('final')}
+                          className={`px-2 py-0.5 text-[11px] rounded transition-colors ${
+                            stylistViewMode === 'final'
+                              ? 'bg-[#151925] text-emerald-300 font-semibold'
+                              : 'text-[#8893A8] hover:text-[#F3F4F6]'
+                          }`}
+                        >
+                          Финал
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStylistViewMode('pre_stylist')}
+                          className={`px-2 py-0.5 text-[11px] rounded transition-colors ${
+                            stylistViewMode === 'pre_stylist'
+                              ? 'bg-[#151925] text-[#E5AC3D] font-semibold'
+                              : 'text-[#8893A8] hover:text-[#F3F4F6]'
+                          }`}
+                        >
+                          Pass 2
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStylistViewMode('stylist_diff')}
+                          className={`px-2 py-0.5 text-[11px] rounded transition-colors ${
+                            stylistViewMode === 'stylist_diff'
+                              ? 'bg-[#151925] text-sky-300 font-semibold'
+                              : 'text-[#8893A8] hover:text-[#F3F4F6]'
+                          }`}
+                        >
+                          Дифф
+                        </button>
+                      </div>
+                    )}
+
+                    <span className="font-mono text-xs tabular-nums text-[#8893A8]">
+                      {draftRus.trim() ? draftRus.trim().split(/\s+/).length : 0} сл.
+                    </span>
+
+                    {isDirty && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDraftRus(chapter.rusText);
+                          setDraftTitleRus(chapter.titleRus);
+                        }}
+                        aria-label="Сбросить несохранённые правки"
+                        title="Сбросить несохранённые правки"
+                        className="inline-flex min-h-6 min-w-6 items-center justify-center rounded text-[#8893A8] hover:bg-white/[0.06] hover:text-[#F3F4F6]"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {stylistViewMode === 'final' ? (
+                  <textarea
+                    ref={rusTextareaRef}
+                    onScroll={handleRusPaneScroll}
+                    aria-label="Текст перевода на русском"
+                    value={draftRus}
+                    onChange={(e) => setDraftRus(e.target.value)}
+                    onMouseUp={handleEditorMouseUp}
+                    onKeyUp={handleEditorMouseUp}
+                    placeholder="Нажмите «Перевести главу» или введите литературный перевод..."
+                    className={`w-full ${splitHeightClass} overflow-y-auto studio-scroll resize-y bg-transparent p-6 sm:p-7 text-[#F3F4F6] placeholder:text-[#8893A8] focus:outline-none ${typoClass} ${
+                      columnWidth === 'prose' ? 'mx-auto' : ''
+                    }`}
+                  />
+                ) : stylistViewMode === 'pre_stylist' ? (
+                  <div
+                    onMouseUp={handleEditorMouseUp}
+                    className={`${splitHeightClass} overflow-y-auto studio-scroll p-6 sm:p-7 text-[#F3F4F6]/90 whitespace-pre-wrap`}
+                  >
+                    <div className="mb-3 rounded-lg border border-[#D99B26]/30 bg-[#0A0C12] px-3 py-2 font-mono text-xs text-[#E5AC3D]">
+                      Черновик Pass 2 (до финального прохода стилиста)
+                    </div>
+                    <div className={`mx-auto ${typoClass}`}>{preStylistSnapshot}</div>
+                  </div>
+                ) : (
+                  <div
+                    className={`${splitHeightClass} overflow-y-auto studio-scroll p-6 sm:p-7 whitespace-pre-wrap`}
+                  >
+                    <div className="mb-3 rounded-lg border border-sky-500/30 bg-[#0A0C12] px-3 py-2 font-mono text-xs text-sky-300">
+                      Дифф правок стилиста: красный — Pass 2, зелёный — финал
+                    </div>
+                    <div className={`mx-auto ${typoClass}`}>
+                      {stylistDiffSegments.map((seg, i) =>
+                        seg.type === 'removed' ? (
+                          <span
+                            key={i}
+                            className="bg-rose-500/20 text-rose-300 line-through decoration-rose-400 px-1 py-0.5 rounded mx-0.5"
+                          >
+                            {seg.text}
+                          </span>
+                        ) : seg.type === 'added' ? (
+                          <span
+                            key={i}
+                            className="bg-emerald-500/20 text-emerald-200 font-semibold px-1 py-0.5 rounded mx-0.5"
+                          >
+                            {seg.text}
+                          </span>
+                        ) : (
+                          <span key={i}>{seg.text}</span>
+                        )
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="font-mono text-xs tabular-nums text-[#64748B]">
-                  {draftRus.trim() ? draftRus.trim().split(/\s+/).length : 0} слов
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDraftRus(chapter.rusText);
-                    setDraftTitleRus(chapter.titleRus);
-                  }}
-                  title="Сбросить несохранённые правки"
-                  className="text-[#64748B] hover:text-[#F1F5F9]"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                </button>
-              </div>
             </div>
+          )}
 
-            {stylistViewMode === 'final' ? (
-              <textarea
-                aria-label="Текст перевода на русском"
-                value={draftRus}
-                onChange={(e) => setDraftRus(e.target.value)}
-                onMouseUp={handleEditorMouseUp}
-                onKeyUp={handleEditorMouseUp}
-                placeholder="Нажмите «Перевести главу» или введите литературный перевод..."
-                className={`w-full flex-1 min-h-[440px] resize-y bg-transparent p-6 sm:p-8 text-[#F1F5F9] placeholder:text-[#64748B] focus:outline-none ${typoClass}`}
-              />
-            ) : stylistViewMode === 'pre_stylist' ? (
-              <div
-                onMouseUp={handleEditorMouseUp}
-                className={`p-6 sm:p-8 text-amber-200/90 whitespace-pre-wrap ${typoClass}`}
-              >
-                <div className="text-xs font-mono text-amber-400 mb-3 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
-                  Редакция черновика Pass 2 (до вмешательства «слепого стилиста» Норы Галь)
-                </div>
-                {preStylistSnapshot}
-              </div>
-            ) : (
-              <div className={`p-6 sm:p-8 whitespace-pre-wrap ${typoClass}`}>
-                <div className="text-xs font-mono text-cyan-400 mb-3 bg-cyan-500/10 p-2 rounded-lg border border-cyan-500/20">
-                  Пословный дифф: красный — черновик Pass 2; зелёный — правки стилиста Норы Галь (Pass 3)
-                </div>
-                {stylistDiffSegments.map((seg, i) =>
-                  seg.type === 'removed' ? (
-                    <span
-                      key={i}
-                      className="bg-rose-500/20 text-rose-300 line-through decoration-rose-400 px-1 py-0.5 rounded mx-0.5"
-                    >
-                      {seg.text}
-                    </span>
-                  ) : seg.type === 'added' ? (
-                    <span
-                      key={i}
-                      className="bg-emerald-500/20 text-emerald-300 font-semibold px-1 py-0.5 rounded mx-0.5"
-                    >
-                      {seg.text}
-                    </span>
-                  ) : (
-                    <span key={i}>{seg.text}</span>
-                  )
-                )}
-              </div>
-            )}
-          </div>
+          <EditorModes
+            editorMode={editorMode}
+            alignmentGrid={alignmentGrid}
+            renderHighlightedEnglish={renderHighlightedEnglish}
+            onUpdateAlignedParagraph={handleUpdateAlignedParagraph}
+            onInstantRepair={handleInstantDeterministicRepair}
+            comparedVersionLabel={comparedVersionLabel}
+            wordDiffSegments={wordDiffSegments}
+            lastPreRepairSnapshot={lastPreRepairSnapshot}
+            onUndoRepair={handleUndoRepair}
+            onExitInlineDiff={() => setEditorMode('split')}
+          />
         </div>
-      )}
 
-      <EditorModes
-        editorMode={editorMode}
-        alignmentGrid={alignmentGrid}
-        renderHighlightedEnglish={renderHighlightedEnglish}
-        onUpdateAlignedParagraph={handleUpdateAlignedParagraph}
-        onInstantRepair={handleInstantDeterministicRepair}
-        comparedVersionLabel={comparedVersionLabel}
-        wordDiffSegments={wordDiffSegments}
-        lastPreRepairSnapshot={lastPreRepairSnapshot}
-        onUndoRepair={handleUndoRepair}
-        onExitInlineDiff={() => setEditorMode('split')}
-      />
+        {activeInspectorTab !== null && (
+          <div className="order-1 xl:order-2">
+            <EditorInspectorPanels
+              activeTab={activeInspectorTab}
+              onSelectTab={selectInspectorTab}
+              onClose={() => setActiveInspectorTab(null)}
+              chapter={chapter}
+              previousChapter={previousChapter}
+              draftTitleRus={draftTitleRus}
+              draftEng={draftEng}
+              draftRus={draftRus}
+              draftSummary={draftSummary}
+              setDraftSummary={setDraftSummary}
+              versionHistoryList={versionHistoryList}
+              onCompareWithVersion={handleCompareWithVersion}
+              onRollbackToVersion={handleRollbackToVersion}
+              tautologyItems={tautologyItems}
+              ditingReport={ditingReport}
+              csiCulturalNotes={csiCulturalNotes}
+              deltaContextPacket={deltaContextPacket}
+              hasIssues={hasIssues}
+              genrePreset={genrePreset}
+              proseTone={proseTone}
+              lintReport={lintReport}
+              onInstantRepair={handleInstantDeterministicRepair}
+              editStyleMd={editStyleMd}
+              setEditStyleMd={setEditStyleMd}
+              editContextMd={editContextMd}
+              setEditContextMd={setEditContextMd}
+              onApplyStyleAndContext={() => {
+                onUpdateStyleAndContext(editStyleMd, editContextMd);
+                setRepairNotice('Стилевой гид и контекст обновлены.');
+              }}
+            />
+          </div>
+        )}
+      </div>
 
-      {showQuickTermModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-2xl border border-amber-500/30 bg-slate-900 p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-sm font-bold text-amber-300 flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-amber-400" />
-                Быстрое добавление в Канон (Ctrl+Shift+M)
-              </h3>
+      {/* Native Quick Canon Term Dialog */}
+      <StudioDialog
+        isOpen={showQuickTermModal}
+        onClose={() => setShowQuickTermModal(false)}
+        title={
+          <>
+            <Sparkles className="h-4 w-4 text-[#D99B26]" aria-hidden="true" />
+            <span>Быстрое добавление в канон</span>
+          </>
+        }
+        subtitle="Горячая клавиша в редакторе: Ctrl+Shift+M"
+        titleId="quick-term-modal-title"
+        maxWidthClass="max-w-md"
+        footer={
+          <>
+            <span className="text-[11px] text-[#8893A8]">
+              Применится к текущей главе и глоссарию
+            </span>
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setShowQuickTermModal(false)}
-                className="text-xs text-slate-400 hover:text-slate-200"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="block text-slate-400 mb-1 font-medium">Оригинал (ENG / CJK):</label>
-                <input
-                  type="text"
-                  value={quickTermEng}
-                  onChange={(e) => {
-                    const nextEng = e.target.value;
-                    setQuickTermEng(nextEng);
-                    const found = flatGlossaryPairs.find(
-                      (p) => p.eng.toLowerCase() === nextEng.trim().toLowerCase()
-                    );
-                    if (found) {
-                      setQuickTermOldRus(found.rus);
-                    }
-                  }}
-                  placeholder="e.g. Origin Points, Lin Xuan"
-                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder-slate-500 focus:border-amber-400 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1 font-medium">Канонический русский перевод:</label>
-                <input
-                  type="text"
-                  value={quickTermRus}
-                  onChange={(e) => setQuickTermRus(e.target.value)}
-                  placeholder="например: Очки Истока, Линь Сюань"
-                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder-slate-500 focus:border-amber-400 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1 font-medium">
-                  Прежний вариант для замены (если термин уже был в главах):
-                </label>
-                <input
-                  type="text"
-                  value={quickTermOldRus}
-                  onChange={(e) => setQuickTermOldRus(e.target.value)}
-                  placeholder="определяется автоматически по канону или выделению"
-                  className="w-full rounded-lg border border-slate-700 bg-slate-800/70 px-3 py-1.5 text-slate-200 placeholder-slate-500 focus:border-amber-400 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1 font-medium">Категория глоссария:</label>
-                <select
-                  value={quickTermCategory}
-                  onChange={(e) => setQuickTermCategory(e.target.value as keyof CanonicalGlossary)}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:border-amber-400 focus:outline-none"
-                >
-                  <option value="characters">Персонажи (characters)</option>
-                  <option value="realms">Ступени культивации (realms)</option>
-                  <option value="sects_and_places">Секты и локации (sects_and_places)</option>
-                  <option value="system_and_terms">Техники и термины (system_and_terms)</option>
-                  <option value="units">Меры и единицы (units)</option>
-                </select>
-              </div>
-
-              <label className="flex items-center gap-2 cursor-pointer pt-1 text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={quickTermRipple}
-                  onChange={(e) => setQuickTermRipple(e.target.checked)}
-                  className="rounded border-slate-700 text-amber-500 focus:ring-0"
-                />
-                <span>Canon Ripple (каскадная замена во всех главах)</span>
-              </label>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-              <button
-                type="button"
-                onClick={() => setShowQuickTermModal(false)}
-                className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
+                className="rounded-lg border border-white/[0.12] bg-[#10131C] px-3.5 py-2 text-xs text-[#B0B8C9] hover:text-[#F3F4F6]"
               >
                 Отмена
               </button>
@@ -1687,33 +1750,115 @@ export default function ParallelEditorView({
                 type="button"
                 onClick={handleSaveQuickTerm}
                 disabled={!quickTermEng.trim() || !quickTermRus.trim()}
-                className="rounded-lg bg-amber-500 px-4 py-1.5 text-xs font-semibold text-slate-950 hover:bg-amber-400 disabled:opacity-50"
+                className="rounded-lg bg-[#D99B26] px-4 py-2 text-xs font-semibold text-[#090A0F] hover:bg-[#E5AC3D] disabled:opacity-50"
               >
-                Внести в Канон
+                Внести в канон
               </button>
             </div>
+          </>
+        }
+      >
+        <div className="space-y-3.5 text-xs">
+          <div>
+            <label htmlFor="quick-term-eng" className="block text-[#B0B8C9] mb-1.5 font-medium">
+              Оригинал (ENG / CJK)
+            </label>
+            <input
+              id="quick-term-eng"
+              type="text"
+              autoFocus
+              value={quickTermEng}
+              onChange={(e) => {
+                const nextEng = e.target.value;
+                setQuickTermEng(nextEng);
+                const found = flatGlossaryPairs.find(
+                  (p) => p.eng.toLowerCase() === nextEng.trim().toLowerCase()
+                );
+                if (found) {
+                  setQuickTermOldRus(found.rus);
+                }
+              }}
+              placeholder="Напр., Origin Points или Lin Xuan"
+              className="w-full rounded-lg border border-white/[0.12] bg-[#0A0C12] px-3 py-2 text-[#F3F4F6] placeholder:text-[#8893A8] focus:border-[#D99B26] focus:outline-none"
+            />
           </div>
+
+          <div>
+            <label htmlFor="quick-term-rus" className="block text-[#B0B8C9] mb-1.5 font-medium">
+              Канонический русский перевод
+            </label>
+            <input
+              id="quick-term-rus"
+              type="text"
+              value={quickTermRus}
+              onChange={(e) => setQuickTermRus(e.target.value)}
+              placeholder="Напр., Очки Истока или Линь Сюань"
+              className="w-full rounded-lg border border-white/[0.12] bg-[#0A0C12] px-3 py-2 text-[#F3F4F6] placeholder:text-[#8893A8] focus:border-[#D99B26] focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="quick-term-old-rus" className="block text-[#B0B8C9] mb-1.5 font-medium">
+              Прежний вариант для замены (опционально)
+            </label>
+            <input
+              id="quick-term-old-rus"
+              type="text"
+              value={quickTermOldRus}
+              onChange={(e) => setQuickTermOldRus(e.target.value)}
+              placeholder="Подставляется автоматически по канону"
+              className="w-full rounded-lg border border-white/[0.1] bg-[#0A0C12] px-3 py-2 text-[#B0B8C9] placeholder:text-[#8893A8] focus:border-[#D99B26] focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="quick-term-category" className="block text-[#B0B8C9] mb-1.5 font-medium">
+              Категория глоссария
+            </label>
+            <select
+              id="quick-term-category"
+              value={quickTermCategory}
+              onChange={(e) => setQuickTermCategory(e.target.value as keyof CanonicalGlossary)}
+              className="w-full rounded-lg border border-white/[0.12] bg-[#0A0C12] px-3 py-2 text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none"
+            >
+              <option value="characters">Персонажи (characters)</option>
+              <option value="realms">Ступени культивации (realms)</option>
+              <option value="sects_and_places">Секты и локации (sects_and_places)</option>
+              <option value="system_and_terms">Техники и термины (system_and_terms)</option>
+              <option value="units">Меры и единицы (units)</option>
+            </select>
+          </div>
+
+          <label className="flex items-center gap-2 cursor-pointer pt-1 text-[#B0B8C9]">
+            <input
+              type="checkbox"
+              checked={quickTermRipple}
+              onChange={(e) => setQuickTermRipple(e.target.checked)}
+              className="h-3.5 w-3.5 rounded border-white/[0.2] bg-[#0A0C12]"
+            />
+            <span>Canon Ripple (каскадная замена во всех главах)</span>
+          </label>
         </div>
-      )}
+      </StudioDialog>
 
       {/* Floating Selection Action Pill */}
       {selectedTextSnippet && (
-        <div className="fixed bottom-7 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-3 duration-200">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
           <button
             type="button"
             onClick={() => {
               openQuickTermFromSelection(selectedTextSnippet.text);
               setSelectedTextSnippet(null);
             }}
-            className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 text-black font-semibold text-xs shadow-2xl shadow-amber-500/40 hover:from-amber-400 hover:to-amber-500 transition-all border border-amber-300 active:scale-95"
+            className="flex items-center gap-2.5 rounded-full border border-[#D99B26]/55 bg-[#151925]/95 px-4 py-2 text-xs font-medium text-[#F3F4F6] shadow-[0_14px_36px_rgba(0,0,0,0.75)] backdrop-blur-md hover:border-[#D99B26] transition-colors"
           >
-            <BookmarkPlus className="w-4 h-4 shrink-0" />
+            <BookmarkPlus className="h-4 w-4 shrink-0 text-[#D99B26]" aria-hidden="true" />
             <span className="max-w-[200px] truncate">
-              + В Канон: «<strong>{selectedTextSnippet.text}</strong>»
+              В канон: <strong className="text-[#E5AC3D]">«{selectedTextSnippet.text}»</strong>
             </span>
-            <span className="font-mono text-[10px] bg-black/20 px-1.5 py-0.5 rounded text-black/80 font-bold hidden sm:inline">
+            <kbd className="font-mono text-[10px] rounded border border-white/[0.12] bg-[#0A0C12] px-1.5 py-0.5 text-[#8893A8] hidden sm:inline">
               Ctrl+Shift+M
-            </span>
+            </kbd>
           </button>
         </div>
       )}

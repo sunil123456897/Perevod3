@@ -111,61 +111,61 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div
-        aria-live="polite"
-        className="fixed bottom-5 right-5 z-[9999] flex flex-col gap-2.5 max-w-md w-full pointer-events-none px-4 sm:px-0"
-      >
+      <div className="fixed bottom-5 right-5 z-[9999] flex flex-col gap-2.5 max-w-md w-full pointer-events-none px-4 sm:px-0">
         {toasts.map((t) => {
           const isSuccess = t.type === 'success';
           const isError = t.type === 'error';
           const isWarn = t.type === 'warn';
 
-          const borderColor = isSuccess
-            ? 'border-emerald-500/50 bg-[#061510]/95 text-emerald-100 shadow-emerald-950/40'
+          const surfaceColor = isSuccess
+            ? 'border-emerald-500/40 bg-[#151925]/95 text-[#F3F4F6]'
             : isError
-            ? 'border-rose-500/50 bg-[#19090c]/95 text-rose-100 shadow-rose-950/40'
-            : isWarn
-            ? 'border-amber-500/50 bg-[#181106]/95 text-amber-100 shadow-amber-950/40'
-            : 'border-cyan-500/40 bg-[#08131d]/95 text-cyan-100 shadow-cyan-950/40';
+              ? 'border-rose-500/45 bg-[#151925]/95 text-[#F3F4F6]'
+              : isWarn
+                ? 'border-[#D99B26]/45 bg-[#151925]/95 text-[#F3F4F6]'
+                : 'border-white/[0.14] bg-[#151925]/95 text-[#F3F4F6]';
 
           const IconComponent = isSuccess
             ? CheckCircle2
             : isError
-            ? XCircle
-            : isWarn
-            ? AlertTriangle
-            : Info;
+              ? XCircle
+              : isWarn
+                ? AlertTriangle
+                : Info;
 
           const iconColor = isSuccess
             ? 'text-emerald-400'
             : isError
-            ? 'text-rose-400'
-            : isWarn
-            ? 'text-amber-400'
-            : 'text-cyan-400';
+              ? 'text-rose-400'
+              : isWarn
+                ? 'text-[#D99B26]'
+                : 'text-[#B0B8C9]';
 
           return (
             <div
               key={t.id}
-              role="alert"
-              className={`pointer-events-auto flex items-start gap-3 p-3.5 rounded-xl border backdrop-blur-md shadow-2xl transition-all duration-200 animate-in fade-in slide-in-from-bottom-2 ${borderColor}`}
+              role={isError ? 'alert' : 'status'}
+              aria-live={isError ? 'assertive' : 'polite'}
+              className={`pointer-events-auto flex items-start gap-3 rounded-xl border p-3.5 backdrop-blur-md shadow-[0_18px_40px_rgba(0,0,0,0.72)] transition-all duration-200 ${surfaceColor}`}
             >
-              <IconComponent className={`w-5 h-5 shrink-0 mt-0.5 ${iconColor}`} />
+              <IconComponent className={`h-5 w-5 shrink-0 mt-0.5 ${iconColor}`} aria-hidden="true" />
               <div className="flex-1 min-w-0 pr-1">
                 {t.title && (
-                  <div className="text-xs font-semibold uppercase tracking-wider mb-0.5 opacity-90">
+                  <div className="text-xs font-semibold text-[#F3F4F6] mb-0.5">
                     {t.title}
                   </div>
                 )}
-                <div className="text-sm leading-snug break-words font-medium">{t.message}</div>
+                <div className="text-xs leading-relaxed break-words text-[#B0B8C9]">
+                  {t.message}
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => dismissToast(t.id)}
-                className="shrink-0 p-1 rounded-md text-white/50 hover:text-white hover:bg-white/10 transition-colors"
+                className="inline-flex min-h-7 min-w-7 shrink-0 items-center justify-center rounded-lg text-[#8893A8] hover:bg-white/[0.06] hover:text-[#F3F4F6] transition-colors"
                 aria-label="Закрыть уведомление"
               >
-                <X className="w-4 h-4" />
+                <X className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
           );

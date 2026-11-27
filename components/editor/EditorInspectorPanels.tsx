@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
-import { ChevronRight, GitCompare, Undo2 } from 'lucide-react';
+import React, { useRef } from 'react';
+import { ChevronRight, GitCompare, Undo2, X, CheckCircle2 } from 'lucide-react';
 import {
   GENRE_PRESET_LABELS,
   PROSE_TONE_LABELS,
@@ -20,7 +20,12 @@ import type {
 } from '@/lib/pipeline-types';
 import type { ChapterRecord, ChapterVersionSnapshot } from '@/lib/seed-data';
 
+export type InspectorTab = 'qa' | 'tautology' | 'csi' | 'delta' | 'history' | 'guide';
+
 interface EditorInspectorPanelsProps {
+  activeTab: InspectorTab | null;
+  onSelectTab: (tab: InspectorTab) => void;
+  onClose: () => void;
   chapter: ChapterRecord;
   previousChapter: ChapterRecord | null;
   draftTitleRus: string;
@@ -28,28 +33,18 @@ interface EditorInspectorPanelsProps {
   draftRus: string;
   draftSummary: string;
   setDraftSummary: (val: string) => void;
-  showVersionHistoryPanel: boolean;
-  onCloseVersionHistory: () => void;
   versionHistoryList: ChapterVersionSnapshot[];
   onCompareWithVersion: (snap: ChapterVersionSnapshot) => void;
   onRollbackToVersion: (snap: ChapterVersionSnapshot) => void;
-  showTautologyPanel: boolean;
-  onCloseTautology: () => void;
   tautologyItems: ReturnType<typeof detectTautologies>;
-  showCsiDitingPanel: boolean;
-  onCloseCsiDiting: () => void;
   ditingReport: ReturnType<typeof evaluateDitingQuality>;
   csiCulturalNotes: ReturnType<typeof extractCsiCulturalNotes>;
-  showMemoryBar: boolean;
-  onCloseMemoryBar: () => void;
   deltaContextPacket: ReturnType<typeof buildDelTAContextPacket>;
   hasIssues: boolean;
-  showIssuesPanel: boolean;
   genrePreset: GenrePreset;
   proseTone: ProseTone;
   lintReport: LintReport;
   onInstantRepair: () => void;
-  showContextDrawer: boolean;
   editStyleMd: string;
   setEditStyleMd: (val: string) => void;
   editContextMd: string;
@@ -58,6 +53,9 @@ interface EditorInspectorPanelsProps {
 }
 
 export default function EditorInspectorPanels({
+  activeTab,
+  onSelectTab,
+  onClose,
   chapter,
   previousChapter,
   draftTitleRus,
@@ -65,328 +63,301 @@ export default function EditorInspectorPanels({
   draftRus,
   draftSummary,
   setDraftSummary,
-  showVersionHistoryPanel,
-  onCloseVersionHistory,
   versionHistoryList,
   onCompareWithVersion,
   onRollbackToVersion,
-  showTautologyPanel,
-  onCloseTautology,
   tautologyItems,
-  showCsiDitingPanel,
-  onCloseCsiDiting,
   ditingReport,
   csiCulturalNotes,
-  showMemoryBar,
-  onCloseMemoryBar,
   deltaContextPacket,
   hasIssues,
-  showIssuesPanel,
   genrePreset,
   proseTone,
   lintReport,
   onInstantRepair,
-  showContextDrawer,
   editStyleMd,
   setEditStyleMd,
   editContextMd,
   setEditContextMd,
   onApplyStyleAndContext,
 }: EditorInspectorPanelsProps) {
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  if (!activeTab) return null;
+
+  const qaCount = lintReport.errorCount + lintReport.warningCount;
+  const tabs: Array<{ id: InspectorTab; label: string; badge?: string | number }> = [
+    { id: 'qa', label: 'QA', badge: qaCount > 0 ? qaCount : undefined },
+    {
+      id: 'tautology',
+      label: 'Повторы',
+      badge: tautologyItems.length > 0 ? tautologyItems.length : undefined,
+    },
+    { id: 'csi', label: 'CSI', badge: csiCulturalNotes.length },
+    { id: 'delta', label: 'DelTA', badge: deltaContextPacket.shortTermWindow.length },
+    { id: 'history', label: 'История', badge: versionHistoryList.length },
+    { id: 'guide', label: 'Гид' },
+  ];
+
+  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const idx = tabs.findIndex((t) => t.id === activeTab);
+    if (idx === -1) return;
+    let nextIdx = -1;
+    if (e.key === 'ArrowRight') nextIdx = (idx + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') nextIdx = (idx - 1 + tabs.length) % tabs.length;
+    else if (e.key === 'Home') nextIdx = 0;
+    else if (e.key === 'End') nextIdx = tabs.length - 1;
+    if (nextIdx >= 0) {
+      e.preventDefault();
+      onSelectTab(tabs[nextIdx].id);
+      tabRefs.current[nextIdx]?.focus();
+    }
+  };
+
   return (
-    <>
-      {/* Version History Panel (Compare & Rollback across Pipeline Passes) */}
-      {showVersionHistoryPanel && (
-        <div
-          role="region"
-          aria-label="История версий главы"
-          className="rounded-xl border border-amber-500/30 bg-slate-900/80 p-4 space-y-3"
+    <aside
+      aria-label="Инспектор главы"
+      className="rounded-xl border border-white/[0.1] bg-[#10131C] flex flex-col overflow-hidden max-h-[440px] xl:sticky xl:top-20 xl:max-h-[calc(100dvh-6.25rem)]"
+    >
+      {/* Inspector Header */}
+      <div className="flex items-center justify-between gap-2 border-b border-white/[0.07] px-4 py-2.5 shrink-0">
+        <h2 className="font-display text-xs font-semibold text-[#F3F4F6]">
+          Инспектор главы {chapter.subPart || chapter.number}
+        </h2>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Закрыть инспектор"
+          className="inline-flex min-h-7 min-w-7 items-center justify-center rounded-lg text-[#8893A8] hover:bg-white/[0.06] hover:text-[#F3F4F6] transition-colors"
         >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <span className="text-xs font-semibold text-amber-300">
-                История версий и результатов прохождения конвейера (Глава{' '}
-                {chapter.subPart || chapter.number})
-              </span>
-              <p className="text-[11px] text-slate-400">
-                Сравните любую предыдущую фазу конвейера с текущим текстом пословно (Diff) или
-                откатите главу в один клик.
-              </p>
-            </div>
+          <X className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      </div>
+
+      {/* Single-Row Scrollable Tablist */}
+      <div
+        role="tablist"
+        aria-label="Разделы инспектора"
+        onKeyDown={handleTabKeyDown}
+        className="flex items-center gap-0.5 overflow-x-auto studio-tablist border-b border-white/[0.08] bg-[#0D1017] px-2 shrink-0"
+      >
+        {tabs.map((tab, i) => {
+          const isSelected = activeTab === tab.id;
+          return (
             <button
+              key={tab.id}
+              ref={(el) => {
+                tabRefs.current[i] = el;
+              }}
               type="button"
-              onClick={onCloseVersionHistory}
-              className="text-xs text-slate-400 hover:text-white"
+              role="tab"
+              id={`inspector-tab-${tab.id}`}
+              aria-selected={isSelected}
+              tabIndex={isSelected ? 0 : -1}
+              onClick={() => onSelectTab(tab.id)}
+              className={`studio-tab inline-flex shrink-0 items-center gap-1 whitespace-nowrap px-2 py-2 text-[11px] font-medium transition-colors ${
+                isSelected ? 'text-[#F3F4F6]' : 'text-[#8893A8] hover:text-[#F3F4F6]'
+              }`}
             >
-              Свернуть
+              <span>{tab.label}</span>
+              {tab.badge !== undefined && (
+                <span
+                  className={`font-mono text-[10px] tabular-nums ${
+                    tab.id === 'qa' && qaCount > 0 ? 'text-rose-300' : 'text-[#8893A8]'
+                  }`}
+                >
+                  {tab.badge}
+                </span>
+              )}
             </button>
-          </div>
+          );
+        })}
+      </div>
 
-          {versionHistoryList.length === 0 ? (
-            <p className="text-xs text-slate-400">
-              Для этой главы пока нет сохранённых версий — запустите перевод или нажмите «Сохранить».
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
-              {[...versionHistoryList].reverse().map((snap, revIdx) => {
-                const versionNumber = versionHistoryList.length - revIdx;
-                const isIdenticalToCurrent = snap.rusText.trim() === draftRus.trim();
+      {/* Active Tab Panel */}
+      <div
+        role="tabpanel"
+        aria-labelledby={`inspector-tab-${activeTab}`}
+        className="flex-1 overflow-y-auto studio-scroll p-4 space-y-3"
+      >
+        {activeTab === 'qa' && (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-xs text-[#B0B8C9]">
+                Профиль:{' '}
+                <strong className="text-[#F3F4F6]">
+                  {GENRE_PRESET_LABELS[genrePreset].title}
+                </strong>{' '}
+                · {PROSE_TONE_LABELS[proseTone].title}
+              </div>
+              {hasIssues && (
+                <button
+                  type="button"
+                  onClick={onInstantRepair}
+                  className="text-xs font-semibold text-[#D99B26] hover:text-[#E5AC3D]"
+                >
+                  Исправить все в 1 клик →
+                </button>
+              )}
+            </div>
 
-                return (
+            {!hasIssues ? (
+              <div className="flex items-start gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/[0.07] p-3.5 text-xs text-emerald-200">
+                <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" aria-hidden="true" />
+                <div>
+                  <div className="font-semibold">Замечаний QA не обнаружено</div>
+                  <p className="text-[11px] text-emerald-200/80 mt-0.5">
+                    Типографика, канон терминов, род персонажей и числа совпадают с оригиналом.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {lintReport.issues.map((issue) => (
                   <div
-                    key={snap.id}
-                    className={`rounded-lg border p-3 text-xs space-y-2 transition ${
-                      isIdenticalToCurrent
-                        ? 'border-emerald-500/40 bg-emerald-950/15'
-                        : 'border-slate-800 bg-slate-950/85'
-                    }`}
+                    key={issue.id}
+                    className="rounded-lg border border-white/[0.08] bg-[#0A0C12] p-3 text-xs space-y-1"
                   >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center rounded bg-amber-500/20 px-1.5 py-0.5 font-mono text-[11px] font-bold text-amber-300">
-                          v{versionNumber}
-                        </span>
-                        <span className="font-semibold text-slate-100">
-                          {snap.stageLabel}
-                        </span>
-                      </div>
-                      <span className="font-mono text-[11px] text-slate-400 tabular-nums">
-                        {snap.timestamp} · {snap.wordCountRus} сл.
-                      </span>
+                    <div className="font-medium text-[#F3F4F6]">
+                      <span className="text-rose-300">{issue.ruleTitle}:</span>{' '}
+                      {issue.explanation}
                     </div>
-
-                    <p className="line-clamp-2 text-slate-400 font-serif">
-                      {snap.rusText}
-                    </p>
-
-                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                      <span
-                        className={`font-mono text-[11px] font-medium ${
-                          snap.qaPassed ? 'text-emerald-400' : 'text-rose-400'
-                        }`}
-                      >
-                        {snap.qaPassed
-                          ? '100% QA Pass'
-                          : `Замечаний QA: ${snap.qaErrorCount}`}
-                      </span>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => onCompareWithVersion(snap)}
-                          className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-slate-200 hover:border-amber-500/50 hover:text-amber-300 transition"
-                        >
-                          <GitCompare className="h-3 w-3" />
-                          Сравнить с текущим
-                        </button>
-
-                        {isIdenticalToCurrent ? (
-                          <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
-                            Активная версия
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => onRollbackToVersion(snap)}
-                            className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 border border-amber-500/40 px-2.5 py-1 text-[11px] font-semibold text-amber-300 hover:bg-amber-500/25 transition"
-                          >
-                            <Undo2 className="h-3 w-3" />
-                            Откатить к v{versionNumber}
-                          </button>
-                        )}
+                    {issue.suggestion && (
+                      <div className="flex items-start gap-1 text-emerald-300 text-[11px]">
+                        <ChevronRight className="h-3 w-3 shrink-0 mt-0.5" aria-hidden="true" />
+                        <span>{issue.suggestion}</span>
                       </div>
-                    </div>
+                    )}
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Tautology Radar Panel */}
-      {showTautologyPanel && (
-        <div className="rounded-xl border border-amber-500/30 bg-slate-900/80 p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-amber-300">
-              Радар тавтологий и лексических повторов в соседних предложениях
-            </span>
-            <button
-              type="button"
-              onClick={onCloseTautology}
-              className="text-xs text-slate-400 hover:text-white"
-            >
-              Свернуть
-            </button>
+                ))}
+              </div>
+            )}
           </div>
-          {tautologyItems.length === 0 ? (
-            <p className="text-xs text-emerald-400">
-              Лексических повторов в скользящем окне не обнаружено — проза разнообразна.
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-              {tautologyItems.map((t, idx) => (
+        )}
+
+        {activeTab === 'tautology' && (
+          <div className="space-y-2.5">
+            {tautologyItems.length === 0 ? (
+              <p className="rounded-xl border border-emerald-500/30 bg-emerald-500/[0.07] p-3.5 text-xs text-emerald-200">
+                Лексических повторов в скользящем окне не обнаружено.
+              </p>
+            ) : (
+              tautologyItems.map((t, idx) => (
                 <div
                   key={idx}
-                  className="rounded-lg border border-slate-800 bg-slate-950/80 p-3 text-xs space-y-1"
+                  className="rounded-lg border border-white/[0.08] bg-[#0A0C12] p-3 text-xs space-y-1.5"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-amber-300">
-                      Строка #{t.line} · повтор «{t.wordSample}» ({t.count} раза в абзаце)
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-[#E5AC3D]">
+                      Строка #{t.line} · «{t.wordSample}» ({t.count}×)
                     </span>
-                    <span className="font-mono text-[11px] text-slate-500">
-                      основа: {t.stem}-
+                    <span className="font-mono text-[11px] text-[#8893A8]">
+                      {t.stem}-
                     </span>
                   </div>
-                  <p className="text-slate-400">«{t.snippet}»</p>
+                  <p className="text-[#B0B8C9] leading-relaxed">«{t.snippet}»</p>
                   {t.synonymHint && (
-                    <p className="text-emerald-400 font-medium">{t.synonymHint}</p>
+                    <p className="text-emerald-300 font-medium text-[11px]">{t.synonymHint}</p>
                   )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {activeTab === 'csi' && (
+          <div className="space-y-3.5">
+            <div className="flex items-center justify-between rounded-lg border border-white/[0.08] bg-[#0A0C12] px-3 py-2 text-xs">
+              <span className="text-[#B0B8C9]">Интегральная оценка DITING</span>
+              <span className="font-mono font-semibold text-emerald-300 tabular-nums">
+                {ditingReport.mqmGrade} · {ditingReport.overallScore}/100
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: 'Идиоматика', val: ditingReport.idiomAccuracy },
+                { label: 'Связность сцен', val: ditingReport.referentialCohesion },
+                { label: 'Голоса героев', val: ditingReport.characterVoiceFidelity },
+                { label: 'Культурный код', val: ditingReport.culturalAdaptation },
+                { label: 'Ритмика прозы', val: ditingReport.literaryRhythm },
+                { label: 'Точность канона', val: ditingReport.terminologyPrecision },
+              ].map((dim) => (
+                <div
+                  key={dim.label}
+                  className="rounded-lg border border-white/[0.08] bg-[#0A0C12] px-3 py-2 text-xs"
+                >
+                  <div className="text-[11px] text-[#8893A8] truncate">{dim.label}</div>
+                  <div
+                    className={`mt-0.5 font-mono text-sm font-semibold tabular-nums ${
+                      dim.val >= 95
+                        ? 'text-emerald-300'
+                        : dim.val >= 85
+                          ? 'text-[#E5AC3D]'
+                          : 'text-rose-300'
+                    }`}
+                  >
+                    {dim.val}%
+                  </div>
                 </div>
               ))}
             </div>
-          )}
-        </div>
-      )}
 
-      {/* CHORUS C3 Cultural Footnotes (CSI) & DITING 6D Quality Judge Panel */}
-      {showCsiDitingPanel && (
-        <div
-          role="region"
-          aria-label="Культурные сноски CSI и оценка DITING"
-          className="rounded-xl border border-slate-800 bg-slate-900/80 p-4 space-y-4"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
-            <div>
-              <span className="text-xs font-semibold text-amber-300">
-                3-Ролевой конвейер LCD-MAS · Журнал культурных реалий CSI (CHORUS C3) и судья DITING
-              </span>
-              <p className="text-[11px] text-slate-400">
-                Прозрачное обоснование адаптации идиом, гоноративов и терминов + многомерная оценка нарративной достоверности.
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="font-mono text-xs tabular-nums text-emerald-400">
-                {ditingReport.mqmGrade} · {ditingReport.overallScore}/100
-              </span>
-              <button
-                type="button"
-                onClick={onCloseCsiDiting}
-                className="text-xs text-slate-400 hover:text-white"
-              >
-                Свернуть
-              </button>
-            </div>
-          </div>
-
-          {/* 6-Dimension DITING Score Strip */}
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
-            {[
-              { label: 'Идиоматика', val: ditingReport.idiomAccuracy },
-              { label: 'Связность сцен', val: ditingReport.referentialCohesion },
-              { label: 'Голоса героев', val: ditingReport.characterVoiceFidelity },
-              { label: 'Культурный код', val: ditingReport.culturalAdaptation },
-              { label: 'Ритмика прозы', val: ditingReport.literaryRhythm },
-              { label: 'Точность канона', val: ditingReport.terminologyPrecision },
-            ].map((dim) => (
-              <div
-                key={dim.label}
-                className="rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2 text-xs"
-              >
-                <div className="text-[11px] text-slate-400 truncate">{dim.label}</div>
-                <div
-                  className={`mt-0.5 font-mono text-sm font-semibold tabular-nums ${
-                    dim.val >= 95
-                      ? 'text-emerald-400'
-                      : dim.val >= 85
-                        ? 'text-amber-300'
-                        : 'text-rose-400'
-                  }`}
-                >
-                  {dim.val}%
-                </div>
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-[#B0B8C9]">
+                Культурные сноски CSI ({csiCulturalNotes.length})
               </div>
-            ))}
-          </div>
-
-          {/* CSI Cultural Notes List */}
-          <div className="space-y-2">
-            <div className="text-xs font-medium text-slate-300">
-              Обоснование решений локализатора CSI ({csiCulturalNotes.length})
-            </div>
-            <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
               {csiCulturalNotes.map((note) => (
                 <div
                   key={note.id}
-                  className="rounded-lg border border-slate-800 bg-slate-950/85 p-3 text-xs space-y-1.5"
+                  className="rounded-lg border border-white/[0.08] bg-[#0A0C12] p-3 text-xs space-y-1"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-semibold text-slate-100">{note.sourcePhrase}</span>
-                    <span className="font-mono text-[11px] text-amber-300">
+                    <span className="font-semibold text-[#F3F4F6]">{note.sourcePhrase}</span>
+                    <span className="font-mono text-[11px] text-[#D99B26]">
                       {note.categoryLabel}
                     </span>
                   </div>
-                  <div className="text-emerald-400 font-medium">
+                  <div className="text-emerald-300 font-medium">
                     Адаптация: {note.adaptedRus}
                   </div>
-                  <p className="text-slate-400 leading-relaxed">{note.rationale}</p>
+                  <p className="text-[#8893A8] leading-relaxed">{note.rationale}</p>
                 </div>
               ))}
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* 4-Component DelTA Memory & Continuity Inspector */}
-      {showMemoryBar && (
-        <div
-          role="region"
-          aria-label="Четырёхкомпонентная память DelTA"
-          className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 space-y-4"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
-            <div>
-              <span className="text-xs font-semibold text-amber-300">
-                Четырёхуровневая память документа DelTA (Doc2Sent)
-              </span>
-              <p className="text-[11px] text-slate-400 font-mono tabular-nums">
-                Реестр сущностей R^(i): {deltaContextPacket.properNounCount} терм. · Окно M^(i):{' '}
-                {deltaContextPacket.shortTermWindow.length} абз. ENG↔RUS · Долгосрочная память N^(i):{' '}
-                {deltaContextPacket.longTermMemories.length} сцен
-              </p>
+        {activeTab === 'delta' && (
+          <div className="space-y-3">
+            <div className="font-mono text-[11px] text-[#8893A8] tabular-nums">
+              Сущности: {deltaContextPacket.properNounCount} · Окно:{' '}
+              {deltaContextPacket.shortTermWindow.length} абз. · Сцен:{' '}
+              {deltaContextPacket.longTermMemories.length}
             </div>
-            <button
-              type="button"
-              onClick={onCloseMemoryBar}
-              className="text-xs text-slate-400 hover:text-white"
-            >
-              Свернуть
-            </button>
-          </div>
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div className="space-y-1.5">
-              <div className="text-xs font-semibold text-slate-300">
-                Двуязычное макро-резюме предыдущей главы (A_s [ENG] + A_t [RUS]){' '}
-                {previousChapter ? `(Глава ${previousChapter.number})` : '(начало книги)'}
+              <div className="text-xs font-medium text-[#B0B8C9]">
+                Сводка предыдущей главы{' '}
+                {previousChapter ? `(Гл. ${previousChapter.number})` : '(начало)'}
               </div>
-              <div className="rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs space-y-2 leading-relaxed">
+              <div className="rounded-lg border border-white/[0.08] bg-[#0A0C12] p-3 text-xs space-y-2 leading-relaxed">
                 <div>
-                  <span className="font-mono text-[11px] text-slate-500">ENG (A_s): </span>
-                  <span className="text-slate-300">{deltaContextPacket.bilingualSummary.eng}</span>
+                  <span className="font-mono text-[11px] text-[#8893A8]">ENG: </span>
+                  <span className="text-[#B0B8C9]">{deltaContextPacket.bilingualSummary.eng}</span>
                 </div>
-                <div className="border-t border-slate-800/80 pt-1.5">
-                  <span className="font-mono text-[11px] text-amber-400">RUS (A_t): </span>
-                  <span className="text-slate-200">{deltaContextPacket.bilingualSummary.rus}</span>
+                <div className="border-t border-white/[0.06] pt-1.5">
+                  <span className="font-mono text-[11px] text-[#D99B26]">RUS: </span>
+                  <span className="text-[#F3F4F6]">{deltaContextPacket.bilingualSummary.rus}</span>
                 </div>
               </div>
             </div>
 
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-amber-300">
-                  Память текущей главы (передаётся в следующую главу)
-                </span>
+              <div className="flex items-center justify-between gap-2">
+                <label htmlFor="inspector-delta-summary" className="text-xs font-medium text-[#F3F4F6]">
+                  Память текущей главы
+                </label>
                 <button
                   type="button"
                   onClick={() => {
@@ -399,122 +370,159 @@ export default function EditorInspectorPanels({
                     );
                     setDraftSummary(auto.rus);
                   }}
-                  className="text-[11px] text-amber-400 hover:text-amber-300"
+                  className="text-[11px] font-medium text-[#D99B26] hover:text-[#E5AC3D]"
                 >
-                  Сгенерировать автоматически
+                  Сгенерировать
                 </button>
               </div>
               <textarea
+                id="inspector-delta-summary"
                 value={draftSummary}
                 onChange={(e) => setDraftSummary(e.target.value)}
                 rows={3}
-                placeholder="Краткая сводка событий, прорывов и локаций этой главы..."
-                className="w-full rounded-lg border border-slate-800 bg-slate-950 p-2.5 text-xs text-slate-200 focus:border-amber-500 focus:outline-none"
+                placeholder="Краткая сводка событий, прорывов и локаций..."
+                className="w-full resize-y rounded-lg border border-white/[0.1] bg-[#0A0C12] p-2.5 text-xs text-[#F3F4F6] placeholder:text-[#8893A8] focus:border-[#D99B26] focus:outline-none"
               />
             </div>
-          </div>
 
-          {/* Short-Term Sliding Window M^(i): Last 3 ENG <-> RUS paragraphs */}
-          {deltaContextPacket.shortTermWindow.length > 0 && (
-            <div className="space-y-2 pt-1">
-              <div className="text-xs font-semibold text-slate-300">
-                Краткосрочное скользящее окно M^(i) (3 последних абзаца ENG ↔ RUS из Главы{' '}
-                {previousChapter?.number})
-              </div>
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+            {deltaContextPacket.shortTermWindow.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-xs font-medium text-[#B0B8C9]">
+                  Окно контекста из Гл. {previousChapter?.number}
+                </div>
                 {deltaContextPacket.shortTermWindow.map((pair) => (
                   <div
                     key={pair.index}
-                    className="rounded-lg border border-slate-800 bg-slate-950/90 p-2.5 text-xs space-y-1.5"
+                    className="rounded-lg border border-white/[0.08] bg-[#0A0C12] p-2.5 text-xs space-y-1"
                   >
-                    <div className="font-mono text-[11px] text-slate-500">
-                      Опорная пара #{pair.index}
+                    <div className="font-mono text-[11px] text-[#8893A8]">
+                      Абзац #{pair.index}
                     </div>
-                    <p className="line-clamp-2 text-slate-400">{pair.engParagraph}</p>
-                    <p className="line-clamp-2 text-emerald-300/90 border-t border-slate-800/80 pt-1">
+                    <p className="line-clamp-2 text-[#8893A8]">{pair.engParagraph}</p>
+                    <p className="line-clamp-2 text-emerald-300 border-t border-white/[0.06] pt-1">
                       {pair.rusParagraph}
                     </p>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Collapsible QA Issues List */}
-      {hasIssues && showIssuesPanel && (
-        <div className="rounded-xl border border-rose-500/30 bg-slate-900/80 p-4 space-y-2.5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-rose-300">
-              Журнал замечаний QA-линтера ({GENRE_PRESET_LABELS[genrePreset].title} ·{' '}
-              {PROSE_TONE_LABELS[proseTone].title})
-            </span>
-            <button
-              type="button"
-              onClick={onInstantRepair}
-              className="text-xs font-semibold text-emerald-400 hover:text-emerald-300"
-            >
-              Исправить все в 1 клик →
-            </button>
+            )}
           </div>
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-            {lintReport.issues.map((issue) => (
-              <div
-                key={issue.id}
-                className="rounded-lg border border-slate-800 bg-slate-950/80 p-2.5 text-xs"
-              >
-                <div className="font-medium text-slate-200">
-                  {issue.ruleTitle}: {issue.explanation}
-                </div>
-                {issue.suggestion && (
-                  <div className="mt-1 flex items-center gap-1 text-emerald-400">
-                    <ChevronRight className="h-3 w-3 shrink-0" />
-                    <span>{issue.suggestion}</span>
+        )}
+
+        {activeTab === 'history' && (
+          <div className="space-y-2.5">
+            {versionHistoryList.length === 0 ? (
+              <p className="text-xs text-[#8893A8]">
+                Сохранённых снимков пока нет — выполните перевод или нажмите «Сохранить».
+              </p>
+            ) : (
+              [...versionHistoryList].reverse().map((snap, revIdx) => {
+                const versionNumber = versionHistoryList.length - revIdx;
+                const isCurrent = snap.rusText.trim() === draftRus.trim();
+
+                return (
+                  <div
+                    key={snap.id}
+                    className={`rounded-lg border p-3 text-xs space-y-2 ${
+                      isCurrent
+                        ? 'border-emerald-500/40 bg-emerald-500/[0.06]'
+                        : 'border-white/[0.08] bg-[#0A0C12]'
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="rounded bg-[#D99B26]/20 px-1.5 py-0.5 font-mono text-[11px] font-bold text-[#E5AC3D]">
+                          v{versionNumber}
+                        </span>
+                        <span className="font-medium text-[#F3F4F6]">{snap.stageLabel}</span>
+                      </div>
+                      <span className="font-mono text-[11px] text-[#8893A8] tabular-nums">
+                        {snap.timestamp} · {snap.wordCountRus} сл.
+                      </span>
+                    </div>
+
+                    <p className="line-clamp-2 text-[#B0B8C9] font-serif">{snap.rusText}</p>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                      <span
+                        className={`font-mono text-[11px] font-medium ${
+                          snap.qaPassed ? 'text-emerald-300' : 'text-rose-300'
+                        }`}
+                      >
+                        {snap.qaPassed ? '100% QA' : `Замечаний: ${snap.qaErrorCount}`}
+                      </span>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => onCompareWithVersion(snap)}
+                          className="inline-flex items-center gap-1 rounded-md border border-white/[0.1] bg-[#10131C] px-2 py-1 text-[11px] font-medium text-[#F3F4F6] hover:border-[#D99B26]/50 transition-colors"
+                        >
+                          <GitCompare className="h-3 w-3" aria-hidden="true" />
+                          <span>Diff</span>
+                        </button>
+
+                        {isCurrent ? (
+                          <span className="rounded-md border border-emerald-500/35 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-300">
+                            Текущая
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => onRollbackToVersion(snap)}
+                            className="inline-flex items-center gap-1 rounded-md border border-[#D99B26]/40 bg-[#D99B26]/15 px-2 py-1 text-[11px] font-semibold text-[#E5AC3D] hover:bg-[#D99B26]/25 transition-colors"
+                          >
+                            <Undo2 className="h-3 w-3" aria-hidden="true" />
+                            <span>Откатить</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
+                );
+              })
+            )}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Collapsible Style Guide Drawer */}
-      {showContextDrawer && (
-        <div className="grid grid-cols-1 gap-4 rounded-xl border border-slate-800 bg-slate-900/70 p-4 lg:grid-cols-2">
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">
-              Стилевой гид (STYLE_GUIDE.md)
-            </label>
-            <textarea
-              value={editStyleMd}
-              onChange={(e) => setEditStyleMd(e.target.value)}
-              rows={5}
-              className="w-full rounded-lg border border-slate-800 bg-slate-950 p-3 font-mono text-xs text-slate-200 focus:border-amber-500/60 focus:outline-none"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-300">
-                Контекст мира (CONTEXT.md)
+        {activeTab === 'guide' && (
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label htmlFor="inspector-style-md" className="block text-xs font-medium text-[#B0B8C9]">
+                Стилевой гид (STYLE_GUIDE.md)
               </label>
-              <button
-                type="button"
-                onClick={onApplyStyleAndContext}
-                className="rounded bg-amber-500 px-2.5 py-1 text-xs font-semibold text-slate-950 hover:bg-amber-400"
-              >
-                Применить
-              </button>
+              <textarea
+                id="inspector-style-md"
+                value={editStyleMd}
+                onChange={(e) => setEditStyleMd(e.target.value)}
+                rows={5}
+                className="w-full resize-y rounded-lg border border-white/[0.1] bg-[#0A0C12] p-3 font-mono text-xs text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none"
+              />
             </div>
-            <textarea
-              value={editContextMd}
-              onChange={(e) => setEditContextMd(e.target.value)}
-              rows={5}
-              className="w-full rounded-lg border border-slate-800 bg-slate-950 p-3 font-mono text-xs text-slate-200 focus:border-amber-500/60 focus:outline-none"
-            />
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label htmlFor="inspector-context-md" className="text-xs font-medium text-[#B0B8C9]">
+                  Контекст мира (CONTEXT.md)
+                </label>
+                <button
+                  type="button"
+                  onClick={onApplyStyleAndContext}
+                  className="rounded-lg bg-[#D99B26] px-3 py-1 text-xs font-semibold text-[#090A0F] hover:bg-[#E5AC3D]"
+                >
+                  Применить
+                </button>
+              </div>
+              <textarea
+                id="inspector-context-md"
+                value={editContextMd}
+                onChange={(e) => setEditContextMd(e.target.value)}
+                rows={5}
+                className="w-full resize-y rounded-lg border border-white/[0.1] bg-[#0A0C12] p-3 font-mono text-xs text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none"
+              />
+            </div>
           </div>
-        </div>
-      )}
-    </>
+        )}
+      </div>
+    </aside>
   );
 }
