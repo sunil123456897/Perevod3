@@ -1,32 +1,31 @@
 # Core Translation Engine & Verification (`lib`)
 
 ## Overview
-Ядро конвейера автономного литературного перевода веб-новелл (JP/CN/KR/EN → RU). Модуль реализует 4-проходный конвейер с Брандмауэром Оригинала (`MELT Source Firewall`), AST-препроцессором японской фуриганы (`RubyGikunParser`), нормализатором корейских строк, 20 детерминированными правилами русского QA-линтера, квантитативным речевым вектором `S-VoCAL`, многомодельным портом инференса (Gemini Flash/Argon + Colab L4 Ollama) и поабзацным шлюзом отката по инвариантам $G_{surf}$.
+Ядро конвейера автономного литературного перевода веб-новелл (JP/CN/KR/EN → RU). Модуль организован в виде строгого ациклического графа зависимостей (DAG, 0 циклических импортов) с жёстким разделением на браузерно-безопасные модули и серверные адаптеры.
 
-## Interface
-- [`runQaLinter(engText, rusText, glossary, options)`](file:///c:/Users/vanya/Desktop/автономная-студия-перевода-веб-новелл/lib/qa-linter.ts): Проверка 20 детерминированных правил русского слога, рода персонажей, чисел и канона.
-- [`autoRepairRussianText(engText, rusText, glossary, options)`](file:///c:/Users/vanya/Desktop/автономная-студия-перевода-веб-новелл/lib/qa-linter.ts): Детерминированный авто-ремонт пунктуации, латиницы, тавтологий и соматизмов.
-- [`parseRubyAndGikunMarkup(text)`](file:///c:/Users/vanya/Desktop/автономная-студия-перевода-веб-новелл/lib/qa-linter.ts): AST-классификация и трансформация 6 категорий японской фуриганы (`reading_aid`, `bouten`, `nomenclature`, `litrpg_term`, `deictic`, `subtext`).
-- [`normalizeKoreanOneLineParagraphs(text)`](file:///c:/Users/vanya/Desktop/автономная-студия-перевода-веб-новелл/lib/qa-linter.ts): Склейка рваных мобильных однострочников в связные абзацы с защитой рамок `[...]` и реплик `— ...`.
-- [`chunkChapterWithSceneAndDialogueLocks(text, maxTokens)`](file:///c:/Users/vanya/Desktop/автономная-студия-перевода-веб-новелл/lib/qa-linter.ts): Сценарная нарезка с Dialogue Lock, Frame Lock и контекстным буфером `READ_ONLY_LOOKAHEAD`.
-- [`classifyScenePacingMode(text)`](file:///c:/Users/vanya/Desktop/автономная-студия-перевода-веб-новелл/lib/llm-inference-port.ts): Детекция темпоритма сцены (`combat_action`, `cultivation_epiphany`, `comedy_banter`, `solemn_pathos`, `romance_psychology`).
-- [`buildBlindStylistPass3Prompts(chapterNumber, titleEng, rusDraft, ...)`](file:///c:/Users/vanya/Desktop/автономная-студия-перевода-веб-новелл/lib/llm-inference-port.ts): Генерация 100% русскоязычного промпта для Pass 3 без доступа к иностранному оригиналу $x_s$.
-- [`verifyAndRollbackStylistPass(candidateRus, baselineRus, glossary, ...)`](file:///c:/Users/vanya/Desktop/автономная-студия-перевода-веб-новелл/lib/chapter-verifier.ts): Поабзацный контроль 5 инвариантов $G_{surf}$ с мгновенным изолированным откатом абзаца.
-- [`finalizeAndVerifyChapter(input)`](file:///c:/Users/vanya/Desktop/автономная-студия-перевода-веб-новелл/lib/chapter-verifier.ts): 7-шаговый финальный компилятор релизного текста главы.
-- [`previewAndApplyCanonRipple(novel, termEng, newRus)`](file:///c:/Users/vanya/Desktop/автономная-студия-перевода-веб-новелл/lib/canon-glossary-vault.ts): Каскадное обновление термина по всем 6 падежам во всех главах.
-- [`runPipelineBatchOnNovel(options)`](file:///c:/Users/vanya/Desktop/автономная-студия-перевода-веб-новелл/lib/pipeline-run-engine.ts): Пакетный 5-фазный движок перевода с контролем таймаутов и скользящим окном.
-- [`loadNovelsFromStorage()`](file:///c:/Users/vanya/Desktop/автономная-студия-перевода-веб-новелл/lib/storage-idb.ts) / [`saveNovelsToStorage()`](file:///c:/Users/vanya/Desktop/автономная-студия-перевода-веб-новелл/lib/storage-idb.ts): Персистентность проектов в IndexedDB с защитой от гонки гидратации.
+## Layering (Zero-Cycle DAG)
+### 1. Browser-Safe Leaf & Shared Core
+- [`pipeline-types.ts`](./pipeline-types.ts): Общие типы конвейера, провайдеров, рубрик DITING / Decision 1, сцен и SSE-задач.
+- [`seed-data.ts`](./seed-data.ts): Модели данных `ChapterRecord`, `NovelProject`, начальные проекты и пресеты.
+- [`russian-morphology.ts`](./russian-morphology.ts): Склонение русских и составных терминов, заморозка слогов CJK-имён (`buildInflectedRussianForms`, `splitCompoundRussianTerm`).
+- [`scene-analysis.ts`](./scene-analysis.ts): Классификация темпоритма сцен (`classifyScenePacingMode`), разметка диалогов/нулевых местоимений и отбор триплетов few-shot.
+- [`ruby-korean-parser.ts`](./ruby-korean-parser.ts), [`epub-archive.ts`](./epub-archive.ts), [`storage-idb.ts`](./storage-idb.ts): AST фуриганы/корейской нормализации, EPUB/ZIP-архивы, браузерное хранилище и клиентский API (`fetchChapterFromServer`, `patchChapterOnServer`).
+- [`qa-linter.ts`](./qa-linter.ts): 20 детерминированных правил русского слога, авто-ремонт пунктуации/тавтологий и экспорт Рулейт (чистый хаб без downstream `export *`).
+- [`canon-glossary-vault.ts`](./canon-glossary-vault.ts), [`delta-diting.ts`](./delta-diting.ts), [`chapter-verifier.ts`](./chapter-verifier.ts): Каскад глоссария `Canon Ripple`, память DelTA + DITING 6D, Banded-DTW выравнивание, шлюз отката `verifyAndRollbackStylistPass` и 7-шаговый `finalizeAndVerifyChapter`.
+- [`pipeline-batch-runner.ts`](./pipeline-batch-runner.ts): Браузерно-безопасный волновой раннер (`runPipelineBatchOnNovel`), `FetchPipelineTransportAdapter`, сбор `degradedWarnings`.
+
+### 2. Server-Only Modules (Never imported from `components/`)
+- [`api-security.ts`](./api-security.ts): Host/Origin guard, HMAC cookie + Bearer/Header auth (`verifyStudioApiRequest`), санитизация `LlmProviderConfig`, защита от SSRF.
+- [`gemini-decision-engine.ts`](./gemini-decision-engine.ts), [`local-embed-client.ts`](./local-embed-client.ts): Оркестрация `gemini-decision-1` и локального CUDA-моста эмбеддингов.
+- [`llm-inference-port.ts`](./llm-inference-port.ts): Ротация пула ключей `GEMINI_API_KEY` / `GOOGLE_API_KEYS` по бакетам `(project, model)`, `AntigravityCliAdapter`, `ColabOllamaAdapter`.
+- [`chapter-verifier-server.ts`](./chapter-verifier-server.ts), [`pipeline-run-engine.ts`](./pipeline-run-engine.ts): Серверный асинхронный цикл (`verifyAndRepairChapterAsync`, `ServerPipelineExecutionAdapter`) с LLM-ремонтом и пробросом `degradedWarnings`.
+- [`sqlite-db-server.ts`](./sqlite-db-server.ts), [`disk-db-server.ts`](./disk-db-server.ts), [`job-broker.ts`](./job-broker.ts): Персистентность в `node:sqlite` WAL (`process.getBuiltinModule('node:sqlite')`), сериализованная запись `novels_db.json` (flush при `close()`), межнодовый lock задач (`owner_pid`) и SSE-брокер.
 
 ## Invariants
-- **Source Firewall**: В промпт `Pass 3 (Blind Literary Stylist)` запрещено передавать текст оригинала $x_s$ в любом виде.
-- **Инварианты $G_{surf}$**: Любой абзац `#pK`, в котором стилист потерял числа, уронил канонический термин глоссария, нарушил баланс кавычек/скобок или изменил длину более чем на $\pm 45\%$, автоматически откатывается к выверенному тексту $y'[\text{\#pK}]$.
-- **Чистый TypeScript**: В рантайме браузера и Node.js запрещены тяжёлые бинарные зависимости (Python/PyTorch); все лингвистические парсеры и детерминированные линтеры выполняются локально на JS/TS.
-- **Детерминированность склонений**: Заморозка слогов CJK-имён на гласные (`Хань Ли` — несклоняемый) и склонение замыкающих слогов на согласные (`Чжао Фэн` $\to$ `Чжао Фэна`).
-
-## Side Effects
-- Вызовы внешних API языковых моделей (Google Gemini API или Colab L4 Ollama HTTP эндпоинт).
-- Запись снапшотов версий и обновлённых глав в IndexedDB (`xianxia_pipeline_studio_v3`).
+- **Source Firewall**: Оригинал $x_s$ никогда не передаётся в `Pass 3 (Blind Literary Stylist)`.
+- **Инварианты $G_{surf}$**: Нарушение чисел, терминов, баланса кавычек/скобок или длины $> \pm 45\%$ откатывает абзац к $y'[\text{\#pK}]$.
+- **Node 22 strip-types**: Все относительные импорты внутри `lib/` и `scripts/` сохраняют расширение `.ts`, а `node:sqlite` загружается динамически через `process.getBuiltinModule('node:sqlite')`.
 
 ## Verification
-- Run: `node --test lib/qa-linter.test.ts` (55 unit & integration тестов)
+- Run: `npm test` (полный набор тестов `lib/qa-linter.test.ts` + `lib/audit-fixes.test.ts`)
 - Run: `npx tsc --noEmit`

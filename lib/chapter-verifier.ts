@@ -1,42 +1,44 @@
 import {
   runQaLinter,
+  createChapterAnalysisContext,
+  filterGlossaryForChapter,
   autoRepairRussianText,
-  repairNegationPolarityWithSource,
   surgicalRepairDriftedParagraphs,
   alignChapterParagraphs,
   splitChapterParagraphs,
   applySurgicalPatches,
-  extractCsiCulturalNotes,
-  evaluateDitingQuality,
-  verifyProseQualityGate,
-  generateBilingualChapterSummary,
   detectTranslationDegenerationAndDuplicates,
   extractNormalizedRussianNumbers,
   joinParagraphsPreservingSystemBoxes,
   normalizeRussianBookLayout,
   normalizeRussianChapterTitle,
-  type CanonicalGlossary,
-  type GlossaryTermMeta,
-  type LintRuleId,
-  type LintReport,
+  computeParagraphHashAnchor,
+  type ChapterAnalysisContext,
   type SurgicalPatchItem,
-  type CsiCulturalNote,
-  type DitingQualityReport,
-  type ProseQualityGateReport,
-  type ProseQualityGateThresholds,
   type LinterOptions,
 } from './qa-linter.ts';
 import {
-  getLocalEmbedBridgeClient,
-  shutdownLocalEmbedBridgeClient,
-  type ChapterNeuralAuditResult,
-} from './local-embed-client.ts';
+  repairNegationPolarityWithSource,
+  extractCsiCulturalNotes,
+  evaluateDitingQuality,
+  verifyProseQualityGate,
+  generateBilingualChapterSummary,
+  computeStylometricMetrics,
+  type ProseQualityGateReport,
+  type ProseQualityGateThresholds,
+} from './delta-diting.ts';
+import type {
+  CanonicalGlossary,
+  GlossaryTermMeta,
+  LintRuleId,
+  LintReport,
+  CsiCulturalNote,
+  DitingQualityReport,
+  ChapterNeuralAuditResult,
+} from './pipeline-types.ts';
 
-export {
-  getLocalEmbedBridgeClient,
-  shutdownLocalEmbedBridgeClient,
-  type ChapterNeuralAuditResult,
-};
+export { computeParagraphHashAnchor };
+export type { ChapterNeuralAuditResult };
 
 export interface ChapterVerificationInput {
   chapterNumber: number;
@@ -123,7 +125,7 @@ export function repairSplitAndGluedParagraphs(
     }
     // 3. Proportional sentence boundary split when paragraph has >= 2 sentences
     const sentences = p
-      .split(/(?<=[.!?…»])\s+(?=[А-ЯЁ«—])/)
+      .split(/(?<=[.!?…»])\s+(?=[А-ЯЁ«]|—\s+[А-ЯЁ«])/)
       .map((s) => s.trim())
       .filter(Boolean);
     if (sentences.length >= 2) {
@@ -147,11 +149,57 @@ export function repairSplitAndGluedParagraphs(
     return null;
   };
 
+  /** Split a 3-way glued Russian paragraph proportionally across three consecutive English paragraphs. */
+  const trySplitGluedIntoThree = (
+    p: string,
+    e0: string,
+    e1: string,
+    e2: string
+  ): [string, string, string] | null => {
+    const first = trySplitGluedParagraph(p, `${e1} ${e2}`, e0);
+    if (first && first[0] && first[1]) {
+      const second = trySplitGluedParagraph(first[1], e2, e1);
+      if (second && second[0] && second[1]) {
+        return [first[0], second[0], second[1]];
+      }
+    }
+    const sentences = p
+      .split(/(?<=[.!?…»])\s+(?=[А-ЯЁ«]|—\s+[А-ЯЁ«])/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (sentences.length < 3) return null;
+
+    const totalEng = Math.max(1, e0.length + e1.length + e2.length);
+    const t0 = e0.length / totalEng;
+    const t1 = e1.length / totalEng;
+    const totalLen = Math.max(1, p.length);
+    let bestPair: [number, number] | null = null;
+    let bestErr = Infinity;
+    for (let k1 = 1; k1 < sentences.length - 1; k1++) {
+      const l0 = sentences.slice(0, k1).join(' ').length / totalLen;
+      for (let k2 = k1 + 1; k2 < sentences.length; k2++) {
+        const l1 = sentences.slice(k1, k2).join(' ').length / totalLen;
+        const err = Math.abs(l0 - t0) + Math.abs(l1 - t1);
+        if (err < bestErr) {
+          bestErr = err;
+          bestPair = [k1, k2];
+        }
+      }
+    }
+    if (!bestPair) return null;
+    const [k1, k2] = bestPair;
+    return [
+      sentences.slice(0, k1).join(' '),
+      sentences.slice(k1, k2).join(' '),
+      sentences.slice(k2).join(' '),
+    ];
+  };
+
   let workingRus = [...rusParas];
 
-  // Case D: Wagner-Fischer / Gale-Church Dynamic Time Warping (DTW) for unequal paragraph counts (|N - M| >= 1)
+  // Case D: Banded Wagner-Fischer / Gale-Church Dynamic Time Warping (DTW) for unequal paragraph counts (|N - M| >= 1)
   const countDiff = Math.abs(workingRus.length - engParas.length);
-  if (countDiff >= 1 && countDiff <= 10 && engParas.length >= 3 && workingRus.length >= 3) {
+  if (countDiff >= 1 && engParas.length >= 2 && workingRus.length >= 2) {
     const N = engParas.length;
     const M = workingRus.length;
     const isBox = (s: string) => /^\[[\s\S]+\]$/.test(s.trim()) || s.trim() === '---';
@@ -175,19 +223,20 @@ export function repairSplitAndGluedParagraphs(
     type BackStep = {
       prevI: number;
       prevJ: number;
-      op: '1:1' | '1:2' | '2:1';
-      splitParts?: [string, string];
+      op: '1:1' | '1:2' | '2:1' | '1:3' | '3:1';
+      splitParts?: string[];
     };
 
     const dp: number[][] = Array.from({ length: N + 1 }, () =>
-      Array(M + 1).fill( Number.POSITIVE_INFINITY )
+      Array(M + 1).fill(Number.POSITIVE_INFINITY)
     );
     const back: Array<Array<BackStep | null>> = Array.from({ length: N + 1 }, () =>
       Array(M + 1).fill(null)
     );
     dp[0]![0] = 0;
 
-    const band = Math.max(4, countDiff + 3);
+    // Sakoe-Chiba band without artificial |N - M| <= 10 cutoff (supports diff = 15..25+)
+    const band = Math.max(16, countDiff + 12);
     for (let i = 0; i <= N; i++) {
       const jMin = Math.max(0, i - band);
       const jMax = Math.min(M, i + band);
@@ -228,6 +277,33 @@ export function repairSplitAndGluedParagraphs(
           }
         }
 
+        // 1:3 transition (1 ENG paragraph split into 3 consecutive RUS fragments)
+        if (i < N && j + 2 < M) {
+          const e = engParas[i]!;
+          const r0 = workingRus[j]!;
+          const r1 = workingRus[j + 1]!;
+          const r2 = workingRus[j + 2]!;
+          const combLen = r0.length + r1.length + r2.length + 2;
+          if (
+            !isBox(e) &&
+            !isBox(r0) &&
+            !isBox(r1) &&
+            !isBox(r2) &&
+            e.length >= 65 &&
+            r0.length < e.length * 0.65 &&
+            r1.length < e.length * 0.65 &&
+            r2.length < e.length * 0.65 &&
+            combLen >= e.length * 0.55 &&
+            combLen <= e.length * 1.65
+          ) {
+            const c13 = cur + pairCost(e, `${r0} ${r1} ${r2}`) + 2.6;
+            if (c13 < dp[i + 1]![j + 3]!) {
+              dp[i + 1]![j + 3] = c13;
+              back[i + 1]![j + 3] = { prevI: i, prevJ: j, op: '1:3' };
+            }
+          }
+        }
+
         // 2:1 transition (2 ENG paragraphs glued into 1 RUS paragraph: split workingRus[j])
         if (i + 1 < N && j < M) {
           const e0 = engParas[i]!;
@@ -247,6 +323,40 @@ export function repairSplitAndGluedParagraphs(
               if (c21 < dp[i + 2]![j + 1]!) {
                 dp[i + 2]![j + 1] = c21;
                 back[i + 2]![j + 1] = { prevI: i, prevJ: j, op: '2:1', splitParts: parts };
+              }
+            }
+          }
+        }
+
+        // 3:1 transition (3 ENG paragraphs glued into 1 RUS paragraph: split workingRus[j] into 3)
+        if (i + 2 < N && j < M) {
+          const e0 = engParas[i]!;
+          const e1 = engParas[i + 1]!;
+          const e2 = engParas[i + 2]!;
+          const rGlued = workingRus[j]!;
+          const inlineDlgMatches = rGlued.match(/[.!?…»]\s+—\s+[А-ЯЁ]/g)?.length || 0;
+          const isOverlong3 =
+            rGlued.length >= (e0.length + e1.length + e2.length) * 0.52 &&
+            rGlued.length > Math.max(e0.length, e1.length, e2.length) * 1.35;
+
+          if (
+            !isBox(e0) &&
+            !isBox(e1) &&
+            !isBox(e2) &&
+            !isBox(rGlued) &&
+            (inlineDlgMatches >= 2 || isOverlong3)
+          ) {
+            const parts = trySplitGluedIntoThree(rGlued, e0, e1, e2);
+            if (parts) {
+              const c31 =
+                cur +
+                pairCost(e0, parts[0]) +
+                pairCost(e1, parts[1]) +
+                pairCost(e2, parts[2]) +
+                2.6;
+              if (c31 < dp[i + 3]![j + 1]!) {
+                dp[i + 3]![j + 1] = c31;
+                back[i + 3]![j + 1] = { prevI: i, prevJ: j, op: '3:1', splitParts: parts };
               }
             }
           }
@@ -279,11 +389,21 @@ export function repairSplitAndGluedParagraphs(
             dtwFixes.push(
               `Stage 1 DTW Alignment: объединён разорванный абзац #p${st.prevI} (1:2 -> 1:1)`
             );
-          } else if (st.op === '2:1' && st.splitParts) {
-            reconstructed.push(st.splitParts[0], st.splitParts[1]);
-            dtwIndices.push(st.prevI, st.prevI + 1);
+          } else if (st.op === '1:3') {
+            reconstructed.push(
+              `${workingRus[st.prevJ]!} ${workingRus[st.prevJ + 1]!} ${workingRus[st.prevJ + 2]!}`
+            );
+            dtwIndices.push(st.prevI);
             dtwFixes.push(
-              `Stage 1 DTW Alignment: разделён склеенный абзац #p${st.prevI}..#p${st.prevI + 1} (2:1 -> 1:1)`
+              `Stage 1 DTW Alignment: объединён разорванный абзац #p${st.prevI} (1:3 -> 1:1)`
+            );
+          } else if ((st.op === '2:1' || st.op === '3:1') && st.splitParts) {
+            reconstructed.push(...st.splitParts);
+            for (let k = 0; k < st.splitParts.length; k++) {
+              dtwIndices.push(st.prevI + k);
+            }
+            dtwFixes.push(
+              `Stage 1 DTW Alignment: разделён склеенный абзац #p${st.prevI}..#p${st.prevI + st.splitParts.length - 1} (${st.splitParts.length}:1 -> 1:1)`
             );
           }
         }
@@ -409,6 +529,151 @@ export function repairSplitAndGluedParagraphs(
   };
 }
 
+export function countParagraphInternalDashes(paragraph: string): {
+  counted: number;
+  words: number;
+} {
+  const trimmed = paragraph.trim();
+  const withoutLeadDash = trimmed.replace(/^—\s+/, '');
+  const matches = withoutLeadDash.match(/\s[—–]\s/g) || [];
+  const isDialogue = /^—\s+/.test(trimmed);
+  const counted = isDialogue ? Math.max(0, matches.length - 1) : matches.length;
+  const words = (trimmed.match(/[а-яё]+(?:-[а-яё]+)*/gi) || []).filter(
+    (w) => w.length >= 2
+  ).length;
+  return { counted, words };
+}
+
+/**
+ * Deterministic chapter-level budget relaxation for excess intra-paragraph AI em-dashes.
+ * Preserves system boxes, leading dialogue dashes (`— ...`), and attribution/resumption
+ * dashes following `[,!?….»:;—–]`, converting only excess authorial medial dashes into
+ * commas, spaces (around `это`/`вот` and linking verbs), or sentence breaks.
+ */
+export function relaxChapterExcessInternalDashes(
+  rusText: string,
+  engText = '',
+  maxInternalDash = 2.0
+): {
+  repairedRusText: string;
+  relaxedCount: number;
+  touchedParagraphs: number[];
+} {
+  const stylo = computeStylometricMetrics(rusText, engText);
+  if (stylo.wordCount === 0 || stylo.internalDashPer100Words <= maxInternalDash) {
+    return { repairedRusText: rusText, relaxedCount: 0, touchedParagraphs: [] };
+  }
+
+  const paragraphs = splitChapterParagraphs(rusText);
+  if (paragraphs.length === 0) {
+    return { repairedRusText: rusText, relaxedCount: 0, touchedParagraphs: [] };
+  }
+
+  let inBox = false;
+  const meta = paragraphs.map((p, idx) => {
+    const trimmed = p.trim();
+    let isBox = false;
+    if (trimmed === '---') {
+      inBox = !inBox;
+      isBox = true;
+    } else if (inBox || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      isBox = true;
+    }
+    const { counted, words } = countParagraphInternalDashes(p);
+    return { idx, isBox, counted, words };
+  });
+
+  const totalCounted = meta.reduce((sum, m) => sum + m.counted, 0);
+  const targetMaxDashes = Math.max(
+    0,
+    Math.floor((Math.max(0.05, maxInternalDash - 0.12) * stylo.wordCount) / 100)
+  );
+  let needed = totalCounted - targetMaxDashes;
+  if (needed <= 0) {
+    return { repairedRusText: rusText, relaxedCount: 0, touchedParagraphs: [] };
+  }
+
+  const touchedSet = new Set<number>();
+  let relaxedCount = 0;
+
+  const runTier = (tier: 1 | 2): void => {
+    while (needed > 0) {
+      let changedInRound = false;
+      const candidates = meta
+        .filter((m) => !m.isBox && m.counted >= 1)
+        .sort((a, b) => b.counted / Math.max(1, b.words) - a.counted / Math.max(1, a.words));
+
+      for (const item of candidates) {
+        if (needed <= 0) break;
+        const p = paragraphs[item.idx]!;
+        let nextP = p;
+
+        if (tier === 1) {
+          const match = /([а-яёa-z0-9)])\s+[—–]\s+([а-яё])/.exec(p);
+          if (match) {
+            const leftChar = match[1]!;
+            const rightChar = match[2]!;
+            const prefix = p.slice(0, match.index + leftChar.length);
+            const suffix = p.slice(match.index + match[0].length - rightChar.length);
+            const keepSpace =
+              /(?<![а-яёА-ЯЁ])(?:это|вот)$/i.test(prefix) ||
+              /^(?:не\s+)?(?:был[аои]?|будет|будут|ста(?:л[аои]?|нет|нут)|явля(?:ется|ются|лся|лась)|казал(?:ся|ась|ось|ись)|оказал(?:ся|ась|ось|ись))(?![а-яё])/i.test(
+                suffix
+              );
+            nextP =
+              p.slice(0, match.index) +
+              (keepSpace ? `${leftChar} ${rightChar}` : `${leftChar}, ${rightChar}`) +
+              p.slice(match.index + match[0].length);
+          }
+        } else {
+          const match = /([а-яё]{2,}|[0-9)])\s+[—–]\s+([А-ЯЁ])/.exec(p);
+          if (match) {
+            const leftPart = match[1]!;
+            const rightChar = match[2]!;
+            const prefix = p.slice(0, match.index + leftPart.length);
+            const sep = /(?<![а-яёА-ЯЁ])(?:это|вот)$/i.test(prefix) ? ' ' : '. ';
+            nextP =
+              p.slice(0, match.index) +
+              `${leftPart}${sep}${rightChar}` +
+              p.slice(match.index + match[0].length);
+          }
+        }
+
+        if (nextP !== p) {
+          paragraphs[item.idx] = nextP;
+          const updated = countParagraphInternalDashes(nextP);
+          const drop = Math.max(0, item.counted - updated.counted);
+          item.counted = updated.counted;
+          item.words = updated.words;
+          if (drop > 0) {
+            needed -= drop;
+            relaxedCount += drop;
+          }
+          touchedSet.add(item.idx);
+          changedInRound = true;
+        }
+      }
+
+      if (!changedInRound) break;
+    }
+  };
+
+  runTier(1);
+  if (needed > 0) {
+    runTier(2);
+  }
+
+  if (relaxedCount === 0) {
+    return { repairedRusText: rusText, relaxedCount: 0, touchedParagraphs: [] };
+  }
+
+  return {
+    repairedRusText: normalizeRussianBookLayout(joinParagraphsPreservingSystemBoxes(paragraphs)),
+    relaxedCount,
+    touchedParagraphs: Array.from(touchedSet).sort((a, b) => a - b),
+  };
+}
+
 /**
  * Universal deep module for chapter post-processing and QA verification.
  * Enforces strict order of operations:
@@ -500,16 +765,42 @@ export function finalizeAndVerifyChapter(
         appliedFixes.push(...negRepair.appliedFixes);
       }
     }
+
+    const dashRuleActive =
+      !input.enabledRuleIds || input.enabledRuleIds.includes('DASH_AND_COMMA_INFLATION');
+    if (dashRuleActive) {
+      const maxDashCap = input.gateThresholds?.maxInternalDashPer100Words ?? 2.0;
+      const dashRepair = relaxChapterExcessInternalDashes(rusText, input.engText, maxDashCap);
+      if (dashRepair.relaxedCount > 0) {
+        rusText = dashRepair.repairedRusText;
+        for (const idx of dashRepair.touchedParagraphs) {
+          surgicallyFixedSet.add(idx);
+        }
+        appliedFixes.push(
+          `Бюджет тире главы: снято ${dashRepair.relaxedCount} избыточных внутриабзацных ИИ-тире для соблюдения лимита <= ${maxDashCap}%`
+        );
+      }
+    }
   }
 
-  // 4. QA Linter
+  // 4. QA Linter (single-pass ChapterAnalysisContext reuse)
+  const analysisCtx: ChapterAnalysisContext = createChapterAnalysisContext(
+    input.engText,
+    rusText,
+    input.glossary,
+    {
+      enabledRuleIds: input.enabledRuleIds,
+      glossaryMeta: input.glossaryMeta,
+    }
+  );
   const lintReport = runQaLinter(input.engText, rusText, input.glossary, {
     enabledRuleIds: input.enabledRuleIds,
     glossaryMeta: input.glossaryMeta,
+    analysisContext: analysisCtx,
   });
 
   // 5. Flawed Paragraph Indexing (0-based)
-  const alignment = alignChapterParagraphs(input.engText, rusText);
+  const alignment = analysisCtx.alignment;
   const flawedSet = new Set<number>();
   for (const pair of alignment.pairs) {
     if (pair.isDrifted || pair.missingNumbers.length > 0) {
@@ -517,7 +808,7 @@ export function finalizeAndVerifyChapter(
       continue;
     }
     if (pair.engParagraph.trim() && pair.rusParagraph.trim()) {
-      const pLint = runQaLinter(pair.engParagraph, pair.rusParagraph, input.glossary, {
+      const pLint = runQaLinter(pair.engParagraph, pair.rusParagraph, analysisCtx.filteredGlossary, {
         enabledRuleIds: input.enabledRuleIds,
         glossaryMeta: input.glossaryMeta,
       });
@@ -609,26 +900,6 @@ export function finalizeAndVerifyChapter(
     wordCountRus,
     verified,
   };
-}
-
-/**
- * Computes a robust 3-character base-36 hash anchor for an English paragraph.
- * Uses FNV-1a (32-bit) with index mixing.
- * 36^3 = 46,656 possible values (<0.1% collision probability over a chapter),
- * consuming only 5 tokens in the prompt: [a7f|#pK].
- */
-export function computeParagraphHashAnchor(
-  sourceParagraph: string,
-  index: number
-): string {
-  const normalized = (sourceParagraph || '').trim().toLowerCase().replace(/\s+/g, ' ');
-  let hash = (2166136261 ^ index) >>> 0;
-  for (let i = 0; i < normalized.length; i++) {
-    hash ^= normalized.charCodeAt(i);
-    hash = Math.imul(hash, 16777619) >>> 0;
-  }
-  const positiveHash = hash % 46656;
-  return positiveHash.toString(36).padStart(3, '0');
 }
 
 export interface FlawedParagraphItem {
@@ -773,26 +1044,68 @@ export function mergeRepairedParagraphsByIndex(
   const droppedDueToNumbers: number[] = [];
   const droppedDueToHashDrift: number[] = [];
 
+  const cleanLlmParagraphContent = (raw: string): string => {
+    let text = raw
+      .replace(/^\s*```[^\n]*\s*$/gm, '')
+      .replace(/^\[(?:[a-z0-9]{3}\|)?#p\d+\]\s*/i, '')
+      .replace(/^ENG:[\s\S]*?\n(?:RUS|REPAIRED|ПЕРЕВОД|ИСПРАВЛЕНО):\s*/i, '')
+      .replace(/^\[DRAFT_PASS1_FOR_SUFFIX_LOOKUP\]:\s*[\s\S]*?\n/i, '')
+      .replace(/\n(?:MISSING_NUMBERS|QA_ERRORS):[\s\S]*$/i, '')
+      .replace(/\[DRAFT_PASS1_FOR_SUFFIX_LOOKUP\]:.*$/im, '');
+
+    const keptLines: string[] = [];
+    let skippingGlossaryBlock = false;
+    for (const rawLine of text.split('\n')) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      if (/^```/.test(line)) continue;
+      if (/^(?:[#>*\-\s]*)?(?:SPECULATIVE\s+SUFFIX\s+DECODING|LAYER\s*0\b)/i.test(line)) {
+        skippingGlossaryBlock = false;
+        continue;
+      }
+      if (/^\[GLOSSARY(?:_SLICE|_GUARD|\b)[^\]]*\]?:?/i.test(line)) {
+        skippingGlossaryBlock = true;
+        continue;
+      }
+      if (skippingGlossaryBlock) {
+        if (/^(?:[-•*]\s*)?[^:\n]{1,80}\s*(?:->|=>|→|=)\s*[^\n]+$/.test(line)) {
+          continue;
+        }
+        skippingGlossaryBlock = false;
+      }
+      if (/^(?:CONTEXT_PREV|CONTEXT_NEXT|ENG|CANON_CONTEXT|MISSING_NUMBERS|QA_ERRORS)\s*:/i.test(line)) {
+        continue;
+      }
+      if (
+        /^(?:Вот исправленн[а-яё]+(?:\s+[а-яё]+){0,3}|Исправленн(?:ый|ая|ое|ые)\s+(?:вариант|перевод|текст|абзац(?:ы)?)|Конечно[,!.]?(?:\s+вот[^\n:]*)?|Here is the (?:repaired|fixed|corrected)[^\n:]*)\s*:?\s*$/i.test(
+          line
+        )
+      ) {
+        continue;
+      }
+      keptLines.push(line);
+    }
+
+    return keptLines
+      .join(' ')
+      .replace(/^(?:\[(?:[a-z0-9]{3}\|)?#p\d+\]\s*)+/i, '')
+      .replace(/^(?:RUS|REPAIRED|ПЕРЕВОД|ИСПРАВЛЕНО|Исправленный вариант)\s*:\s*/i, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  };
+
+  // Strip markdown code-fence wrappers before scanning paragraph anchors
+  const sanitizedBlock = repairedBlock.replace(/^\s*```[^\n]*\s*$/gm, '');
+
   // Matches [a7f|#p0], [#p0], [#p0] [a7f|#p0], or [a7f|#p0] [#p0]
   const regex =
     /\[(?:([a-z0-9]{3})\|)?#p(\d+)\](?:\s*\[(?:([a-z0-9]{3})\|)?#p\d+\])?\s*([\s\S]*?)(?=(?:\[(?:[a-z0-9]{3}\|)?#p\d+\])|$)/gi;
   let match: RegExpExecArray | null;
 
-  while ((match = regex.exec(repairedBlock)) !== null) {
+  while ((match = regex.exec(sanitizedBlock)) !== null) {
     const anchorHash = match[1] || match[3];
     const idx = parseInt(match[2], 10);
-    let content = match[4].trim();
-
-    // Strip prefix markers if repeated by the LLM (including echoed ENG prompts, lookup tokens, and residual anchors)
-    content = content
-      .replace(/^\[(?:[a-z0-9]{3}\|)?#p\d+\]\s*/i, '')
-      .replace(/^ENG:[\s\S]*?\n(?:RUS|REPAIRED|ПЕРЕВОД):\s*/i, '')
-      .replace(/^(?:RUS|REPAIRED|ПЕРЕВОД):\s*/i, '')
-      .replace(/^\[DRAFT_PASS1_FOR_SUFFIX_LOOKUP\]:\s*[\s\S]*?\n/i, '')
-      .replace(/\n(?:MISSING_NUMBERS|QA_ERRORS):[\s\S]*$/i, '')
-      .replace(/\[DRAFT_PASS1_FOR_SUFFIX_LOOKUP\]:.*$/im, '')
-      .replace(/^\[(?:[a-z0-9]{3}\|)?#p\d+\]\s*/i, '')
-      .trim();
+    const content = cleanLlmParagraphContent(match[4]);
 
     if (isNaN(idx) || idx < 0 || idx >= paragraphs.length) {
       skippedIndices.push(idx);
@@ -995,215 +1308,5 @@ export function verifyAndRollbackStylistPass(params: {
     finalRusText: joinParagraphsPreservingSystemBoxes(paragraphs),
     acceptedParagraphIndices,
     rolledBackParagraphs,
-  };
-}
-
-export interface ScorecardDeltaRow {
-  id: string;
-  label: string;
-  before: number;
-  after: number;
-  expected: string;
-  passedBefore: boolean;
-  passedAfter: boolean;
-}
-
-export interface UnifiedVerificationAndRepairResult extends ChapterVerificationOutput {
-  beforeGateReport: ProseQualityGateReport;
-  afterGateReport: ProseQualityGateReport;
-  beforeNeuralAudit?: ChapterNeuralAuditResult;
-  afterNeuralAudit?: ChapterNeuralAuditResult;
-  scorecard: ScorecardDeltaRow[];
-  llmRepairRoundsUsed: number;
-}
-
-/**
- * Asynchronous 3-Stage Verification & Self-Repair Orchestrator:
- * - Evaluates baseline (Before) Prose Quality Gate + Neural Cosine Audit (`google/embeddinggemma-2` or cloud fallback)
- * - Runs Stage 1 (Structural +1/-1 Split/Glue Alignment) & Stage 2 (Deterministic Gender, Canon & Nora Gal Anti-Bureaucracy)
- * - Runs Stage 3 (Optional Targeted LLM Self-Repair with monotonic rollback guard, up to `maxLlmRepairRounds = 2`)
- * - Evaluates final (After) Prose Quality Gate + Neural Cosine Audit and builds a `Before -> After` scorecard.
- */
-export async function verifyAndRepairChapterAsync(
-  input: ChapterVerificationInput,
-  options?: {
-    enableNeuralAudit?: boolean; // default: true
-    neuralThreshold?: number; // default: 0.65
-    customNeuralEvaluator?: (
-      chapterNumber: number,
-      engParagraphs: string[],
-      rusParagraphs: string[],
-      threshold: number
-    ) => Promise<ChapterNeuralAuditResult>;
-    llmParagraphRepairFn?: (payload: {
-      flawedIndices: number[];
-      promptBlock: string;
-    }) => Promise<string>;
-    maxLlmRepairRounds?: number; // default: 2
-  }
-): Promise<UnifiedVerificationAndRepairResult> {
-  const enableNeural = options?.enableNeuralAudit !== false;
-  const threshold = options?.neuralThreshold ?? 0.65;
-  const maxRounds = options?.maxLlmRepairRounds ?? 2;
-
-  const evaluateNeural = async (rusCandidate: string): Promise<ChapterNeuralAuditResult | undefined> => {
-    if (!enableNeural) return undefined;
-    const engParas = splitChapterParagraphs(input.engText);
-    const rusParas = splitChapterParagraphs(rusCandidate);
-    if (options?.customNeuralEvaluator) {
-      return options.customNeuralEvaluator(input.chapterNumber, engParas, rusParas, threshold);
-    }
-    return getLocalEmbedBridgeClient().auditChapterParagraphs(
-      input.chapterNumber,
-      engParas,
-      rusParas,
-      threshold
-    );
-  };
-
-  // 0. Measure raw candidate BEFORE any repair
-  const rawCandidate = (input.candidateRusText || '').trim();
-  const beforeNeuralAudit = await evaluateNeural(rawCandidate);
-  const beforeGateReport = verifyProseQualityGate(input.engText, rawCandidate, input.glossary, {
-    glossaryMeta: input.glossaryMeta,
-    enabledRuleIds: input.enabledRuleIds,
-    thresholds: input.gateThresholds,
-    neuralStats: beforeNeuralAudit
-      ? { meanCosine: beforeNeuralAudit.meanCosine, minCosine: beforeNeuralAudit.minCosine }
-      : input.neuralStats,
-  });
-
-  // 1. Run Stage 1 (Structural +1/-1 Split/Glue Alignment) + Stage 2 (Deterministic Gender, Canon & Nora Gal Anti-Bureaucracy)
-  let currentVerif = finalizeAndVerifyChapter(input);
-  let afterNeuralAudit = await evaluateNeural(currentVerif.rusText);
-  let afterGateReport = verifyProseQualityGate(
-    input.engText,
-    currentVerif.rusText,
-    input.glossary,
-    {
-      glossaryMeta: input.glossaryMeta,
-      enabledRuleIds: input.enabledRuleIds,
-      thresholds: input.gateThresholds,
-      neuralStats: afterNeuralAudit
-        ? { meanCosine: afterNeuralAudit.meanCosine, minCosine: afterNeuralAudit.minCosine }
-        : input.neuralStats,
-    }
-  );
-
-  // Merge low-cosine neural indices into flawedParagraphIndices
-  const collectTargetFlawedIndices = (
-    verif: ChapterVerificationOutput,
-    gate: ProseQualityGateReport,
-    neural?: ChapterNeuralAuditResult
-  ): number[] => {
-    const s = new Set<number>(verif.flawedParagraphIndices);
-    for (const h of gate.stylometry.nominalizationHotspotParagraphs) s.add(h);
-    for (const neg of gate.stylometry.negationPolarityMismatchParagraphs) s.add(neg);
-    if (neural) {
-      for (const lp of neural.lowPairs) {
-        if (lp.index >= 1) s.add(lp.index - 1);
-      }
-    }
-    return Array.from(s).sort((a, b) => a - b);
-  };
-
-  // 2. Stage 3: Targeted LLM Self-Repair (if still needed and llmParagraphRepairFn is provided)
-  let llmRepairRoundsUsed = 0;
-  if (!afterGateReport.passed && options?.llmParagraphRepairFn && maxRounds > 0) {
-    for (let round = 1; round <= maxRounds; round++) {
-      const targetIndices = collectTargetFlawedIndices(
-        currentVerif,
-        afterGateReport,
-        afterNeuralAudit
-      );
-      if (targetIndices.length === 0) break;
-
-      const engParas = splitChapterParagraphs(input.engText);
-      const rusParas = splitChapterParagraphs(currentVerif.rusText);
-
-      const promptBlock = targetIndices
-        .filter((idx) => idx >= 0 && idx < engParas.length && idx < rusParas.length)
-        .map((idx) => {
-          const hash = computeParagraphHashAnchor(engParas[idx]!, idx);
-          return `[#p${idx}] [${hash}|#p${idx}]\nENG: ${engParas[idx]}\nRUS: ${rusParas[idx]}\n[DRAFT_PASS1_FOR_SUFFIX_LOOKUP]: ${rusParas[idx]}`;
-        })
-        .join('\n\n');
-      if (!promptBlock) break;
-
-      llmRepairRoundsUsed++;
-      const llmReply = await options.llmParagraphRepairFn({
-        flawedIndices: targetIndices,
-        promptBlock,
-      });
-
-      const merged = mergeRepairedParagraphsByIndex(
-        currentVerif.rusText,
-        llmReply,
-        input.engText
-      );
-      if (merged.repairedIndices.length === 0) break;
-
-      const nextVerif = finalizeAndVerifyChapter({
-        ...input,
-        candidateRusText: merged.mergedText,
-      });
-      const nextNeural = await evaluateNeural(nextVerif.rusText);
-      const nextGate = verifyProseQualityGate(input.engText, nextVerif.rusText, input.glossary, {
-        glossaryMeta: input.glossaryMeta,
-        enabledRuleIds: input.enabledRuleIds,
-        thresholds: input.gateThresholds,
-        neuralStats: nextNeural
-          ? { meanCosine: nextNeural.meanCosine, minCosine: nextNeural.minCosine }
-          : input.neuralStats,
-      });
-
-      // Monotonic progress guard: accept only if failedChecks decreased or overallScore improved
-      if (
-        nextGate.failedChecks.length < afterGateReport.failedChecks.length ||
-        nextGate.overallScore > afterGateReport.overallScore
-      ) {
-        currentVerif = {
-          ...nextVerif,
-          appliedFixes: [
-            ...currentVerif.appliedFixes,
-            `Stage 3 LLM Self-Repair (раунд ${round}): точечно исправлено ${merged.repairedIndices.length} абз.`,
-          ],
-        };
-        afterNeuralAudit = nextNeural;
-        afterGateReport = nextGate;
-        if (afterGateReport.passed) break;
-      } else {
-        break;
-      }
-    }
-  }
-
-  const finalFlawed = collectTargetFlawedIndices(currentVerif, afterGateReport, afterNeuralAudit);
-  const scorecard: ScorecardDeltaRow[] = afterGateReport.checks.map((afterCheck) => {
-    const beforeCheck =
-      beforeGateReport.checks.find((c) => c.id === afterCheck.id) || afterCheck;
-    return {
-      id: afterCheck.id,
-      label: afterCheck.label,
-      before: beforeCheck.observed,
-      after: afterCheck.observed,
-      expected: afterCheck.expected,
-      passedBefore: beforeCheck.passed,
-      passedAfter: afterCheck.passed,
-    };
-  });
-
-  return {
-    ...currentVerif,
-    flawedParagraphIndices: finalFlawed,
-    proseGateReport: afterGateReport,
-    neuralAudit: afterNeuralAudit,
-    verified: currentVerif.verified && afterGateReport.passed,
-    beforeGateReport,
-    afterGateReport,
-    beforeNeuralAudit,
-    afterNeuralAudit,
-    scorecard,
-    llmRepairRoundsUsed,
   };
 }

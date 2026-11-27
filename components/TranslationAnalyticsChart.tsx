@@ -11,13 +11,35 @@ import {
   CartesianGrid,
   Tooltip,
 } from 'recharts';
-import { BarChart3 } from 'lucide-react';
+import { BarChart3, AlertTriangle } from 'lucide-react';
 import {
   computeChapterGlossaryCoverage,
-  type CanonicalGlossary,
-  type ScoutedTerm,
-} from '@/lib/qa-linter';
+  type ChapterGlossaryCoverageResult,
+} from '@/lib/canon-glossary-vault';
+import type { CanonicalGlossary, ScoutedTerm } from '@/lib/pipeline-types';
 import type { ChapterRecord } from '@/lib/seed-data';
+
+const MAX_COVERAGE_CACHE_ENTRIES = 1000;
+const chapterCoverageCache = new Map<string, ChapterGlossaryCoverageResult>();
+
+function getMemoizedChapterCoverage(
+  cacheKey: string,
+  compute: () => ChapterGlossaryCoverageResult
+): ChapterGlossaryCoverageResult {
+  const existing = chapterCoverageCache.get(cacheKey);
+  if (existing) {
+    return existing;
+  }
+  const computed = compute();
+  if (chapterCoverageCache.size >= MAX_COVERAGE_CACHE_ENTRIES) {
+    const oldestKey = chapterCoverageCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      chapterCoverageCache.delete(oldestKey);
+    }
+  }
+  chapterCoverageCache.set(cacheKey, computed);
+  return computed;
+}
 
 interface TranslationAnalyticsChartProps {
   chapters: ChapterRecord[];
@@ -35,6 +57,59 @@ interface ChartDataPoint {
   canonHits: number;
   totalDetectedTerms: number;
   translated: boolean;
+  quarantined: boolean;
+  quarantineReason?: string;
+}
+
+function fastStrHash(text: string): number {
+  let h = 2166136261;
+  const step = text.length > 2048 ? 8 : 2;
+  for (let i = 0; i < text.length; i += step) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function AnalyticsTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload?: ChartDataPoint }>;
+}) {
+  if (!active || !payload || payload.length === 0 || !payload[0]?.payload) {
+    return null;
+  }
+  const point = payload[0].payload;
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#161925] px-3 py-2.5 text-xs text-[#F1F5F9] shadow-xl max-w-xs space-y-1.5">
+      <div className="font-semibold text-[#F1F5F9]">{point.dateLabel}</div>
+      <div className="space-y-1 font-mono tabular-nums text-[11px]">
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-[#94A3B8]">Объём перевода:</span>
+          <span className="text-[#D99B26] font-semibold">
+            {point.wordsProcessed} слов (RUS)
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-[#94A3B8]">Покрытие глоссария:</span>
+          <span className="text-emerald-400 font-semibold">
+            {point.glossaryCoveragePct}% ({point.canonHits}/{point.totalDetectedTerms})
+          </span>
+        </div>
+      </div>
+      {point.quarantined && (
+        <div className="mt-1 rounded border border-rose-500/35 bg-rose-950/40 px-2 py-1 text-[11px] text-rose-200 flex items-start gap-1.5">
+          <AlertTriangle className="h-3.5 w-3.5 text-rose-400 shrink-0 mt-0.5" />
+          <span className="line-clamp-2">
+            <strong className="font-semibold text-rose-300">Карантин:</strong>{' '}
+            {point.quarantineReason || 'Глава изолирована после сбоя перевода'}
+          </span>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function TranslationAnalyticsChart({
@@ -42,6 +117,37 @@ export default function TranslationAnalyticsChart({
   glossary,
   scoutedTerms,
 }: TranslationAnalyticsChartProps) {
+  const glossarySignature = useMemo(() => {
+    let h = 2166136261;
+    let count = 0;
+    for (const [cat, bucket] of Object.entries(glossary)) {
+      if (!bucket) continue;
+      for (const [eng, rus] of Object.entries(bucket)) {
+        count++;
+        const line = `${cat}:${eng}=${rus}`;
+        for (let i = 0; i < line.length; i++) {
+          h ^= line.charCodeAt(i);
+          h = Math.imul(h, 16777619);
+        }
+      }
+    }
+    return `${count}:${h >>> 0}`;
+  }, [glossary]);
+
+  const scoutedSignature = useMemo(() => {
+    let h = 2166136261;
+    let pendingCount = 0;
+    for (const st of scoutedTerms) {
+      if (st.approved_for_glossary) continue;
+      pendingCount++;
+      for (let i = 0; i < st.eng.length; i++) {
+        h ^= st.eng.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+    }
+    return `${pendingCount}:${h >>> 0}`;
+  }, [scoutedTerms]);
+
   const chartData = useMemo<ChartDataPoint[]>(() => {
     const sorted = [...chapters].sort((a, b) => {
       if (a.number !== b.number) return a.number - b.number;
@@ -49,12 +155,15 @@ export default function TranslationAnalyticsChart({
     });
 
     return sorted.map((ch) => {
+      const cacheKey = `${ch.id}|${ch.engText.length}|${fastStrHash(ch.engText)}|${ch.rusText.length}|${fastStrHash(ch.rusText)}|${ch.translated ? 1 : 0}|${ch.lastUpdated || ''}|${glossarySignature}|${scoutedSignature}`;
       const {
         canonInSource,
         canonMatchedInRus,
         totalDetectedTerms,
         glossaryCoveragePct,
-      } = computeChapterGlossaryCoverage(ch, glossary, scoutedTerms);
+      } = getMemoizedChapterCoverage(cacheKey, () =>
+        computeChapterGlossaryCoverage(ch, glossary, scoutedTerms)
+      );
 
       const numLabel = `Гл. ${ch.subPart || ch.number}`;
       const shortDate = ch.lastUpdated
@@ -71,20 +180,24 @@ export default function TranslationAnalyticsChart({
         canonHits: ch.translated ? canonMatchedInRus : canonInSource,
         totalDetectedTerms,
         translated: ch.translated,
+        quarantined: ch.status === 'quarantined',
+        quarantineReason: ch.quarantineReason,
       };
     });
-  }, [chapters, glossary, scoutedTerms]);
+  }, [chapters, glossary, scoutedTerms, glossarySignature, scoutedSignature]);
 
   const summaryMetrics = useMemo(() => {
-    const totalWordsRus = chartData.reduce((acc, d) => acc + d.wordsProcessed, 0);
+    let totalWordsRus = 0;
+    let coverageSum = 0;
+    let quarantinedCount = 0;
+    for (const d of chartData) {
+      totalWordsRus += d.wordsProcessed;
+      coverageSum += d.glossaryCoveragePct;
+      if (d.quarantined) quarantinedCount++;
+    }
     const avgCoverage =
-      chartData.length > 0
-        ? Math.round(
-            chartData.reduce((acc, d) => acc + d.glossaryCoveragePct, 0) /
-              chartData.length
-          )
-        : 0;
-    return { totalWordsRus, avgCoverage };
+      chartData.length > 0 ? Math.round(coverageSum / chartData.length) : 0;
+    return { totalWordsRus, avgCoverage, quarantinedCount };
   }, [chartData]);
 
   if (chartData.length === 0) return null;
@@ -115,6 +228,13 @@ export default function TranslationAnalyticsChart({
             <span className="text-[#94A3B8]">Среднее покрытие глоссария:</span>
             <strong className="text-emerald-400">{summaryMetrics.avgCoverage}%</strong>
           </div>
+          {summaryMetrics.quarantinedCount > 0 && (
+            <div className="flex items-center gap-1.5 text-rose-300">
+              <AlertTriangle className="h-3.5 w-3.5 text-rose-400" />
+              <span>Карантин:</span>
+              <strong className="text-rose-300">{summaryMetrics.quarantinedCount} гл.</strong>
+            </div>
+          )}
         </div>
       </div>
 
@@ -156,25 +276,7 @@ export default function TranslationAnalyticsChart({
               axisLine={false}
               unit="%"
             />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: '#161925',
-                borderColor: 'rgba(255,255,255,0.1)',
-                borderRadius: '0.5rem',
-                fontSize: '12px',
-                color: '#F1F5F9',
-              }}
-              labelStyle={{ color: '#F1F5F9', fontWeight: 600, marginBottom: '4px' }}
-              formatter={(value, name) => {
-                if (name === 'wordsProcessed') {
-                  return [`${value} слов (RUS)`, 'Объём перевода'];
-                }
-                if (name === 'glossaryCoveragePct') {
-                  return [`${value}%`, 'Покрытие глоссария'];
-                }
-                return [String(value), String(name)];
-              }}
-            />
+            <Tooltip content={<AnalyticsTooltip />} />
             <Area
               yAxisId="words"
               type="monotone"

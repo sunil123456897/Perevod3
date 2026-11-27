@@ -6,91 +6,50 @@
  * Self-contained module testable via `node --test`.
  */
 
-import { type SocialRegisterEdge, buildInflectedRussianForms } from './canon-glossary-vault.ts';
+import { buildInflectedRussianForms } from './russian-morphology.ts';
+import type {
+  GlossaryCategory,
+  GrammaticalGender,
+  CharacterSpeechVector,
+  GlossaryTermMeta,
+  CanonicalGlossary,
+  ScoutedTerm,
+  GenrePreset,
+  ProseTone,
+  LintSeverity,
+  LintRuleId,
+  LintIssue,
+  LintReport,
+  HeroStateLedger,
+  ForwardFallingQuestion,
+  LlmProviderType,
+  LlmProviderConfig,
+  GeminiThinkingLevel,
+  ChapterQaSummary,
+  SocialRegisterEdge,
+} from './pipeline-types.ts';
 
-export type GlossaryCategory =
-  | 'realms'
-  | 'characters'
-  | 'sects_and_places'
-  | 'system_and_terms'
-  | 'units';
-
-export type GrammaticalGender = 'M' | 'F' | 'N' | 'PL';
-
-export interface CharacterSpeechVector {
-  registerLevel: number; // [-1.0 (грубый просторечный) .. +1.0 (высокий архаичный)]
-  sentenceLengthBias: 'clipped_staccato' | 'balanced_conversational' | 'ornate_periodic';
-  ellipsisRate: 'low' | 'medium' | 'high';
-  inversionTendency: 'low' | 'medium' | 'high';
-  preferredParticles: string[]; // e.g. ["же", "-то", "ну", "ведь", "что ли"]
-  forbiddenLexicon: string[];   // e.g. ["окей", "круто", "проблема", "информация"]
-  catchphrasesOrTics?: string[];
-  contrastiveDialogueSamples?: Array<{
-    context: string;
-    badNeutralAi: string;
-    canonicalVoiceRu: string;
-  }>;
-}
-
-export interface GlossaryTermMeta {
-  gender?: GrammaticalGender;
-  declensionNote?: string; // e.g., "не склоняется" or "род. п.: Су Цинсюэ"
-  voiceNote?: string; // e.g., "к ученикам на «ты», архаично-властный тон; к нему все на «вы»"
-  speechVector?: CharacterSpeechVector;
-}
-
-export interface CanonicalGlossary {
-  realms: Record<string, string>;
-  characters: Record<string, string>;
-  sects_and_places: Record<string, string>;
-  system_and_terms: Record<string, string>;
-  units: Record<string, string>;
-}
-
-export interface ScoutedTerm {
-  id: string;
-  eng: string;
-  rus_suggested: string;
-  category: GlossaryCategory;
-  gender?: GrammaticalGender;
-  chapter_first_seen: number;
-  context_snippet: string;
-  approved_for_glossary: boolean;
-  confidence: number;
-}
-
-export type GenrePreset =
-  | 'xianxia'
-  | 'litrpg'
-  | 'korean_murim'
-  | 'japanese_ln'
-  | 'dark_fantasy';
-
-export type ProseTone = 'classic' | 'dynamic' | 'grim' | 'light';
-
-export type LintSeverity = 'error' | 'warning';
-
-export type LintRuleId =
-  | 'TIER_VS_GRADE'
-  | 'ARTIFACT_RANKING'
-  | 'WRITTEN_NUMERALS'
-  | 'WRITTEN_PERCENTS'
-  | 'DIALOGUE_DASH'
-  | 'THOUGHT_QUOTES'
-  | 'WEIGHT_UNITS'
-  | 'ALCHEMY_CALQUES'
-  | 'SECT_SINGULAR'
-  | 'MACHINE_CALQUES'
-  | 'NUMBER_MISMATCH'
-  | 'GLOSSARY_CANON_VIOLATION'
-  | 'CHARACTER_GENDER_MISMATCH'
-  | 'PARAGRAPH_DRIFT'
-  | 'TAUTOLOGY_RADAR'
-  | 'LATIN_LEAKAGE_AND_BRACKETS'
-  | 'DASH_AND_COMMA_INFLATION'
-  | 'SYNTAX_MONOTONY_AND_BURSTINESS'
-  | 'REGISTER_PRONOUN_SHIFT'
-  | 'NOMINALIZATION_AND_INANIMATE_SUBJECT';
+export type {
+  GlossaryCategory,
+  GrammaticalGender,
+  CharacterSpeechVector,
+  GlossaryTermMeta,
+  CanonicalGlossary,
+  ScoutedTerm,
+  GenrePreset,
+  ProseTone,
+  LintSeverity,
+  LintRuleId,
+  LintIssue,
+  LintReport,
+  HeroStateLedger,
+  ForwardFallingQuestion,
+  LlmProviderType,
+  LlmProviderConfig,
+  GeminiThinkingLevel,
+  ChapterQaSummary,
+  SocialRegisterEdge,
+} from './pipeline-types.ts';
 
 export interface LintRuleDefinition {
   id: LintRuleId;
@@ -288,32 +247,12 @@ export const PROSE_TONE_LABELS: Record<
   },
 };
 
-export interface LintIssue {
-  id: string;
-  ruleId: LintRuleId;
-  ruleTitle: string;
-  severity: LintSeverity;
-  line: number;
-  snippet: string;
-  suggestion: string;
-  explanation: string;
-}
-
-export interface LintReport {
-  passed: boolean;
-  errorCount: number;
-  warningCount: number;
-  score: number;
-  issues: LintIssue[];
-  checkedNumbersCount: number;
-  glossaryMatchesCount: number;
-}
-
 export interface LinterOptions {
   enabledRuleIds?: LintRuleId[];
   glossaryMeta?: Record<string, GlossaryTermMeta>;
   socialEdges?: SocialRegisterEdge[];
   dialogueRegisters?: Array<{ lineIndex?: number; speaker?: string; pronounMode: 'ты' | 'Вы' }>;
+  analysisContext?: ChapterAnalysisContext;
 }
 
 const WRITTEN_NUMERAL_PATTERNS: Array<{ regex: RegExp; replacement: string; label: string }> = [
@@ -367,9 +306,126 @@ const WRITTEN_NUMERAL_PATTERNS: Array<{ regex: RegExp; replacement: string; labe
 const COMMON_PAST_VERBS =
   'сказал|подумал|ответил|спросил|воскликнул|прошептал|пробормотал|посмотрел|взглянул|шагнул|улыбнулся|нахмурился|кивнул|почувствовал|ощутил|решил|понял|заметил|качнул|вздохнул|усмехнулся|замер|обернулся|повернулся|поднял|опустил|взял|открыл|закрыл|произнес|произнёс|добавил|продолжил|возразил|бросил|выдохнул|сделал';
 
-const INDECLINABLE_FEM_NAMES = ['Айрам', 'Эстер', 'Фейт', 'Мей'];
-const MASC_GENITIVE_GOVERNORS =
-  '(?:[Вв]згляд|[Гг]олос|[Сс]вет|[Рр]от|[Оо]твет|[Ии]нтерес|[Сс]лучай|[Сс]мысл|[Тт]анец|[Сс]тоицизм|[Пп]очерк|[Вв]ид|[Оо]браз|Ульриха\\s+и|[Уу]|[Сс])';
+const REV_INTRANSITIVE_OR_SPEECH_VERBS =
+  'сказал|подумал|ответил|спросил|воскликнул|прошептал|пробормотал|посмотрел|взглянул|шагнул|улыбнулся|нахмурился|кивнул|качнул|вздохнул|усмехнулся|замер|обернулся|повернулся|произнес|произнёс|добавил|продолжил|возразил|бросил|выдохнул';
+
+const INDECLINABLE_FEM_NAMES = ['Айрам', 'Эстер', 'Фейт', 'Мей', 'Элизабет'];
+
+const FEM_SUBJECT_BOUNDARY =
+  '((?:^|[\\n.!?:;,…»"(\\[—]|(?<![а-яёА-ЯЁ-])(?:а|но|и|зато|однако|когда|пока|хотя|что|чтобы|ведь|где|как|если|словно|будто|точно|тогда|теперь|потом|затем|вдруг|внезапно|тут|лишь|только|даже|сама|эта|та|одна|леди|госпожа|принцесса|королева|сестра)(?![а-яёА-ЯЁ]))[ \\t]*(?:—[ \\t]+)?)';
+
+const FEM_ADVERB_CHAIN =
+  '(?:(?:не|так|очень|ещё|еще|уже|опять|снова|лишь|только|тут\\s+же|просто|даже|вдруг|внезапно|едва|чуть|нехотя|молча|тихо|громко|холодно|мрачно|резко|сухо|мягко|медленно|удивлённо|недоверчиво|внимательно|пристально|осторожно|быстро|слегка|устало|тяжело|горько|слабо|печально|радостно|решительно|спокойно|небрежно|нервно|судорожно)\\s+){0,2}';
+
+const COPULA_VERB_PATTERN =
+  '(?:(?:не\\s+)?(?:был|была|было|были|(?:стал|стала|стало|стали)(?!\\s+бы(?![а-яёА-ЯЁ]))|являлся|являлась|являлись|представлял|представляла|представляло|представляли))';
+
+const ARTIFICIAL_COPULA_DASH_RE = new RegExp(
+  `(?<=[а-яёА-ЯЁ0-9])\\s+(?:—|–|-)\\s+(${COPULA_VERB_PATTERN})(?![а-яёА-ЯЁ])`,
+  'i'
+);
+
+const ARTIFICIAL_COPULA_DASH_GLOBAL_RE = new RegExp(
+  `(?<=[а-яёА-ЯЁ0-9])\\s+(?:—|–|-)\\s+(${COPULA_VERB_PATTERN})(?![а-яёА-ЯЁ])`,
+  'gi'
+);
+
+function toFemininePastVerb(verb: string): string {
+  const lower = verb.toLowerCase();
+  if (lower.endsWith('ся')) {
+    return `${verb.slice(0, -2)}ась`;
+  }
+  if (lower === 'замер') {
+    return `${verb}ла`;
+  }
+  return `${verb}а`;
+}
+
+interface CompiledFemGenderMatcher {
+  name: string;
+  femPattern: RegExp;
+  revAttributionPattern: RegExp;
+  revClauseStartPattern: RegExp;
+  multiVerbPattern: RegExp;
+}
+
+const FEM_MATCHER_CACHE = new Map<string, CompiledFemGenderMatcher>();
+
+function getCompiledFemGenderMatcher(femName: string): CompiledFemGenderMatcher {
+  const cached = FEM_MATCHER_CACHE.get(femName);
+  if (cached) return cached;
+
+  const escapedName = femName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const matcher: CompiledFemGenderMatcher = {
+    name: femName,
+    femPattern: new RegExp(
+      `${FEM_SUBJECT_BOUNDARY}(${escapedName}[ \\t]+${FEM_ADVERB_CHAIN})(${COMMON_PAST_VERBS})(?![а-яё])`,
+      'gi'
+    ),
+    revAttributionPattern: new RegExp(
+      `([,!?…»"][ \\t]*—[ \\t]*${FEM_ADVERB_CHAIN})(${COMMON_PAST_VERBS})([ \\t]+${escapedName})(?![а-яё])`,
+      'gi'
+    ),
+    revClauseStartPattern: new RegExp(
+      `((?:^|[.!?\\n…:;][ \\t]*|[ \\t]*—[ \\t]+)(?:(?:[Аа]|[Нн]о|[Ии]|[Зз]ато|[Оо]днако|[Тт]ут|[Вв]друг|[Зз]атем|[Пп]отом|[Нн]аконец)[ \\t]+)?(?:не[ \\t]+)?)(${REV_INTRANSITIVE_OR_SPEECH_VERBS})([ \\t]+${escapedName})(?![а-яё])`,
+      'gi'
+    ),
+    multiVerbPattern: new RegExp(
+      `${FEM_SUBJECT_BOUNDARY}(${escapedName}[ \\t]+(?:(?![.!?\\n;]).){1,120}?[ \\t]+и[ \\t]+)(${COMMON_PAST_VERBS})(?![а-яё])`,
+      'gi'
+    ),
+  };
+
+  if (FEM_MATCHER_CACHE.size > 512) {
+    FEM_MATCHER_CACHE.clear();
+  }
+  FEM_MATCHER_CACHE.set(femName, matcher);
+  return matcher;
+}
+
+const MULTI_VERB_NEW_CLAUSE_RE =
+  /(?:,\s*(?:а|но|однако|зато|хотя|когда|пока|что|чтобы|ведь|где|как|если)(?![а-яё])|,\s*и\s+(?:он|она|они|брат|отец|враг|мужчина|юноша|старик|король|принц|мастер|старейшина|[А-ЯЁ][а-яё]{2,})(?![а-яё])|[,;]\s*(?:он|брат|отец|враг|мужчина|юноша|старик|король|принц|мастер|старейшина)(?![а-яё]))/i;
+
+function applyFemaleGenderAgreement(
+  input: string,
+  matcher: CompiledFemGenderMatcher,
+  includeMultiClause: boolean
+): { text: string; changed: boolean } {
+  let text = input;
+  let changed = false;
+
+  const replaceWithCallback = (re: RegExp, fn: (...args: string[]) => string) => {
+    re.lastIndex = 0;
+    const next = text.replace(re, fn);
+    if (next !== text) {
+      text = next;
+      changed = true;
+    }
+  };
+
+  replaceWithCallback(matcher.femPattern, (_m, lead: string, prefix: string, verb: string) => {
+    return `${lead}${prefix}${toFemininePastVerb(verb)}`;
+  });
+
+  replaceWithCallback(matcher.revAttributionPattern, (_m, lead: string, verb: string, suffix: string) => {
+    return `${lead}${toFemininePastVerb(verb)}${suffix}`;
+  });
+
+  replaceWithCallback(matcher.revClauseStartPattern, (_m, lead: string, verb: string, suffix: string) => {
+    return `${lead}${toFemininePastVerb(verb)}${suffix}`;
+  });
+
+  if (includeMultiClause) {
+    replaceWithCallback(matcher.multiVerbPattern, (full: string, lead: string, body: string, verb2: string) => {
+      if (MULTI_VERB_NEW_CLAUSE_RE.test(body)) {
+        return full;
+      }
+      return `${lead}${body}${toFemininePastVerb(verb2)}`;
+    });
+  }
+
+  return { text, changed };
+}
 
 const RUSSIAN_STOP_STEMS = new Set([
   'котор',
@@ -394,9 +450,9 @@ const TAUTOLOGY_SYNONYM_HINTS: Record<string, string> = {
   мгновен: 'в тот же миг, молниеносно, в одночасье',
   быстр: 'стремительно, проворно, мигом',
   сказа: 'произнёс, промолвил, заметил, бросил',
-  посмотр: 'окинул взглядом, воззрился, перевёл взор',
+  посмотр: 'взглянул, перевёл взгляд, воззрился',
   холодн: 'ледяной, студёный, бесстрастный',
-  огромн: 'исполинский, колоссальный, массивный',
+  огромн: 'исполинский, громадный, массивный',
   сил: 'мощь, напор, могущество',
 };
 
@@ -610,6 +666,26 @@ export function alignChapterParagraphs(
 }
 
 /**
+ * Computes a robust 3-character base-36 hash anchor for an English paragraph.
+ * Uses FNV-1a (32-bit) with index mixing.
+ * 36^3 = 46,656 possible values (<0.1% collision probability over a chapter),
+ * consuming only 5 tokens in the prompt: [a7f|#pK].
+ */
+export function computeParagraphHashAnchor(
+  sourceParagraph: string,
+  index: number
+): string {
+  const normalized = (sourceParagraph || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  let hash = (2166136261 ^ index) >>> 0;
+  for (let i = 0; i < normalized.length; i++) {
+    hash ^= normalized.charCodeAt(i);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  const positiveHash = hash % 46656;
+  return positiveHash.toString(36).padStart(3, '0');
+}
+
+/**
  * Proximity Tautology Radar: detects repeated non-trivial word stems (3+ occurrences within a single paragraph)
  */
 export interface TautologyHit {
@@ -727,10 +803,337 @@ export function computeWordDiff(oldText: string, newText: string): WordDiffToken
   return result;
 }
 
-export {
-  previewAndApplyCanonRipple,
-  type CanonRippleChapterChange,
-} from './canon-glossary-vault.ts';
+export interface CompiledGlossaryEntry {
+  eng: string;
+  rus: string;
+  category: GlossaryCategory;
+  filterRegex: RegExp;
+  lintRegex: RegExp;
+  globalReplaceRegex: RegExp;
+  significantStems: string[];
+}
+
+interface CompiledGlossaryBundle {
+  signature: string;
+  entries: CompiledGlossaryEntry[];
+  sortedByEngLengthDesc: CompiledGlossaryEntry[];
+  tautologyProtectedRegex: RegExp | null;
+}
+
+export interface ChapterAnalysisContext {
+  engText: string;
+  rusText: string;
+  engLines: string[];
+  rusLines: string[];
+  engParagraphs: string[];
+  rusParagraphs: string[];
+  alignment: {
+    pairs: AlignedParagraphPair[];
+    engCount: number;
+    rusCount: number;
+    hasDrift: boolean;
+  };
+  engNumbers: string[];
+  rusNumbers: Set<string>;
+  filteredGlossary: CanonicalGlossary;
+  matchedGlossaryCount: number;
+  femaleCharacters: string[];
+  compiledGlossary: CompiledGlossaryEntry[];
+  glossarySignature: string;
+}
+
+const GLOSSARY_WEAK_CACHE = new WeakMap<CanonicalGlossary, CompiledGlossaryBundle>();
+const GLOSSARY_LRU_CACHE = new Map<string, CompiledGlossaryBundle>();
+const MAX_GLOSSARY_LRU = 32;
+
+const TAUTOLOGY_TARGET_TRIGGER_RE = /(?:мгновенн|быстр|сказал|посмотрел|огромн)/i;
+
+function computeGlossarySignature(glossary?: CanonicalGlossary): string {
+  if (!glossary) return 'empty';
+  const cats: GlossaryCategory[] = ['realms', 'characters', 'sects_and_places', 'system_and_terms', 'units'];
+  let sig = '';
+  for (const cat of cats) {
+    const bucket = glossary[cat];
+    if (!bucket) continue;
+    const keys = Object.keys(bucket);
+    sig += `${cat}:${keys.length}:`;
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      sig += `${k}=${bucket[k]}|`;
+    }
+  }
+  return sig;
+}
+
+function compileGlossaryBundle(glossary?: CanonicalGlossary): CompiledGlossaryBundle {
+  const signature = computeGlossarySignature(glossary);
+  if (glossary) {
+    const weakHit = GLOSSARY_WEAK_CACHE.get(glossary);
+    if (weakHit && weakHit.signature === signature) {
+      return weakHit;
+    }
+  }
+  const lruHit = GLOSSARY_LRU_CACHE.get(signature);
+  if (lruHit) {
+    GLOSSARY_LRU_CACHE.delete(signature);
+    GLOSSARY_LRU_CACHE.set(signature, lruHit);
+    if (glossary) {
+      GLOSSARY_WEAK_CACHE.set(glossary, lruHit);
+    }
+    return lruHit;
+  }
+
+  const entries: CompiledGlossaryEntry[] = [];
+  const protectedFormSet = new Set<string>();
+  const cats: GlossaryCategory[] = ['realms', 'characters', 'sects_and_places', 'system_and_terms', 'units'];
+
+  if (glossary) {
+    for (const cat of cats) {
+      const bucket = glossary[cat] || {};
+      for (const [eng, rus] of Object.entries(bucket)) {
+        const cleanEng = (eng || '').trim();
+        const cleanRus = (rus || '').trim();
+        if (cleanEng.length >= 2) {
+          const escapedEng = cleanEng.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const isProperNoun =
+            (cat === 'characters' || cat === 'sects_and_places') && /^[A-Z]/.test(cleanEng);
+          const significantStems = cleanRus
+            .toLowerCase()
+            .replace(/ё/g, 'е')
+            .split(/[\s-]+/)
+            .filter((w) => w.length >= 2)
+            .map((w) => {
+              if (w.startsWith('камен')) return 'кам';
+              if (w.startsWith('корен')) return 'кор';
+              return w.slice(0, Math.min(4, Math.max(2, w.length - 2)));
+            });
+
+          entries.push({
+            eng: cleanEng,
+            rus: cleanRus,
+            category: cat,
+            filterRegex: new RegExp(`\\b${escapedEng}s?\\b`, 'i'),
+            lintRegex: new RegExp(`\\b${escapedEng}s?\\b`, isProperNoun ? '' : 'i'),
+            globalReplaceRegex: new RegExp(`\\b${escapedEng}s?\\b`, 'gi'),
+            significantStems,
+          });
+        }
+
+        if (cleanRus && TAUTOLOGY_TARGET_TRIGGER_RE.test(cleanRus)) {
+          protectedFormSet.add(cleanRus);
+          const forms = buildInflectedRussianForms(cleanRus, { category: cat });
+          for (const item of forms) {
+            if (item.form && item.form.length >= 3) {
+              protectedFormSet.add(item.form.trim());
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const sortedByEngLengthDesc = [...entries].sort((a, b) => b.eng.length - a.eng.length);
+  const protectedForms = Array.from(protectedFormSet)
+    .sort((a, b) => b.length - a.length)
+    .map((f) => f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const tautologyProtectedRegex =
+    protectedForms.length > 0
+      ? new RegExp(`(?<![а-яёА-ЯЁ])(?:${protectedForms.join('|')})(?![а-яёА-ЯЁ])`, 'gi')
+      : null;
+
+  const bundle: CompiledGlossaryBundle = {
+    signature,
+    entries,
+    sortedByEngLengthDesc,
+    tautologyProtectedRegex,
+  };
+
+  if (GLOSSARY_LRU_CACHE.size >= MAX_GLOSSARY_LRU) {
+    const oldestKey = GLOSSARY_LRU_CACHE.keys().next().value;
+    if (oldestKey !== undefined) {
+      GLOSSARY_LRU_CACHE.delete(oldestKey);
+    }
+  }
+  GLOSSARY_LRU_CACHE.set(signature, bundle);
+  if (glossary) {
+    GLOSSARY_WEAK_CACHE.set(glossary, bundle);
+  }
+  return bundle;
+}
+
+function alignFromSplitParagraphs(engParagraphs: string[], rusParagraphs: string[]): {
+  pairs: AlignedParagraphPair[];
+  engCount: number;
+  rusCount: number;
+  hasDrift: boolean;
+} {
+  const maxLen = Math.max(engParagraphs.length, rusParagraphs.length);
+  const pairs: AlignedParagraphPair[] = [];
+
+  for (let i = 0; i < maxLen; i++) {
+    const engP = engParagraphs[i] || '';
+    const rusP = rusParagraphs[i] || '';
+    const isSystemDivider = engP === '---' || rusP === '---';
+    const isSystemProperty =
+      (engP.startsWith('[') && engP.endsWith(']')) ||
+      (rusP.startsWith('[') && rusP.endsWith(']'));
+
+    const engNums = Array.from(new Set(engP.match(/(?<!\d)\d+(?:\.\d+)?(?!\d)/g) || []));
+    const rusNums = extractNormalizedRussianNumbers(rusP);
+    const missingNumbers = rusP ? engNums.filter((n) => !rusNums.has(n)) : [];
+
+    const isDrifted =
+      (Boolean(engP) && !rusP && rusParagraphs.length > 0) ||
+      (!engP && Boolean(rusP)) ||
+      (engP === '---' && rusP !== '---' && Boolean(rusP));
+
+    pairs.push({
+      index: i,
+      engParagraph: engP,
+      rusParagraph: rusP,
+      isSystemDivider,
+      isSystemProperty,
+      isDrifted,
+      missingNumbers,
+    });
+  }
+
+  return {
+    pairs,
+    engCount: engParagraphs.length,
+    rusCount: rusParagraphs.length,
+    hasDrift: rusParagraphs.length > 0 && engParagraphs.length !== rusParagraphs.length,
+  };
+}
+
+/**
+ * Single-pass chapter analysis context (< 20 ms target): precomputes split lines, aligned pairs,
+ * normalized numbers, compiled glossary matchers (WeakMap + LRU), and female character list once.
+ */
+export function createChapterAnalysisContext(
+  engText: string,
+  rusText: string,
+  glossary: CanonicalGlossary,
+  options?: LinterOptions
+): ChapterAnalysisContext {
+  const bundle = compileGlossaryBundle(glossary);
+  const engLines = (engText || '').replace(/\r\n/g, '\n').split('\n');
+  const rusLines = (rusText || '').replace(/\r\n/g, '\n').split('\n');
+  const engParagraphs = engLines.map((l) => l.trim()).filter(Boolean);
+  const rusParagraphs = rusLines.map((l) => l.trim()).filter(Boolean);
+  const alignment = alignFromSplitParagraphs(engParagraphs, rusParagraphs);
+
+  const engNumbers = Array.from(new Set((engText || '').match(/(?<!\d)\d+(?:\.\d+)?(?!\d)/g) || []));
+  const rusNumbers = extractNormalizedRussianNumbers(rusText || '');
+
+  const filteredGlossary: CanonicalGlossary = {
+    realms: {},
+    characters: {},
+    sects_and_places: {},
+    system_and_terms: {},
+    units: {},
+  };
+  let matchedGlossaryCount = 0;
+  for (const entry of bundle.entries) {
+    if (entry.filterRegex.test(engText)) {
+      filteredGlossary[entry.category][entry.eng] = entry.rus;
+      matchedGlossaryCount++;
+    }
+  }
+
+  const glossaryMeta = options?.glossaryMeta || {};
+  const femaleCharacterSet = new Set<string>(INDECLINABLE_FEM_NAMES);
+  const MASC_A_YA_EXCEPTIONS = new Set(['илья', 'никита', 'лука', 'фома', 'савва', 'кузьма', 'данила']);
+  Object.entries(glossary?.characters || {}).forEach(([eng, rus]) => {
+    const meta = glossaryMeta[eng];
+    const cleanRus = rus.trim();
+    const firstToken = cleanRus.split(/\s+/)[0] || '';
+    if (meta?.gender === 'M' || meta?.gender === 'N') {
+      femaleCharacterSet.delete(cleanRus);
+      if (firstToken) femaleCharacterSet.delete(firstToken);
+    } else if (
+      meta?.gender === 'F' ||
+      (!meta?.gender &&
+        firstToken.length >= 3 &&
+        /[ая]$/i.test(firstToken) &&
+        !MASC_A_YA_EXCEPTIONS.has(firstToken.toLowerCase()))
+    ) {
+      femaleCharacterSet.add(cleanRus);
+    }
+  });
+
+  return {
+    engText,
+    rusText,
+    engLines,
+    rusLines,
+    engParagraphs,
+    rusParagraphs,
+    alignment,
+    engNumbers,
+    rusNumbers,
+    filteredGlossary,
+    matchedGlossaryCount,
+    femaleCharacters: Array.from(femaleCharacterSet),
+    compiledGlossary: bundle.entries,
+    glossarySignature: bundle.signature,
+  };
+}
+
+/**
+ * Pure-JS 64-bit FNV-1a chapter fingerprint for caching UI & SQLite QA summaries without node:crypto.
+ */
+export function computeChapterFingerprint(
+  engText: string,
+  rusText: string,
+  glossary: CanonicalGlossary,
+  options?: LinterOptions
+): string {
+  let h1 = 0x811c9dc5;
+  let h2 = 0x9e3779b9;
+  const feed = (s: string) => {
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      h1 ^= c;
+      h1 = Math.imul(h1, 0x01000193);
+      h2 ^= (c + i) & 0xffff;
+      h2 = Math.imul(h2, 0x85ebca6b);
+    }
+  };
+  feed(engText || '');
+  feed('\u0001');
+  feed(rusText || '');
+  feed('\u0002');
+  feed(computeGlossarySignature(glossary));
+  if (options?.enabledRuleIds) {
+    feed('\u0003' + options.enabledRuleIds.join(','));
+  }
+  if (options?.glossaryMeta) {
+    feed('\u0004' + JSON.stringify(options.glossaryMeta));
+  }
+  return `${(h1 >>> 0).toString(16).padStart(8, '0')}${(h2 >>> 0).toString(16).padStart(8, '0')}`;
+}
+
+/**
+ * Computes compact UI-ready QA summary from a single-pass lint execution (< 20 ms per chapter).
+ */
+export function computeChapterQaSummary(
+  engText: string,
+  rusText: string,
+  glossary: CanonicalGlossary,
+  options?: LinterOptions
+): ChapterQaSummary {
+  const ctx = options?.analysisContext || createChapterAnalysisContext(engText, rusText, glossary, options);
+  const report = runQaLinter(engText, rusText, glossary, { ...options, analysisContext: ctx });
+  return {
+    passed: report.passed,
+    score: report.score,
+    errorCount: report.errorCount,
+    warningCount: report.warningCount,
+    fingerprint: computeChapterFingerprint(engText, rusText, glossary, options),
+    computedAt: new Date().toISOString(),
+  };
+}
 
 /**
  * Filters a full CanonicalGlossary down to ONLY the terms that appear in `engText`.
@@ -747,16 +1150,14 @@ export function filterGlossaryForChapter(
     units: {},
   };
   let matchedCount = 0;
+  const bundle = compileGlossaryBundle(glossary);
 
-  (Object.keys(glossary) as GlossaryCategory[]).forEach((cat) => {
-    Object.entries(glossary[cat] || {}).forEach(([eng, rus]) => {
-      const escaped = eng.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      if (new RegExp(`\\b${escaped}s?\\b`, 'i').test(engText)) {
-        filteredGlossary[cat][eng] = rus;
-        matchedCount++;
-      }
-    });
-  });
+  for (const entry of bundle.entries) {
+    if (entry.filterRegex.test(engText)) {
+      filteredGlossary[entry.category][entry.eng] = entry.rus;
+      matchedCount++;
+    }
+  }
 
   return { filteredGlossary, matchedCount };
 }
@@ -789,6 +1190,26 @@ export function generateChapterMemorySummary(
   return `В Главе ${chapterNumber} («${titleRus}»): ${firstSentence} Итог главы: ${lastSentence}`;
 }
 
+const INDECLINABLE_FEM_MATCHERS = INDECLINABLE_FEM_NAMES.map((indeclName) => ({
+  name: indeclName,
+  testRe: new RegExp(`(?<![а-яё])${indeclName}(?:а|у|ом|е|ой|ы|ам|ами|ах)(?![а-яё])`, 'i'),
+  replaceRe: new RegExp(`(?<![а-яё])${indeclName}(?:а|у|ом|е|ой|ы|ам|ами|ах)(?![а-яё])`, 'gi'),
+}));
+
+interface MemoLintEntry {
+  engText: string;
+  rusText: string;
+  glossarySig: string;
+  rulesKey: string;
+  metaKey: string;
+  edgesKey: string;
+  registersKey: string;
+  report: LintReport;
+}
+
+const RUN_QA_LINTER_MEMO_CACHE: MemoLintEntry[] = [];
+const MAX_LINT_MEMO = 16;
+
 /**
  * Runs the configurable deterministic style, accuracy, gender, paragraph drift & tautology rules.
  */
@@ -798,31 +1219,37 @@ export function runQaLinter(
   glossary: CanonicalGlossary,
   options?: LinterOptions
 ): LintReport {
+  const ctx =
+    options?.analysisContext ||
+    createChapterAnalysisContext(engText, rusText, glossary, options);
+
+  const rulesKey = options?.enabledRuleIds ? options.enabledRuleIds.join(',') : 'ALL';
+  const metaKey = options?.glossaryMeta ? JSON.stringify(options.glossaryMeta) : '';
+  const edgesKey = options?.socialEdges ? JSON.stringify(options.socialEdges) : '';
+  const registersKey = options?.dialogueRegisters ? JSON.stringify(options.dialogueRegisters) : '';
+
+  for (let i = RUN_QA_LINTER_MEMO_CACHE.length - 1; i >= 0; i--) {
+    const entry = RUN_QA_LINTER_MEMO_CACHE[i];
+    if (
+      entry.engText === engText &&
+      entry.rusText === rusText &&
+      entry.glossarySig === ctx.glossarySignature &&
+      entry.rulesKey === rulesKey &&
+      entry.metaKey === metaKey &&
+      entry.edgesKey === edgesKey &&
+      entry.registersKey === registersKey
+    ) {
+      return { ...entry.report, issues: entry.report.issues.slice() };
+    }
+  }
+
   const activeRules = new Set<LintRuleId>(
     options?.enabledRuleIds || ALL_LINT_RULES.map((r) => r.id)
   );
-  const glossaryMeta = options?.glossaryMeta || {};
-
   const issues: LintIssue[] = [];
-  const lines = rusText.split(/\r?\n/);
-
-  const femaleCharacterSet = new Set<string>(INDECLINABLE_FEM_NAMES);
-  const MASC_A_YA_EXCEPTIONS = new Set(['илья', 'никита', 'лука', 'фома', 'савва', 'кузьма', 'данила']);
-  Object.entries(glossary.characters || {}).forEach(([eng, rus]) => {
-    const meta = glossaryMeta[eng];
-    const cleanRus = rus.trim();
-    const firstToken = cleanRus.split(/\s+/)[0] || '';
-    if (
-      meta?.gender === 'F' ||
-      (!meta?.gender &&
-        firstToken.length >= 3 &&
-        /[ая]$/i.test(firstToken) &&
-        !MASC_A_YA_EXCEPTIONS.has(firstToken.toLowerCase()))
-    ) {
-      femaleCharacterSet.add(cleanRus);
-    }
-  });
-  const femaleCharacters = Array.from(femaleCharacterSet);
+  const lines = ctx.rusLines;
+  const femaleCharacters = ctx.femaleCharacters;
+  const femaleCharacterSet = new Set<string>(femaleCharacters);
 
   lines.forEach((rawLine, idx) => {
     const lineNum = idx + 1;
@@ -1069,52 +1496,26 @@ export function runQaLinter(
 
     // 13. CHARACTER_GENDER_MISMATCH
     if (activeRules.has('CHARACTER_GENDER_MISMATCH')) {
-      for (const indeclName of INDECLINABLE_FEM_NAMES) {
-        const reDecl = new RegExp(
-          `(?<![а-яё])${indeclName}(?:а|у|ом|е|ой|ы|ам|ами|ах)(?![а-яё])`,
-          'i'
-        );
-        if (reDecl.test(line)) {
+      for (const indecl of INDECLINABLE_FEM_MATCHERS) {
+        if (!femaleCharacterSet.has(indecl.name)) continue;
+        if (indecl.testRe.test(line)) {
           issues.push({
-            id: `lint-${lineNum}-indecl-${indeclName}`,
+            id: `lint-${lineNum}-indecl-${indecl.name}`,
             ruleId: 'CHARACTER_GENDER_MISMATCH',
-            ruleTitle: `Ошибочное склонение несклоняемого женского имени («${indeclName}»)`,
+            ruleTitle: `Ошибочное склонение несклоняемого женского имени («${indecl.name}»)`,
             severity: 'error',
             line: lineNum,
             snippet: line,
-            suggestion: line.replace(
-              new RegExp(`(?<![а-яё])${indeclName}(?:а|у|ом|е|ой|ы|ам|ами|ах)(?![а-яё])`, 'gi'),
-              indeclName
-            ),
-            explanation: `Женское имя «${indeclName}» на согласную (и «Мей») по правилам русского языка не склоняется.`,
+            suggestion: line.replace(indecl.replaceRe, indecl.name),
+            explanation: `Женское имя «${indecl.name}» на согласную (и «Мей») по правилам русского языка не склоняется.`,
           });
         }
       }
 
       for (const femName of femaleCharacters) {
-        const escapedName = femName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const femPattern = new RegExp(
-          `(?<!${MASC_GENITIVE_GOVERNORS}\\s+)(?<![а-яё])(${escapedName}\\s+(?:(?:не|уже|снова|лишь|только|тут\\s+же|просто|даже|тихо|мягко|медленно)\\s+)?)(${COMMON_PAST_VERBS})(?![а-яё])`,
-          'i'
-        );
-        const revFemPattern = new RegExp(
-          `(?<![а-яё])(${COMMON_PAST_VERBS})(\\s+${escapedName})(?![а-яё])`,
-          'i'
-        );
-        if (femPattern.test(line) || revFemPattern.test(line)) {
-          const fixedLine = line
-            .replace(femPattern, (_, prefix, verb: string) => {
-              const femVerb = verb.endsWith('ся')
-                ? `${verb.slice(0, -2)}ась`
-                : `${verb}а`;
-              return `${prefix}${femVerb}`;
-            })
-            .replace(revFemPattern, (_, verb: string, suffix) => {
-              const femVerb = verb.endsWith('ся')
-                ? `${verb.slice(0, -2)}ась`
-                : `${verb}а`;
-              return `${femVerb}${suffix}`;
-            });
+        const matcher = getCompiledFemGenderMatcher(femName);
+        const agreed = applyFemaleGenderAgreement(line, matcher, true);
+        if (agreed.changed) {
           issues.push({
             id: `lint-${lineNum}-gender-${femName}`,
             ruleId: 'CHARACTER_GENDER_MISMATCH',
@@ -1122,7 +1523,7 @@ export function runQaLinter(
             severity: 'error',
             line: lineNum,
             snippet: line,
-            suggestion: fixedLine,
+            suggestion: agreed.text,
             explanation: `Персонаж «${femName}» имеет женский род (Ж) в глоссарии, но глагол стоит в мужском роде.`,
           });
         }
@@ -1132,7 +1533,7 @@ export function runQaLinter(
 
   // 14. PARAGRAPH_DRIFT (1:1 Alignment & System Box Dividers)
   if (activeRules.has('PARAGRAPH_DRIFT') && rusText.trim()) {
-    const alignment = alignChapterParagraphs(engText, rusText);
+    const alignment = ctx.alignment;
     if (Math.abs(alignment.engCount - alignment.rusCount) >= 2) {
       issues.push({
         id: 'lint-paragraph-drift',
@@ -1170,8 +1571,7 @@ export function runQaLinter(
   // 16. LATIN_LEAKAGE_AND_BRACKETS (Zero-Leakage Gatekeeper)
   if (activeRules.has('LATIN_LEAKAGE_AND_BRACKETS') && rusText.trim()) {
     const allowedRpgTokens = new Set(['HP', 'MP', 'EXP', 'XP', 'VIP', 'NPC', 'DPS', 'PVP', 'PVE', 'SSS', 'SS']);
-    const rusLines = rusText.split(/\r?\n/);
-    rusLines.forEach((line, idx) => {
+    ctx.rusLines.forEach((line, idx) => {
       const latinMatches = (line.match(/[a-zA-Z]{3,}/g) || []).filter(
         (w) => !allowedRpgTokens.has(w.toUpperCase())
       );
@@ -1208,8 +1608,8 @@ export function runQaLinter(
   }
 
   // 11. NUMBER_MISMATCH
-  const engNumbers = Array.from(new Set(engText.match(/(?<!\d)\d+(?:\.\d+)?(?!\d)/g) || []));
-  const rusNumbers = extractNormalizedRussianNumbers(rusText);
+  const engNumbers = ctx.engNumbers;
+  const rusNumbers = ctx.rusNumbers;
   if (activeRules.has('NUMBER_MISMATCH')) {
     for (const num of engNumbers) {
       if (!rusNumbers.has(num)) {
@@ -1229,39 +1629,14 @@ export function runQaLinter(
   }
 
   // 12. GLOSSARY_CANON_VIOLATION
-  const allGlossaryEntries: Array<{ eng: string; rus: string; category: GlossaryCategory }> = [];
-  (Object.keys(glossary) as GlossaryCategory[]).forEach((cat) => {
-    const bucket = glossary[cat] || {};
-    Object.entries(bucket).forEach(([eng, rus]) => {
-      allGlossaryEntries.push({ eng, rus, category: cat });
-    });
-  });
-
   let glossaryMatchesCount = 0;
   const lowerRus = rusText.toLowerCase().replace(/ё/g, 'е');
 
-  for (const entry of allGlossaryEntries) {
-    if (entry.eng.length < 2) continue;
-    const escapedEng = entry.eng.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const isProperNoun =
-      (entry.category === 'characters' || entry.category === 'sects_and_places') &&
-      /^[A-Z]/.test(entry.eng);
-    const engWordRegex = new RegExp(`\\b${escapedEng}s?\\b`, isProperNoun ? '' : 'i');
-    if (engWordRegex.test(engText)) {
-      const significantWords = entry.rus
-        .toLowerCase()
-        .replace(/ё/g, 'е')
-        .split(/[\s-]+/)
-        .filter((w) => w.length >= 2)
-        .map((w) => {
-          if (w.startsWith('камен')) return 'кам';
-          if (w.startsWith('корен')) return 'кор';
-          return w.slice(0, Math.min(4, Math.max(2, w.length - 2)));
-        });
-
+  for (const entry of ctx.compiledGlossary) {
+    if (entry.lintRegex.test(engText)) {
       const matched =
-        significantWords.length === 0 ||
-        significantWords.every((stem) => lowerRus.includes(stem));
+        entry.significantStems.length === 0 ||
+        entry.significantStems.every((stem) => lowerRus.includes(stem));
 
       if (matched) {
         glossaryMatchesCount++;
@@ -1282,15 +1657,12 @@ export function runQaLinter(
 
   // 17. DASH_AND_COMMA_INFLATION
   if (activeRules.has('DASH_AND_COMMA_INFLATION') && rusText.trim()) {
-    const alignment = alignChapterParagraphs(engText, rusText);
-    alignment.pairs.forEach((pair) => {
+    ctx.alignment.pairs.forEach((pair) => {
       const pRus = pair.rusParagraph.trim();
       const pEng = pair.engParagraph.trim();
       if (!pRus || pRus === '---' || (pRus.startsWith('[') && pRus.endsWith(']'))) return;
 
-      const copulaMatch = pRus.match(
-        /\s+(?:—|–|-)\s+(?:это|был|была|было|были|являлся|являлась|являлись|представлял)\b/i
-      );
+      const copulaMatch = pRus.match(ARTIFICIAL_COPULA_DASH_RE);
       if (copulaMatch) {
         issues.push({
           id: `lint-${pair.index + 1}-copula-dash`,
@@ -1360,11 +1732,7 @@ export function runQaLinter(
 
   // 18. SYNTAX_MONOTONY_AND_BURSTINESS
   if (activeRules.has('SYNTAX_MONOTONY_AND_BURSTINESS') && rusText.trim()) {
-    const rusParagraphs = rusText
-      .split(/\n+/)
-      .map((p) => p.trim())
-      .filter(Boolean);
-    rusParagraphs.forEach((p, pIdx) => {
+    ctx.rusParagraphs.forEach((p, pIdx) => {
       const sentences = p
         .split(/(?<=[.!?])\s+/)
         .map((s) => s.trim())
@@ -1447,7 +1815,7 @@ export function runQaLinter(
 
   // 19. REGISTER_PRONOUN_SHIFT
   if (activeRules.has('REGISTER_PRONOUN_SHIFT') && rusText.trim()) {
-    const rusLines = rusText.split(/\r?\n/);
+    const rusLines = ctx.rusLines;
     rusLines.forEach((rawLine, idx) => {
       const line = rawLine.trim();
       if (!line) return;
@@ -1558,8 +1926,7 @@ export function runQaLinter(
 
   // 20. NOMINALIZATION_AND_INANIMATE_SUBJECT (Nora Gal verbalization & animate subjects)
   if (activeRules.has('NOMINALIZATION_AND_INANIMATE_SUBJECT') && rusText.trim()) {
-    const rusLines = rusText.split(/\r?\n/);
-    rusLines.forEach((rawLine, idx) => {
+    ctx.rusLines.forEach((rawLine, idx) => {
       const line = rawLine.trim();
       if (!line) return;
 
@@ -1604,7 +1971,7 @@ export function runQaLinter(
   const penalty = errorCount * 15 + warningCount * 5;
   const score = Math.max(0, 100 - penalty);
 
-  return {
+  const report: LintReport = {
     passed: errorCount === 0 && warningCount === 0,
     errorCount,
     warningCount,
@@ -1613,6 +1980,122 @@ export function runQaLinter(
     checkedNumbersCount: engNumbers.length,
     glossaryMatchesCount,
   };
+
+  if (RUN_QA_LINTER_MEMO_CACHE.length >= MAX_LINT_MEMO) {
+    RUN_QA_LINTER_MEMO_CACHE.shift();
+  }
+  RUN_QA_LINTER_MEMO_CACHE.push({
+    engText,
+    rusText,
+    glossarySig: ctx.glossarySignature,
+    rulesKey,
+    metaKey,
+    edgesKey,
+    registersKey,
+    report: { ...report, issues: report.issues.slice() },
+  });
+
+  return report;
+}
+
+const VY_IRREGULAR_PREDICATE_MAP: Record<string, string> = {
+  должны: 'должен',
+  обязаны: 'обязан',
+  готовы: 'готов',
+  виноваты: 'виноват',
+  правы: 'прав',
+  уверены: 'уверен',
+  способны: 'способен',
+  слабы: 'слаб',
+  глупы: 'глуп',
+  живы: 'жив',
+  мертвы: 'мёртв',
+  свободны: 'свободен',
+  были: 'был',
+  хотите: 'хочешь',
+  можете: 'можешь',
+  сможете: 'сможешь',
+  сумеете: 'сумеешь',
+  смеете: 'смеешь',
+  посмеете: 'посмеешь',
+  знаете: 'знаешь',
+  узнаете: 'узнаешь',
+  будете: 'будешь',
+  бежите: 'бежишь',
+  едите: 'ешь',
+  дадите: 'дашь',
+  создадите: 'создашь',
+  видите: 'видишь',
+  увидите: 'увидишь',
+  слышите: 'слышишь',
+  услышите: 'услышишь',
+  смотрите: 'смотришь',
+  посмотрите: 'посмотришь',
+  держите: 'держишь',
+  молчите: 'молчишь',
+  спите: 'спишь',
+  стоите: 'стоишь',
+  сидите: 'сидишь',
+  лежите: 'лежишь',
+  кричите: 'кричишь',
+  дышите: 'дышишь',
+  терпите: 'терпишь',
+  любите: 'любишь',
+  боитесь: 'боишься',
+  побоитесь: 'побоишься',
+};
+
+function conjugate2PlTo2Sg(word: string): string {
+  const lower = word.toLowerCase();
+  const mapped = VY_IRREGULAR_PREDICATE_MAP[lower];
+  if (mapped) {
+    return word[0] === word[0].toUpperCase()
+      ? mapped.charAt(0).toUpperCase() + mapped.slice(1)
+      : mapped;
+  }
+  const suffixMatch = word.match(/^([а-яёА-ЯЁ]{2,}?)(ете|ёте|ите)(сь|ся)?$/i);
+  if (suffixMatch) {
+    const [, stem, ending, refl] = suffixMatch;
+    const endLower = ending.toLowerCase();
+    const sgEnding = endLower === 'ите' ? 'ишь' : endLower === 'ёте' ? 'ёшь' : 'ешь';
+    const sgRefl = refl ? (refl.toLowerCase() === 'ся' ? 'ся' : 'ся') : '';
+    return `${stem}${sgEnding}${sgRefl}`;
+  }
+  return word;
+}
+
+function shiftDialogueLineVyToTy(line: string): string {
+  let l = line;
+  const hadFormal = /(?<![а-яёА-ЯЁa-zA-Z0-9])(?:Вы|вы|Вас|вас|Вам|вам|Вами|вами|Ваш|ваш|Вашего|вашего|Вашему|вашему|Вашим|вашим|Вашем|вашем|Ваша|ваша|Ваше|ваше|Ваши|ваши)(?![а-яёА-ЯЁa-zA-Z0-9])/.test(l);
+  l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])[Вв]ы(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'ты');
+  l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])[Вв]ас(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'тебя');
+  l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])[Вв]ам(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'тебе');
+  l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])[Вв]ами(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'тобой');
+  l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])[Вв]ашего(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'твоего');
+  l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])[Вв]ашему(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'твоему');
+  l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])[Вв]ашим(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'твоим');
+  l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])[Вв]ашем(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'твоём');
+  l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])[Вв]аша(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'твоя');
+  l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])[Вв]аше(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'твоё');
+  l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])[Вв]аши(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'твои');
+  l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])[Вв]аш(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'твой');
+
+  if (hadFormal) {
+    l = l.replace(
+      /(?<![а-яёА-ЯЁ])(ты(?:\s+(?:(?:не|уже|даже|всё\s+ещё|все\s+еще|ведь|сами|правда|разве|сейчас|тут|же)\s+)){0,2})([а-яёА-ЯЁ]{3,})(?![а-яёА-ЯЁ])/g,
+      (_m, lead: string, verb: string) => `${lead}${conjugate2PlTo2Sg(verb)}`
+    );
+    l = l.replace(
+      /(?<![а-яёА-ЯЁ])(скажи|послушай|посмотри|уйди|уходи|возьми|прости|отдай|прекрати|погоди|стой|подумай|ответь|убирай|заткни|останови)(тесь|те)(?![а-яёА-ЯЁ])/gi,
+      (_m, stem: string, suffix: string) => {
+        if (suffix.toLowerCase() === 'тесь') {
+          return stem.endsWith('й') || stem.endsWith('Й') ? `${stem}ся` : `${stem}сь`;
+        }
+        return stem;
+      }
+    );
+  }
+  return l;
 }
 
 /**
@@ -1813,7 +2296,7 @@ export function autoRepairRussianText(
     },
     {
       ruleId: 'DASH_AND_COMMA_INFLATION',
-      pattern: /\s+(?:—|–)\s+(это|был|была|было|были|являлся|являлась|являлись|представлял)\b/gi,
+      pattern: ARTIFICIAL_COPULA_DASH_GLOBAL_RE,
       replace: ' $1',
       desc: 'Устранена искусственная тире-связка перед глаголом',
     },
@@ -1836,19 +2319,8 @@ export function autoRepairRussianText(
     const shiftLines = lines.map((line) => {
       const isDialogue = /^\s*—\s+/.test(line) || /^\s*["«]/.test(line);
       if (isDialogue && hostileRe.test(line)) {
-        let l = line;
-        const orig = l;
-        l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])Вы(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'ты');
-        l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])вы(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'ты');
-        l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])Вас(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'тебя');
-        l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])вас(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'тебя');
-        l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])Вам(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'тебе');
-        l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])вам(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'тебе');
-        l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])Вами(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'тобой');
-        l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])вами(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'тобой');
-        l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])Ваш(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'твой');
-        l = l.replace(/(?<![а-яёА-ЯЁa-zA-Z0-9])ваш(?![а-яёА-ЯЁa-zA-Z0-9])/g, 'твой');
-        if (l !== orig) {
+        const l = shiftDialogueLineVyToTy(line);
+        if (l !== line) {
           fixedShift = true;
           return l;
         }
@@ -1863,6 +2335,7 @@ export function autoRepairRussianText(
 
   if (activeRules.has('DASH_AND_COMMA_INFLATION')) {
     const lines = text.split('\n');
+    const copulaFollowRe = new RegExp(`^${COPULA_VERB_PATTERN}(?![а-яёА-ЯЁ])`, 'i');
     let relaxedDashes = false;
     const fixedLines = lines.map((line) => {
       const trimmed = line.trim();
@@ -1879,8 +2352,13 @@ export function autoRepairRussianText(
         relaxedDashes = true;
       }
 
-      // 2. Replace remaining medial spaced hyphens (" - ") and en-dashes (" – ") with comma
-      const medialHyphenFixed = updated.replace(/(\S)\s+(?:-|\u2013)\s+(\S)/g, '$1, $2');
+      // 2. Replace remaining medial spaced hyphens (" - ") and en-dashes (" – ") with space before copula or comma elsewhere
+      const medialHyphenFixed = updated.replace(/(\S)\s+(?:-|\u2013)\s+(\S[^\s]*)/g, (m, prev: string, nextWord: string) => {
+        if (copulaFollowRe.test(nextWord)) {
+          return `${prev} ${nextWord}`;
+        }
+        return `${prev}, ${nextWord}`;
+      });
       if (medialHyphenFixed !== updated) {
         updated = medialHyphenFixed;
         relaxedDashes = true;
@@ -1897,23 +2375,26 @@ export function autoRepairRussianText(
         }
       }
 
-      // 4. Relax excess medial em-dashes in narrative (preserving dialogue attribution/resumption dashes after [,!?….])
+      // 4. Relax excess medial em-dashes in narrative (preserving dialogue attribution/resumption dashes after [,!?….»])
       const bodyAfterLead = isDialogue
         ? updated.replace(/^\s*—\s+/, '')
         : isThought
           ? updated.replace(/^\s*«[^»]+»[,!?…]?\s*—\s+/, '')
           : updated;
       const nonAttributionBody = isDialogue
-        ? bodyAfterLead.replace(/[,!?….]\s*—\s+/g, ', ')
+        ? bodyAfterLead.replace(/[,!?….»]\s*—\s+/g, ', ')
         : bodyAfterLead;
       const medialDashes = nonAttributionBody.match(/\s+—\s+/g) || [];
       if (isThought && medialDashes.length >= 1) {
         relaxedDashes = true;
         let seenFirstAttribution = false;
-        updated = updated.replace(/(\s+)—(\s+)/g, (m, _b, a) => {
+        updated = updated.replace(/(\s+)—(\s+)/g, (m, _b, a, offset) => {
           if (!seenFirstAttribution) {
             seenFirstAttribution = true;
             return m;
+          }
+          if (copulaFollowRe.test(updated.slice(offset + m.length))) {
+            return a;
           }
           return `,${a}`;
         });
@@ -1925,17 +2406,23 @@ export function autoRepairRussianText(
             return m;
           }
           count++;
-          return count > 1 ? `,${a}` : m;
+          if (count > 1) {
+            return copulaFollowRe.test(updated.slice(offset + m.length)) ? a : `,${a}`;
+          }
+          return m;
         });
       } else if (isDialogue && medialDashes.length >= 2) {
         relaxedDashes = true;
         let nonAttrCount = 0;
-        updated = updated.replace(/(\S)(\s+)—(\s+)/g, (m, prevChar, _b, a) => {
-          if (/[,!?….]/.test(prevChar)) {
+        updated = updated.replace(/(\S)(\s+)—(\s+)/g, (m, prevChar, _b, a, offset) => {
+          if (/[,!?….»]/.test(prevChar)) {
             return m;
           }
           nonAttrCount++;
-          return nonAttrCount > 1 ? `${prevChar},${a}` : m;
+          if (nonAttrCount > 1) {
+            return copulaFollowRe.test(updated.slice(offset + m.length)) ? `${prevChar}${a}` : `${prevChar},${a}`;
+          }
+          return m;
         });
       }
       return updated;
@@ -2004,26 +2491,19 @@ export function autoRepairRussianText(
 
   // Character gender & indeclinable feminine name auto-repair
   if (activeRules.has('CHARACTER_GENDER_MISMATCH')) {
-    for (const indeclName of INDECLINABLE_FEM_NAMES) {
-      const reDecl = new RegExp(
-        `(?<![а-яё])${indeclName}(?:а|у|ом|е|ой|ы|ам|ами|ах)(?![а-яё])`,
-        'gi'
-      );
-      if (reDecl.test(text)) {
-        text = text.replace(reDecl, indeclName);
-        appliedFixes.push(`Восстановлена несклоняемая форма женского имени «${indeclName}»`);
-      }
-    }
-
     const femSet = new Set<string>(INDECLINABLE_FEM_NAMES);
     const MASC_A_YA_EXCEPTIONS = new Set(['илья', 'никита', 'лука', 'фома', 'савва', 'кузьма', 'данила']);
     if (options?.glossary?.characters) {
       Object.entries(options.glossary.characters).forEach(([eng, rus]) => {
         const cleanRus = rus.trim();
         const firstToken = cleanRus.split(/\s+/)[0] || '';
-        if (
-          options.glossaryMeta?.[eng]?.gender === 'F' ||
-          (!options.glossaryMeta?.[eng]?.gender &&
+        const explicitGender = options.glossaryMeta?.[eng]?.gender;
+        if (explicitGender === 'M' || explicitGender === 'N') {
+          femSet.delete(cleanRus);
+          if (firstToken) femSet.delete(firstToken);
+        } else if (
+          explicitGender === 'F' ||
+          (!explicitGender &&
             firstToken.length >= 3 &&
             /[ая]$/i.test(firstToken) &&
             !MASC_A_YA_EXCEPTIONS.has(firstToken.toLowerCase()))
@@ -2033,42 +2513,19 @@ export function autoRepairRussianText(
       });
     }
 
+    for (const indecl of INDECLINABLE_FEM_MATCHERS) {
+      if (!femSet.has(indecl.name)) continue;
+      if (indecl.testRe.test(text)) {
+        text = text.replace(indecl.replaceRe, indecl.name);
+        appliedFixes.push(`Восстановлена несклоняемая форма женского имени «${indecl.name}»`);
+      }
+    }
+
     for (const rus of femSet) {
-      const escapedName = rus.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const femPattern = new RegExp(
-        `(?<!${MASC_GENITIVE_GOVERNORS}\\s+)(?<![а-яё])(${escapedName}\\s+(?:\\S+\\s+)?)(${COMMON_PAST_VERBS})(?![а-яё])`,
-        'gi'
-      );
-      const revFemPattern = new RegExp(
-        `(?<![а-яё])(${COMMON_PAST_VERBS})(\\s+${escapedName})(?![а-яё])`,
-        'gi'
-      );
-      if (femPattern.test(text) || revFemPattern.test(text)) {
-        text = text
-          .replace(femPattern, (_, prefix, verb: string) => {
-            const femVerb = verb.endsWith('ся')
-              ? `${verb.slice(0, -2)}ась`
-              : `${verb}а`;
-            return `${prefix}${femVerb}`;
-          })
-          .replace(revFemPattern, (_, verb: string, suffix) => {
-            const femVerb = verb.endsWith('ся')
-              ? `${verb.slice(0, -2)}ась`
-              : `${verb}а`;
-            return `${femVerb}${suffix}`;
-          })
-          .replace(
-            new RegExp(
-              `(${escapedName}[^.\\n]*?\\s+и\\s+)(${COMMON_PAST_VERBS})(?![а-яё])`,
-              'gi'
-            ),
-            (_, prefix, verb2: string) => {
-              const femVerb2 = verb2.endsWith('ся')
-                ? `${verb2.slice(0, -2)}ась`
-                : `${verb2}а`;
-              return `${prefix}${femVerb2}`;
-            }
-          );
+      const matcher = getCompiledFemGenderMatcher(rus);
+      const agreed = applyFemaleGenderAgreement(text, matcher, true);
+      if (agreed.changed) {
+        text = agreed.text;
         appliedFixes.push(`Согласован женский род глаголов для персонажа «${rus}»`);
       }
     }
@@ -2134,22 +2591,15 @@ export function autoRepairRussianText(
   }
 
   // Zero-Leakage Latin & Unclosed Bracket Auto-Repair
+  const glossaryBundle = options?.glossary ? compileGlossaryBundle(options.glossary) : null;
   if (activeRules.has('LATIN_LEAKAGE_AND_BRACKETS')) {
     let latinFixed = false;
-    if (options?.glossary) {
-      const pairs: Array<[string, string]> = [];
-      (Object.keys(options.glossary) as GlossaryCategory[]).forEach((cat) => {
-        Object.entries(options.glossary?.[cat] || {}).forEach(([eng, rus]) => {
-          pairs.push([eng, rus]);
-        });
-      });
-      pairs.sort((a, b) => b[0].length - a[0].length);
-      for (const [eng, rus] of pairs) {
-        if (eng.length < 2) continue;
-        const escaped = eng.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const re = new RegExp(`\\b${escaped}s?\\b`, 'gi');
-        if (re.test(text)) {
-          text = text.replace(re, rus);
+    if (glossaryBundle) {
+      for (const entry of glossaryBundle.sortedByEngLengthDesc) {
+        entry.globalReplaceRegex.lastIndex = 0;
+        if (entry.globalReplaceRegex.test(text)) {
+          entry.globalReplaceRegex.lastIndex = 0;
+          text = text.replace(entry.globalReplaceRegex, entry.rus);
           latinFixed = true;
         }
       }
@@ -2215,23 +2665,50 @@ export function autoRepairRussianText(
       },
       {
         regex: /(?<![а-яё])посмотрел(?![а-яё])/gi,
-        replacements: ['окинул взглядом', 'воззрился', 'перевёл взор'],
+        replacements: ['взглянул', 'перевёл взгляд', 'воззрился'],
       },
       {
         regex: /(?<![а-яё])огромный(?![а-яё])/gi,
-        replacements: ['исполинский', 'колоссальный', 'массивный'],
+        replacements: ['исполинский', 'громадный', 'массивный'],
       },
     ];
+
+    const protectedTermRegex = glossaryBundle?.tautologyProtectedRegex || null;
+    const isProtectedOffset = (
+      spans: Array<[number, number]>,
+      start: number,
+      length: number
+    ): boolean => {
+      const end = start + length;
+      return spans.some(([s, e]) => start < e && end > s);
+    };
 
     let tautologyRepairedCount = 0;
     const paragraphs = text.split('\n');
     const deTautologized = paragraphs.map((p) => {
       let updatedP = p;
+      const protectedSpans: Array<[number, number]> = [];
+      if (protectedTermRegex) {
+        protectedTermRegex.lastIndex = 0;
+        let spanMatch: RegExpExecArray | null;
+        while ((spanMatch = protectedTermRegex.exec(updatedP)) !== null) {
+          protectedSpans.push([spanMatch.index, spanMatch.index + spanMatch[0].length]);
+        }
+      }
+
       for (const rule of synonymPool) {
-        const matches = updatedP.match(rule.regex);
-        if (matches && matches.length >= 3) {
+        const unprotectedStarts = new Set<number>();
+        rule.regex.lastIndex = 0;
+        let match: RegExpExecArray | null;
+        while ((match = rule.regex.exec(updatedP)) !== null) {
+          if (!isProtectedOffset(protectedSpans, match.index, match[0].length)) {
+            unprotectedStarts.add(match.index);
+          }
+        }
+        if (unprotectedStarts.size >= 3) {
           let occ = 0;
-          updatedP = updatedP.replace(rule.regex, (m) => {
+          updatedP = updatedP.replace(rule.regex, (m, offset: number) => {
+            if (!unprotectedStarts.has(offset)) return m;
             occ++;
             if (occ === 1) return m;
             tautologyRepairedCount++;
@@ -2239,6 +2716,15 @@ export function autoRepairRussianText(
             const isUpper = m[0] === m[0].toUpperCase();
             return isUpper ? syn.charAt(0).toUpperCase() + syn.slice(1) : syn;
           });
+          // Recompute protected spans only if length changed inside a paragraph containing protected terms
+          if (protectedSpans.length > 0 && protectedTermRegex) {
+            protectedSpans.length = 0;
+            protectedTermRegex.lastIndex = 0;
+            let spanMatch: RegExpExecArray | null;
+            while ((spanMatch = protectedTermRegex.exec(updatedP)) !== null) {
+              protectedSpans.push([spanMatch.index, spanMatch.index + spanMatch[0].length]);
+            }
+          }
         }
       }
       return updatedP;
@@ -2271,7 +2757,12 @@ export function surgicalRepairDriftedParagraphs(
   surgicallyFixedIndices: number[];
   details: string[];
 } {
-  const alignment = alignChapterParagraphs(engText, rusText);
+  const chapterCtx = createChapterAnalysisContext(engText, rusText, glossary, {
+    enabledRuleIds,
+    glossaryMeta,
+  });
+  const alignment = chapterCtx.alignment;
+  const scopedGlossary = chapterCtx.filteredGlossary;
   const surgicallyFixedIndices: number[] = [];
   const details: string[] = [];
 
@@ -2285,14 +2776,14 @@ export function surgicalRepairDriftedParagraphs(
       repairedParagraphs.push('---');
       if (workingRusP.trim()) {
         const { repairedText } = autoRepairRussianText(workingRusP, {
-          glossary,
+          glossary: scopedGlossary,
           glossaryMeta,
           enabledRuleIds,
         });
         repairedParagraphs.push(repairedText);
       }
-      surgicallyFixedIndices.push(pair.index + 1);
-      details.push(`Абзац #${pair.index + 1}: восстановлен системный разделитель ---`);
+      surgicallyFixedIndices.push(pair.index);
+      details.push(`Абзац #${pair.index}: восстановлен системный разделитель ---`);
       continue;
     }
 
@@ -2300,33 +2791,33 @@ export function surgicalRepairDriftedParagraphs(
       // Untranslated paragraph fallback: apply glossary + rank conversion
       let fallbackP = pair.engParagraph;
       const { repairedText } = autoRepairRussianText(fallbackP, {
-        glossary,
+        glossary: scopedGlossary,
         glossaryMeta,
         enabledRuleIds,
       });
       fallbackP = repairedText;
       repairedParagraphs.push(fallbackP);
-      surgicallyFixedIndices.push(pair.index + 1);
-      details.push(`Абзац #${pair.index + 1}: восстановлен пропущенный абзац`);
+      surgicallyFixedIndices.push(pair.index);
+      details.push(`Абзац #${pair.index}: восстановлен пропущенный абзац`);
       continue;
     }
 
     // Run targeted auto-repair on this paragraph if it has issues or missing numbers
-    const paraLint = runQaLinter(pair.engParagraph, workingRusP, glossary, {
+    const paraLint = runQaLinter(pair.engParagraph, workingRusP, scopedGlossary, {
       enabledRuleIds,
       glossaryMeta,
     });
     if (!paraLint.passed || pair.missingNumbers.length > 0) {
       const { repairedText, appliedFixes } = autoRepairRussianText(workingRusP, {
-        glossary,
+        glossary: scopedGlossary,
         glossaryMeta,
         enabledRuleIds,
       });
       if (repairedText !== workingRusP) {
         workingRusP = repairedText;
-        surgicallyFixedIndices.push(pair.index + 1);
+        surgicallyFixedIndices.push(pair.index);
         details.push(
-          `Абзац #${pair.index + 1}: ${appliedFixes.slice(0, 2).join('; ') || 'исправлен точечно'}`
+          `Абзац #${pair.index}: ${appliedFixes.slice(0, 2).join('; ') || 'исправлен точечно'}`
         );
       }
     }
@@ -2533,30 +3024,6 @@ export function detectTranslationDegenerationAndDuplicates(
     hasFatalDegeneration: hasFatal,
     repairedText: repaired.join('\n'),
   };
-}
-
-export interface ForwardFallingQuestion {
-  id: string;
-  questionRus: string;
-  relatedEntities: string[];
-  createdAtChapter: number;
-  resolvedAtChapter?: number;
-  status: 'open' | 'resolved' | 'abandoned';
-  resolutionNote?: string;
-}
-
-/**
- * Live Hero & World State Ledger (Auto-State Tracker across 50-500 chapters)
- * with Forward-Falling Questions Index (Q_n Chekhov's guns).
- */
-export interface HeroStateLedger {
-  protagonistName: string;
-  cultivationRealm: string;
-  resources: string[];
-  artifactsAndFlames: string[];
-  activeLocation: string;
-  lastUpdatedChapter: number;
-  forwardQuestions?: ForwardFallingQuestion[];
 }
 
 export function updateHeroStateLedgerFromChapter(
@@ -3028,10 +3495,6 @@ export function sampleChaptersStratifiedMonteCarlo<
   });
 }
 
-export {
-  batchLookaheadScoutChapters,
-} from './canon-glossary-vault.ts';
-
 /**
  * Parses bulk multi-chapter text or multiple file contents into discrete chapters
  */
@@ -3463,7 +3926,7 @@ export function runAdditionBySubtractionScout(
     const dictHit = canonicalDictionaryHints[phrase];
     let rusSuggested = dictHit?.rus || phrase;
     let category: GlossaryCategory = dictHit?.cat || 'system_and_terms';
-    let gender: GrammaticalGender = dictHit?.gender || 'M';
+    let gender: GrammaticalGender = dictHit?.gender || 'UNKNOWN';
     const confidence = dictHit?.conf || 0.93;
 
     if (!dictHit) {
@@ -3586,25 +4049,9 @@ export function filterScoutedTermsWithAgentS<
   return out;
 }
 
-// Module 2–5 extracted to ./delta-diting.ts and ./epub-archive.ts
-export * from './delta-diting.ts';
-export * from './epub-archive.ts';
-
 // ============================================================================
 // MODULE 6: GOOGLE COLAB L4 (24GB VRAM) & MULTI-MODEL PROVIDER ADAPTER
 // ============================================================================
-
-export type LlmProviderType = 'colab_ollama' | 'gemini_api' | 'antigravity_cli';
-
-export interface LlmProviderConfig {
-  provider: LlmProviderType;
-  colabEndpointUrl?: string;
-  modelId: string;
-  scoutModelId?: string;
-  criticModelId?: string;
-  temperature?: number;
-  numCtx?: number;
-}
 
 export interface AgyCliModelSpec {
   id: string;
@@ -3670,6 +4117,75 @@ export const AGY_CLI_MODEL_CATALOG: AgyCliModelSpec[] = [
     roleBadge: 'Тяжёлый арбитр художественного слога',
     descriptionRus:
       'Флагманская модель в подписке agy CLI для финальной литературной вычитки.',
+  },
+];
+
+export interface GeminiCloudModelSpec {
+  id: string;
+  title: string;
+  role: 'primary' | 'critic' | 'scout';
+  quotaPerProject: string;
+  contextWindow: string;
+  supportsXHighThinking: boolean;
+  roleBadge: string;
+  descriptionRus: string;
+}
+
+export const GEMINI_CLOUD_MODEL_CATALOG: GeminiCloudModelSpec[] = [
+  {
+    id: 'gemini-4-hydrogen',
+    title: 'Gemini 4 Hydrogen',
+    role: 'primary',
+    quotaPerProject: '5 RPM · 250K TPM · 20 RPD / проект',
+    contextWindow: '1M',
+    supportsXHighThinking: true,
+    roleBadge: 'Флагман художественного перевода (Pass 1)',
+    descriptionRus:
+      'Топовая облачная модель с уровнями мышления LOW/MEDIUM/HIGH/XHIGH и переливом на Flash при исчерпании дневного лимита.',
+  },
+  {
+    id: 'gemini-3.8-flash',
+    title: 'Gemini 3.8 Flash',
+    role: 'critic',
+    quotaPerProject: 'Free Tier · высокий RPD',
+    contextWindow: '1M',
+    supportsXHighThinking: false,
+    roleBadge: 'Хирург Pass 2, Стилист Pass 3 и резерв',
+    descriptionRus:
+      'Быстрая облачная модель для хирургической правки дефектов, литературной шлифовки и автоматического подхвата при исчерпании квоты Hydrogen.',
+  },
+  {
+    id: 'gemma-4-31b-it',
+    title: 'Gemma 4 31B IT (Cloud)',
+    role: 'primary',
+    quotaPerProject: 'Отдельная квота Gemma API',
+    contextWindow: '256K',
+    supportsXHighThinking: false,
+    roleBadge: 'Облачный литературный резерв',
+    descriptionRus:
+      'Плотная 31B модель на серверах Google AI Studio с живым русским диалоговым слогом и отдельным дневным бюджетом.',
+  },
+  {
+    id: 'gemma-4-26b-a4b-it',
+    title: 'Gemma 4 26B A4B IT (Cloud)',
+    role: 'primary',
+    quotaPerProject: 'Отдельная квота Gemma API',
+    contextWindow: '256K',
+    supportsXHighThinking: false,
+    roleBadge: 'Скоростной облачный MoE',
+    descriptionRus:
+      'Быстрая MoE-модель (~4B активных параметров) для массового прогона глав в облаке при заполнении квот линейки Gemini.',
+  },
+  {
+    id: 'gemini-3.1-flash-lite',
+    title: 'Gemini 3.1 Flash Lite',
+    role: 'scout',
+    quotaPerProject: 'Высокая облачная квота',
+    contextWindow: '1M',
+    supportsXHighThinking: false,
+    roleBadge: 'Пре-скаут терминов и родов (Pass 0)',
+    descriptionRus:
+      'Сверхбыстрая облачная модель для генерации предложенных русских переводов новых имён и техник.',
   },
 ];
 
@@ -3772,11 +4288,13 @@ export const COLAB_L4_MODEL_CATALOG: ColabL4ModelSpec[] = [
 ];
 
 export const DEFAULT_LLM_PROVIDER_CONFIG: LlmProviderConfig = {
-  provider: 'colab_ollama',
+  provider: 'gemini_api',
   colabEndpointUrl: '',
-  modelId: 'gemma4:26b-a4b',
-  scoutModelId: 'gemini-3.8-flash-low',
-  criticModelId: 'gemini-4-argon-medium',
+  modelId: 'gemini-4-hydrogen',
+  scoutModelId: 'gemini-3.1-flash-lite',
+  criticModelId: 'gemini-3.8-flash',
+  stylistModelId: 'gemini-3.8-flash',
+  thinkingLevel: 'auto_xhigh',
   temperature: 0.3,
   numCtx: 16384,
 };
@@ -3788,15 +4306,110 @@ export const DEFAULT_LLM_PROVIDER_CONFIG: LlmProviderConfig = {
 export function normalizeColabEndpointUrl(rawUrl: string): string {
   const trimmed = (rawUrl || '').trim();
   if (!trimmed) return '';
-  if (/^(?:file|ftp|gopher|ws|wss|javascript|data):/i.test(trimmed)) return '';
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed) && !/^https?:/i.test(trimmed)) return '';
   const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
   return withProto
     .replace(/\/+(?:v1\/chat\/completions|v1\/models|v1|api\/chat|api\/generate|api\/tags)\/?$/i, '')
     .replace(/\/+$/, '');
 }
 
+function parseIpv4Octets(host: string): [number, number, number, number] | null {
+  const parts = host.split('.');
+  if (parts.length !== 4) return null;
+  const octets: number[] = [];
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part)) return null;
+    const n = Number(part);
+    if (!Number.isInteger(n) || n < 0 || n > 255) return null;
+    octets.push(n);
+  }
+  return [octets[0], octets[1], octets[2], octets[3]];
+}
+
+function isBlockedIpv4Octets(octets: [number, number, number, number]): boolean {
+  const [a, b] = octets;
+  if (a === 0) return true; // 0.0.0.0/8
+  if (a === 10) return true; // RFC1918 10.0.0.0/8
+  if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT 100.64.0.0/10
+  if (a === 127) return true; // loopback 127.0.0.0/8
+  if (a === 169 && b === 254) return true; // link-local / cloud metadata 169.254.0.0/16
+  if (a === 172 && b >= 16 && b <= 31) return true; // RFC1918 172.16.0.0/12
+  if (a === 192 && (b === 168 || b === 0)) return true; // 192.0.0.0/24 & RFC1918 192.168.0.0/16
+  if (a === 198 && (b === 18 || b === 19)) return true; // 198.18.0.0/15 benchmarking
+  if (a >= 224) return true; // multicast & reserved
+  return false;
+}
+
+function parseIpv6Hextets(rawAddr: string): number[] | null {
+  const addr = rawAddr.split('%')[0].toLowerCase();
+  if (!addr.includes(':')) return null;
+  const halves = addr.split('::');
+  if (halves.length > 2) return null;
+
+  const parseTokens = (segment: string): number[] | null => {
+    if (!segment) return [];
+    const tokens = segment.split(':');
+    const out: number[] = [];
+    for (let i = 0; i < tokens.length; i++) {
+      const tok = tokens[i];
+      if (!tok) return null;
+      if (tok.includes('.')) {
+        if (i !== tokens.length - 1) return null;
+        const ipv4 = parseIpv4Octets(tok);
+        if (!ipv4) return null;
+        out.push((ipv4[0] << 8) | ipv4[1], (ipv4[2] << 8) | ipv4[3]);
+      } else {
+        if (!/^[0-9a-f]{1,4}$/.test(tok)) return null;
+        out.push(parseInt(tok, 16));
+      }
+    }
+    return out;
+  };
+
+  if (halves.length === 1) {
+    const full = parseTokens(halves[0]);
+    return full && full.length === 8 ? full : null;
+  }
+  const left = parseTokens(halves[0]);
+  const right = parseTokens(halves[1]);
+  if (!left || !right) return null;
+  const gap = 8 - (left.length + right.length);
+  if (gap < 1) return null;
+  return [...left, ...new Array(gap).fill(0), ...right];
+}
+
+function isBlockedIpv6Host(host: string): boolean {
+  const hextets = parseIpv6Hextets(host);
+  if (!hextets) return true;
+  const headZero = hextets.slice(0, 7).every((h) => h === 0);
+  if (headZero && (hextets[7] === 0 || hextets[7] === 1)) {
+    return true; // :: and ::1
+  }
+  // IPv4-mapped ::ffff:0:0/96 (incl. [::ffff:a9fe:a9fe], [::ffff:169.254.169.254]) & IPv4-compatible ::/96
+  if (hextets.slice(0, 5).every((h) => h === 0) && (hextets[5] === 0xffff || hextets[5] === 0)) {
+    return true;
+  }
+  // NAT64 64:ff9b::/96
+  if (
+    hextets[0] === 0x0064 &&
+    hextets[1] === 0xff9b &&
+    hextets[2] === 0 &&
+    hextets[3] === 0 &&
+    hextets[4] === 0 &&
+    hextets[5] === 0
+  ) {
+    return true;
+  }
+  const first = hextets[0];
+  if ((first & 0xfe00) === 0xfc00) return true; // fc00::/7
+  if ((first & 0xffc0) === 0xfe80) return true; // fe80::/10
+  if ((first & 0xff00) === 0xff00) return true; // ff00::/8
+  return false;
+}
+
 /**
- * Validates a Colab / Ollama endpoint URL against SSRF to cloud metadata or non-HTTP schemes.
+ * Validates a Colab / Ollama endpoint URL against SSRF to cloud metadata, loopback/CGNAT/RFC1918/IPv6 internal ranges,
+ * credentialed URLs, or unsafe plain HTTP hosts (allowing only local Ollama port 11434 or public https://).
  */
 export function validateColabEndpointUrl(rawUrl: string): {
   ok: boolean;
@@ -3812,25 +4425,77 @@ export function validateColabEndpointUrl(rawUrl: string): {
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       return { ok: false, normalizedUrl: '', error: 'Only http:// and https:// are allowed' };
     }
-    const host = parsed.hostname.toLowerCase();
-    // Block cloud metadata services, unspecified addresses & RFC1918 private LAN IPs (SSRF protection)
-    const isRfc1918 =
-      /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host) ||
-      /^192\.168\.\d{1,3}\.\d{1,3}$/.test(host) ||
-      /^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(host);
+    if (parsed.username || parsed.password) {
+      return {
+        ok: false,
+        normalizedUrl: '',
+        error: 'Credentials (user:pass) are forbidden in endpoint URL (SSRF guard)',
+      };
+    }
+
+    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');
+    if (!host) {
+      return { ok: false, normalizedUrl: '', error: 'Missing endpoint hostname' };
+    }
+
+    if (parsed.protocol === 'http:') {
+      const isAllowedOllamaLocal =
+        (host === 'localhost' || host === '127.0.0.1') &&
+        parsed.port === '11434' &&
+        !parsed.search &&
+        !parsed.hash;
+      if (!isAllowedOllamaLocal) {
+        return {
+          ok: false,
+          normalizedUrl: '',
+          error:
+            'Blocked non-HTTPS endpoint: http:// is restricted strictly to http://localhost:11434 or http://127.0.0.1:11434 (SSRF guard)',
+        };
+      }
+      return { ok: true, normalizedUrl: normalized };
+    }
+
+    // Strict SSRF checks for https:// endpoints
     if (
-      host === '169.254.169.254' ||
+      host === 'localhost' ||
       host === 'metadata.google.internal' ||
-      host === '0.0.0.0' ||
-      host.startsWith('169.254.') ||
-      isRfc1918
+      host.endsWith('.localhost') ||
+      host.endsWith('.internal') ||
+      host.endsWith('.local') ||
+      host.endsWith('.localdomain')
     ) {
       return {
         ok: false,
         normalizedUrl: '',
-        error: 'Blocked internal metadata or private LAN host (SSRF guard)',
+        error: 'Blocked internal/local hostname (SSRF guard)',
       };
     }
+
+    if (host.includes(':') && isBlockedIpv6Host(host)) {
+      return {
+        ok: false,
+        normalizedUrl: '',
+        error: 'Blocked internal, loopback, link-local, mapped, or multicast IPv6 address (SSRF guard)',
+      };
+    }
+
+    if (/^(?:\d+|0x[0-9a-f]+)$/i.test(host)) {
+      return {
+        ok: false,
+        normalizedUrl: '',
+        error: 'Blocked obfuscated integer/hex IP hostname (SSRF guard)',
+      };
+    }
+
+    const ipv4 = parseIpv4Octets(host);
+    if (ipv4 && isBlockedIpv4Octets(ipv4)) {
+      return {
+        ok: false,
+        normalizedUrl: '',
+        error: 'Blocked private, loopback, CGNAT, or link-local IPv4 host (SSRF guard)',
+      };
+    }
+
     return { ok: true, normalizedUrl: normalized };
   } catch {
     return { ok: false, normalizedUrl: '', error: 'Invalid URL format' };
@@ -4638,44 +5303,3 @@ export function applySurgicalPatches(
     skippedLog,
   };
 }
-
-// Japanese Ruby/Gikun, Korean Normalizer & Chunker extracted to ./ruby-korean-parser.ts
-export * from './ruby-korean-parser.ts';
-
-// Stage 1: Deep Chapter Postprocessing & Verification Pipeline
-export * from './chapter-verifier.ts';
-
-// Stage 2: Universal LLM Inference Port & Adapters
-export * from './llm-inference-port.ts';
-
-// Stage 3: Morphological Canon Glossary Vault
-export {
-  buildInflectedRussianForms,
-  splitCompoundRussianTerm,
-  buildSocialRegisterPromptBlock,
-  deriveDefaultSpeechVector,
-  buildCharacterVoicePromptBlock,
-  lintGlossaryVault,
-  computeChapterGlossaryCoverage,
-  approveScoutedTermInVault,
-  autoApprovePendingTermsInVault,
-  upsertCanonTermInVault,
-  removeCanonTermFromVault,
-  applyCanonRippleToNovel,
-  type InflectedFormItem,
-  type SplitCompoundResult,
-  type SocialRegisterEdge,
-  type CharacterVoiceCardV3,
-  type GlossaryLintIssue,
-  type CanonVaultState,
-  type ChapterGlossaryCoverageResult,
-} from './canon-glossary-vault.ts';
-
-// Stage 4: 5-Phase Batch Pipeline Orchestration Engine
-export * from './pipeline-run-engine.ts';
-
-// Stage 5: Project Repository, Hydration Guard & Bundle Serialization
-export * from './storage-idb.ts';
-
-// Stage 2 & Wave 3: LLM Inference Port & Pacing Classifier
-export * from './llm-inference-port.ts';

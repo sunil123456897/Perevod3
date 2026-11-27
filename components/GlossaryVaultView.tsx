@@ -11,15 +11,16 @@ import {
   Trash2,
   CheckCheck,
   Replace,
+  AlertTriangle,
 } from 'lucide-react';
-import {
-  previewAndApplyCanonRipple,
-  type CanonicalGlossary,
-  type GlossaryCategory,
-  type GlossaryTermMeta,
-  type GrammaticalGender,
-  type ScoutedTerm,
-} from '@/lib/qa-linter';
+import { previewAndApplyCanonRipple } from '@/lib/canon-glossary-vault';
+import type {
+  CanonicalGlossary,
+  GlossaryCategory,
+  GlossaryTermMeta,
+  GrammaticalGender,
+  ScoutedTerm,
+} from '@/lib/pipeline-types';
 import type { ChapterRecord } from '@/lib/seed-data';
 
 interface GlossaryVaultViewProps {
@@ -68,6 +69,7 @@ const CATEGORY_LABELS: Record<GlossaryCategory, string> = {
 };
 
 const GENDER_OPTIONS: Array<{ value: GrammaticalGender; label: string }> = [
+  { value: 'UNKNOWN', label: 'Не указан' },
   { value: 'M', label: 'М (мужской)' },
   { value: 'F', label: 'Ж (женский)' },
   { value: 'N', label: 'Ср (средний)' },
@@ -91,12 +93,14 @@ export default function GlossaryVaultView({
 }: GlossaryVaultViewProps) {
   const [subView, setSubView] = useState<'canon' | 'scouted' | 'ripple'>('canon');
   const [activeCategory, setActiveCategory] = useState<GlossaryCategory | 'all'>('all');
+  const [onlyUnknownGender, setOnlyUnknownGender] = useState(false);
+  const [onlyUnknownScoutedGender, setOnlyUnknownScoutedGender] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [newEng, setNewEng] = useState('');
   const [newRus, setNewRus] = useState('');
   const [newCategory, setNewCategory] = useState<GlossaryCategory>('characters');
-  const [newGender, setNewGender] = useState<GrammaticalGender>('M');
+  const [newGender, setNewGender] = useState<GrammaticalGender>('UNKNOWN');
   const [newDeclensionNote, setNewDeclensionNote] = useState('');
   const [newVoiceNote, setNewVoiceNote] = useState('');
   const [selectedChapterForScout, setSelectedChapterForScout] = useState(
@@ -121,6 +125,33 @@ export default function GlossaryVaultView({
     [pendingScouted]
   );
 
+  const unknownCharactersCount = useMemo(() => {
+    const charactersBucket = glossary.characters || {};
+    return Object.keys(charactersBucket).filter((eng) => {
+      const g = glossaryMeta?.[eng]?.gender as GrammaticalGender | undefined;
+      return !g || g === 'UNKNOWN';
+    }).length;
+  }, [glossary.characters, glossaryMeta]);
+
+  const unknownScoutedCharactersCount = useMemo(
+    () =>
+      pendingScouted.filter((t) => {
+        if (t.category !== 'characters') return false;
+        const g = (editedGenders[t.id] ?? t.gender ?? 'UNKNOWN') as GrammaticalGender;
+        return g === 'UNKNOWN';
+      }).length,
+    [pendingScouted, editedGenders]
+  );
+
+  const visiblePendingScouted = useMemo(() => {
+    if (!onlyUnknownScoutedGender) return pendingScouted;
+    return pendingScouted.filter((t) => {
+      if (t.category !== 'characters') return false;
+      const g = (editedGenders[t.id] ?? t.gender ?? 'UNKNOWN') as GrammaticalGender;
+      return g === 'UNKNOWN';
+    });
+  }, [pendingScouted, onlyUnknownScoutedGender, editedGenders]);
+
   const flattenedCanon = useMemo(() => {
     const entries: Array<{
       category: GlossaryCategory;
@@ -138,7 +169,7 @@ export default function GlossaryVaultView({
           category: cat,
           eng,
           rus,
-          gender: meta?.gender,
+          gender: meta?.gender as GrammaticalGender | undefined,
           declensionNote: meta?.declensionNote,
           voiceNote: meta?.voiceNote,
         });
@@ -146,7 +177,10 @@ export default function GlossaryVaultView({
     });
 
     return entries.filter((item) => {
-      if (activeCategory !== 'all' && item.category !== activeCategory) {
+      if (onlyUnknownGender) {
+        if (item.category !== 'characters') return false;
+        if (item.gender && item.gender !== 'UNKNOWN') return false;
+      } else if (activeCategory !== 'all' && item.category !== activeCategory) {
         return false;
       }
       if (!searchQuery.trim()) return true;
@@ -158,7 +192,7 @@ export default function GlossaryVaultView({
         (item.voiceNote || '').toLowerCase().includes(q)
       );
     });
-  }, [glossary, glossaryMeta, activeCategory, searchQuery]);
+  }, [glossary, glossaryMeta, activeCategory, onlyUnknownGender, searchQuery]);
 
   // Live preview of Canon Ripple across all translated chapters
   const ripplePreview = useMemo(() => {
@@ -178,6 +212,7 @@ export default function GlossaryVaultView({
     );
     setNewEng('');
     setNewRus('');
+    setNewGender('UNKNOWN');
     setNewDeclensionNote('');
     setNewVoiceNote('');
     setShowAddForm(false);
@@ -349,9 +384,13 @@ export default function GlossaryVaultView({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-1.5">
               <button
-                onClick={() => setActiveCategory('all')}
+                type="button"
+                onClick={() => {
+                  setOnlyUnknownGender(false);
+                  setActiveCategory('all');
+                }}
                 className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition ${
-                  activeCategory === 'all'
+                  !onlyUnknownGender && activeCategory === 'all'
                     ? 'bg-slate-800 text-white'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
@@ -361,9 +400,13 @@ export default function GlossaryVaultView({
               {(Object.keys(CATEGORY_LABELS) as GlossaryCategory[]).map((cat) => (
                 <button
                   key={cat}
-                  onClick={() => setActiveCategory(cat)}
+                  type="button"
+                  onClick={() => {
+                    setOnlyUnknownGender(false);
+                    setActiveCategory(cat);
+                  }}
                   className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition ${
-                    activeCategory === cat
+                    !onlyUnknownGender && activeCategory === cat
                       ? 'bg-slate-800 text-amber-300'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
@@ -371,6 +414,19 @@ export default function GlossaryVaultView({
                   {CATEGORY_LABELS[cat]}
                 </button>
               ))}
+              {unknownCharactersCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setOnlyUnknownGender((v) => !v)}
+                  className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition tabular-nums ${
+                    onlyUnknownGender
+                      ? 'border-amber-500/60 bg-amber-500/20 text-amber-200'
+                      : 'border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/15'
+                  }`}
+                >
+                  Персонажи без пола ({unknownCharactersCount})
+                </button>
+              )}
             </div>
 
             <div className="relative w-full sm:w-72">
@@ -397,40 +453,65 @@ export default function GlossaryVaultView({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-xs">
-                {flattenedCanon.map((item) => (
-                  <tr
-                    key={`${item.category}-${item.eng}`}
-                    className="transition hover:bg-slate-900/60"
-                  >
-                    <td className="py-2.5 pl-4 pr-3">
-                      <div className="font-mono font-medium text-slate-200">{item.eng}</div>
-                      <div className="text-[11px] text-slate-500">
-                        {CATEGORY_LABELS[item.category]}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5 font-medium text-amber-300">{item.rus}</td>
-                    <td className="px-3 py-2.5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <select
-                          value={item.gender || ''}
-                          onChange={(e) => {
-                            const val = e.target.value as GrammaticalGender | '';
-                            onUpdateTermMeta(
-                              item.eng,
-                              val ? (val as GrammaticalGender) : undefined,
-                              item.declensionNote,
-                              item.voiceNote
-                            );
-                          }}
-                          className="rounded border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-300 focus:border-amber-500/60 focus:outline-none"
-                        >
-                          <option value="">Род не задан</option>
-                          {GENDER_OPTIONS.map((g) => (
-                            <option key={g.value} value={g.value}>
-                              {g.label}
-                            </option>
-                          ))}
-                        </select>
+                {flattenedCanon.map((item) => {
+                  const isUnclassifiedCharacter =
+                    item.category === 'characters' &&
+                    (!item.gender || item.gender === 'UNKNOWN');
+
+                  return (
+                    <tr
+                      key={`${item.category}-${item.eng}`}
+                      className={`transition ${
+                        isUnclassifiedCharacter
+                          ? 'bg-amber-500/[0.06] hover:bg-amber-500/[0.11]'
+                          : 'hover:bg-slate-900/60'
+                      }`}
+                    >
+                      <td className="py-2.5 pl-4 pr-3">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-mono font-medium text-slate-200">{item.eng}</span>
+                          {isUnclassifiedCharacter && (
+                            <span className="rounded border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+                              Пол не указан
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          {CATEGORY_LABELS[item.category]}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 font-medium text-amber-300">{item.rus}</td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <select
+                            value={
+                              item.gender ||
+                              (item.category === 'characters' ? 'UNKNOWN' : '')
+                            }
+                            onChange={(e) => {
+                              const val = e.target.value as GrammaticalGender | '';
+                              onUpdateTermMeta(
+                                item.eng,
+                                val ? (val as GrammaticalGender) : undefined,
+                                item.declensionNote,
+                                item.voiceNote
+                              );
+                            }}
+                            className={`rounded border px-2 py-1 text-[11px] focus:outline-none ${
+                              isUnclassifiedCharacter
+                                ? 'border-amber-500/50 bg-amber-950/30 text-amber-200 focus:border-amber-400'
+                                : 'border-slate-800 bg-slate-950 text-slate-300 focus:border-amber-500/60'
+                            }`}
+                          >
+                            {item.category !== 'characters' && (
+                              <option value="">Не применимо</option>
+                            )}
+                            {GENDER_OPTIONS.map((g) => (
+                              <option key={g.value} value={g.value}>
+                                {g.label}
+                              </option>
+                            ))}
+                          </select>
                         {item.declensionNote && (
                           <span className="text-[11px] text-slate-500">
                             {item.declensionNote}
@@ -473,6 +554,7 @@ export default function GlossaryVaultView({
                           <Replace className="h-3.5 w-3.5" />
                         </button>
                         <button
+                          type="button"
                           onClick={() => onRemoveCanonTerm(item.category, item.eng)}
                           className="rounded p-1 text-slate-500 transition hover:bg-rose-500/15 hover:text-rose-300"
                           title="Удалить из канона"
@@ -482,7 +564,8 @@ export default function GlossaryVaultView({
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -502,8 +585,22 @@ export default function GlossaryVaultView({
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {unknownScoutedCharactersCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setOnlyUnknownScoutedGender((v) => !v)}
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition tabular-nums ${
+                    onlyUnknownScoutedGender
+                      ? 'border-amber-500/60 bg-amber-500/20 text-amber-200'
+                      : 'border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/15'
+                  }`}
+                >
+                  Персонажи без пола ({unknownScoutedCharactersCount})
+                </button>
+              )}
               {highConfidencePendingCount > 0 && (
                 <button
+                  type="button"
                   onClick={() => onAutoApproveHighConfidence(0.92)}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3.5 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-emerald-400"
                 >
@@ -523,6 +620,7 @@ export default function GlossaryVaultView({
                 ))}
               </select>
               <button
+                type="button"
                 onClick={() => onScoutChapterTerms(selectedChapterForScout)}
                 disabled={isScouting}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 px-3.5 py-1.5 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/25 disabled:opacity-50"
@@ -533,34 +631,49 @@ export default function GlossaryVaultView({
             </div>
           </div>
 
-          {pendingScouted.length === 0 ? (
+          {visiblePendingScouted.length === 0 ? (
             <div className="rounded-xl border border-slate-800/80 bg-slate-900/20 p-8 text-center text-xs text-slate-400">
-              Все найденные термины рассмотрены и добавлены в канон.
+              {onlyUnknownScoutedGender
+                ? 'Все кандидаты-персонажи уже классифицированы по роду.'
+                : 'Все найденные термины рассмотрены и добавлены в канон.'}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {pendingScouted.map((term) => {
+              {visiblePendingScouted.map((term) => {
                 const currentRus =
                   editedSuggestions[term.id] !== undefined
                     ? editedSuggestions[term.id]
                     : term.rus_suggested;
-                const currentGender =
+                const currentGender: GrammaticalGender =
                   editedGenders[term.id] !== undefined
                     ? editedGenders[term.id]
-                    : term.gender || 'M';
+                    : ((term.gender as GrammaticalGender | undefined) || 'UNKNOWN');
+                const isUnclassifiedCharacter =
+                  term.category === 'characters' && currentGender === 'UNKNOWN';
 
                 return (
                   <div
                     key={term.id}
-                    className="flex flex-col justify-between rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-3"
+                    className={`flex flex-col justify-between rounded-xl border p-4 space-y-3 ${
+                      isUnclassifiedCharacter
+                        ? 'border-amber-500/40 bg-amber-500/[0.05]'
+                        : 'border-slate-800 bg-slate-900/40'
+                    }`}
                   >
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-sm font-semibold text-white">
-                          {term.eng}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-mono text-sm font-semibold text-white">
+                            {term.eng}
+                          </span>
+                          {isUnclassifiedCharacter && (
+                            <span className="rounded border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+                              Пол не указан
+                            </span>
+                          )}
+                        </div>
                         <span
-                          className={`font-mono text-[11px] ${
+                          className={`font-mono text-[11px] tabular-nums ${
                             term.confidence >= 0.92
                               ? 'text-emerald-400 font-semibold'
                               : 'text-slate-400'
@@ -596,16 +709,21 @@ export default function GlossaryVaultView({
                               [term.id]: e.target.value as GrammaticalGender,
                             }))
                           }
-                          className="rounded-lg border border-slate-800 bg-slate-950 px-2 py-1.5 text-xs text-slate-300"
+                          className={`rounded-lg border px-2 py-1.5 text-xs focus:outline-none ${
+                            isUnclassifiedCharacter
+                              ? 'border-amber-500/50 bg-amber-950/30 text-amber-200'
+                              : 'border-slate-800 bg-slate-950 text-slate-300'
+                          }`}
                         >
                           {GENDER_OPTIONS.map((g) => (
                             <option key={g.value} value={g.value}>
-                              {g.value}
+                              {g.label}
                             </option>
                           ))}
                         </select>
                       )}
                       <button
+                        type="button"
                         onClick={() =>
                           onApproveScoutedTerm(
                             term.id,
@@ -619,6 +737,7 @@ export default function GlossaryVaultView({
                         <Check className="h-3.5 w-3.5" />В канон
                       </button>
                       <button
+                        type="button"
                         onClick={() => onRejectScoutedTerm(term.id)}
                         className="rounded-lg border border-slate-800 bg-slate-950 p-1.5 text-slate-400 transition hover:text-rose-300"
                         title="Отклонить"

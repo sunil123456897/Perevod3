@@ -1,562 +1,63 @@
 import {
   filterGlossaryForChapter,
   runAdditionBySubtractionScout,
-  type CanonicalGlossary,
-  type GlossaryCategory,
-  type GlossaryTermMeta,
-  type GrammaticalGender,
-  type ScoutedTerm,
-  type CharacterSpeechVector,
 } from './qa-linter.ts';
+import type {
+  CanonicalGlossary,
+  CharacterSpeechVector,
+  GlossaryCategory,
+  GlossaryTermMeta,
+  GrammaticalGender,
+  ScoutedTerm,
+  SocialRegisterEdge,
+} from './pipeline-types.ts';
+import {
+  buildInflectedRussianForms,
+  splitCompoundRussianTerm,
+  type InflectedFormItem,
+  type SplitCompoundResult,
+} from './russian-morphology.ts';
 
-export interface InflectedFormItem {
-  caseLabel: string;
-  form: string;
-}
-
-export interface SplitCompoundResult {
-  hasQuotes: boolean;
-  quoteOpen: string;
-  quoteClose: string;
-  headGroup: string;
-  headAdjectives: string[];
-  headNoun: string;
-  tail: string;
-  frozenTail: string;
-}
-
-/**
- * Splits complex multi-word Russian terms (e.g. «Пилюля Девяти Превращений Лазурного Дракона»,
- * «Великий Канон Багрового Пламени») into a declinable head group (adjectives + head noun)
- * and a frozen complement tail.
- */
-export function splitCompoundRussianTerm(term: string): SplitCompoundResult {
-  let clean = (term || '').trim();
-  let hasQuotes = false;
-  let quoteOpen = '';
-  let quoteClose = '';
-
-  if (clean.startsWith('«') && clean.endsWith('»')) {
-    hasQuotes = true;
-    quoteOpen = '«';
-    quoteClose = '»';
-    clean = clean.slice(1, -1).trim();
-  } else if (clean.startsWith('"') && clean.endsWith('"')) {
-    hasQuotes = true;
-    quoteOpen = '"';
-    quoteClose = '"';
-    clean = clean.slice(1, -1).trim();
-  }
-
-  const words = clean.split(/\s+/).filter(Boolean);
-  if (words.length <= 1) {
-    return {
-      hasQuotes,
-      quoteOpen,
-      quoteClose,
-      headGroup: clean,
-      headAdjectives: [],
-      headNoun: clean,
-      tail: '',
-      frozenTail: '',
-    };
-  }
-
-  // Check if first words are adjectives in nominative case
-  const isAdj = (w: string) =>
-    /^(?:[а-яёА-ЯЁ]+)(?:ый|ий|ой|ая|яя|ое|ее|ые|ие)$/i.test(w);
-
-  const headAdjectives: string[] = [];
-  let idx = 0;
-  while (idx < words.length && isAdj(words[idx])) {
-    headAdjectives.push(words[idx]);
-    idx++;
-  }
-
-  if (idx >= words.length) {
-    // All adjectives, last word serves as noun
-    const headNoun = words[words.length - 1];
-    headAdjectives.pop();
-    return {
-      hasQuotes,
-      quoteOpen,
-      quoteClose,
-      headGroup: clean,
-      headAdjectives,
-      headNoun,
-      tail: '',
-      frozenTail: '',
-    };
-  }
-
-  const headNoun = words[idx];
-  const headGroup = words.slice(0, idx + 1).join(' ');
-  const frozenTail = words.slice(idx + 1).join(' ');
-
-  return {
-    hasQuotes,
-    quoteOpen,
-    quoteClose,
-    headGroup,
-    headAdjectives,
-    headNoun,
-    tail: frozenTail,
-    frozenTail,
-  };
-}
+export {
+  buildInflectedRussianForms,
+  splitCompoundRussianTerm,
+  type InflectedFormItem,
+  type SplitCompoundResult,
+};
+export type { SocialRegisterEdge } from './pipeline-types.ts';
 
 /**
- * Builds inflected Russian grammatical forms across all 6 cases (singular and plural)
- * for nouns, noun phrases (Noun + Genitive Complement), Adjective + Noun phrases,
- * compound multi-word Xianxia terms, and East-Asian anthroponyms.
+ * Infers grammatical gender from English context clues without defaulting to 'M'.
+ * Returns 'UNKNOWN' when there are no unambiguous gender markers.
  */
-export function buildInflectedRussianForms(
-  term: string,
-  meta?: { gender?: GrammaticalGender; isPersonName?: boolean; category?: string } | GlossaryTermMeta
-): InflectedFormItem[] {
-  let clean = (term || '').trim();
-  if (!clean) return [];
+export function inferGenderFromContext(eng?: string, contextSnippet?: string): GrammaticalGender {
+  const combined = `${contextSnippet || ''} ${eng || ''}`.trim();
+  if (!combined) return 'UNKNOWN';
 
-  const formsMap = new Map<string, string>();
-  const addForm = (caseLabel: string, form: string) => {
-    if (form && !formsMap.has(caseLabel)) {
-      formsMap.set(caseLabel, form);
-    }
-  };
-
-  // Base nominative form
-  addForm('nom_sg', clean);
-
-  // Check quotes
-  let hasQuotes = false;
-  let quoteOpen = '';
-  let quoteClose = '';
-  if (clean.startsWith('«') && clean.endsWith('»')) {
-    hasQuotes = true;
-    quoteOpen = '«';
-    quoteClose = '»';
-    clean = clean.slice(1, -1).trim();
-  } else if (clean.startsWith('"') && clean.endsWith('"')) {
-    hasQuotes = true;
-    quoteOpen = '"';
-    quoteClose = '"';
-    clean = clean.slice(1, -1).trim();
-  }
-
-  const lower = clean.toLowerCase();
-  const isFirstUpper = clean[0] === clean[0].toUpperCase();
-  const cap = (s: string) => (isFirstUpper ? s.charAt(0).toUpperCase() + s.slice(1) : s);
-
-  const wrapQuotes = (str: string) => (hasQuotes ? `${quoteOpen}${str}${quoteClose}` : str);
-
-  // 1. East-Asian Anthroponym Declension Rules (CJK Declension Guard)
-  const isCharacterCategory =
-    Boolean((meta as any)?.isPersonName) ||
-    meta?.gender === 'F' ||
-    meta?.gender === 'M' ||
-    (meta as { category?: string })?.category === 'characters';
-
-  const cjkSurnames =
-    'Су|Линь|Чжан|Ван|Ли|Чэнь|Сяо|Лю|Е|Хуан|У|Цянь|Сунь|Чжоу|Ян|Хан|Хань|Бай|Цин|Фэн|Мэн|Тан|Чжао|Гу|Цзи|Ло|Ши|Юй|Се|Сун|Дун|Гао|Лян|Чжэн|Фан|Цзян|Вэй|Шэнь|Цзинь|Цзоу|Му|Хэ|Цзя|Пань|Ду|Хао|Кун|Юань|Цай|Тянь|Сюй|Лу|Го|Ма|Цуй|Жэнь|Вэнь|Не|Лань|Пак|Ким|Сон|Чхве|Ю|Чон|Кан|Чо|Юн|Чан|Син';
-  const cjkNameRegex = new RegExp(`^(?:${cjkSurnames})\\s+[а-яёА-ЯЁ]+`, 'i');
-  const isLikelyCjkName =
-    isCharacterCategory ||
-    cjkNameRegex.test(clean) ||
-    clean === 'Су Цинсюэ' ||
-    clean === 'Линь Сюань';
-
-  if (isLikelyCjkName) {
-    const isFem =
-      meta?.gender === 'F' ||
-      clean === 'Су Цинсюэ' ||
-      (clean !== 'Линь Сюань' && /цинсюэ|бай\s+юэ|\bюй\b|сяосяо|\bмей\b|\bмэй\b|\bин\b|\bинь\b/i.test(lower));
-
-    const nameParts = clean.split(/\s+/);
-    const lastPart = nameParts[nameParts.length - 1];
-
-    // Rule A: Syllables ending in -и, -у, -ю, -э, -о are indeclinable in Russian
-    // Rule B: Feminine East-Asian names ending in consonants or -ь are indeclinable (нескл.)
-    if (isFem || /[иуюэо]$/i.test(clean) || /[иуюэо]$/i.test(lastPart)) {
-      const fixed = wrapQuotes(clean);
-      addForm('nom_sg', fixed);
-      addForm('gen_sg', fixed);
-      addForm('dat_sg', fixed);
-      addForm('acc_sg', fixed);
-      addForm('ins_sg', fixed);
-      addForm('pre_sg', fixed);
-      return Array.from(formsMap.entries()).map(([caseLabel, form]) => ({ caseLabel, form }));
-    }
-
-    // Rule C: Masculine East-Asian names (Линь Сюань, Чжан Вэй, Хан Сень, Чжао Фэн)
-    // First syllables are frozen surnames, only the final syllable declines!
-    if (nameParts.length >= 2) {
-      const prefix = nameParts.slice(0, -1).join(' ');
-
-      let stem = lastPart;
-      let gen = `${lastPart}а`;
-      let dat = `${lastPart}у`;
-      let acc = `${lastPart}а`;
-      let ins = `${lastPart}ом`;
-      let pre = `${lastPart}е`;
-      let nomPl = `${lastPart}ы`;
-      let genPl = `${lastPart}ов`;
-      let datPl = `${lastPart}ам`;
-      let accPl = `${lastPart}ов`;
-      let insPl = `${lastPart}ами`;
-      let prePl = `${lastPart}ах`;
-
-      if (lastPart.endsWith('ь')) {
-        stem = lastPart.slice(0, -1);
-        gen = `${stem}я`;
-        dat = `${stem}ю`;
-        acc = `${stem}я`;
-        ins = `${stem}ем`;
-        pre = `${stem}е`;
-        nomPl = `${stem}и`;
-        genPl = `${stem}ей`;
-        datPl = `${stem}ям`;
-        accPl = `${stem}ей`;
-        insPl = `${stem}ями`;
-        prePl = `${stem}ях`;
-      } else if (lastPart.endsWith('й')) {
-        stem = lastPart.slice(0, -1);
-        gen = `${stem}я`;
-        dat = `${stem}ю`;
-        acc = `${stem}я`;
-        ins = `${stem}ем`;
-        pre = `${stem}е`;
-        nomPl = `${stem}и`;
-        genPl = `${stem}ев`;
-        datPl = `${stem}ям`;
-        accPl = `${stem}ев`;
-        insPl = `${stem}ями`;
-        prePl = `${stem}ях`;
-      }
-
-      addForm('nom_sg', wrapQuotes(clean));
-      addForm('gen_sg', wrapQuotes(`${prefix} ${gen}`));
-      addForm('dat_sg', wrapQuotes(`${prefix} ${dat}`));
-      addForm('acc_sg', wrapQuotes(`${prefix} ${acc}`));
-      addForm('ins_sg', wrapQuotes(`${prefix} ${ins}`));
-      addForm('pre_sg', wrapQuotes(`${prefix} ${pre}`));
-      addForm('nom_pl', wrapQuotes(`${prefix} ${nomPl}`));
-      addForm('gen_pl', wrapQuotes(`${prefix} ${genPl}`));
-      addForm('dat_pl', wrapQuotes(`${prefix} ${datPl}`));
-      addForm('acc_pl', wrapQuotes(`${prefix} ${accPl}`));
-      addForm('ins_pl', wrapQuotes(`${prefix} ${insPl}`));
-      addForm('pre_pl', wrapQuotes(`${prefix} ${prePl}`));
-
-      return Array.from(formsMap.entries()).map(([caseLabel, form]) => ({ caseLabel, form }));
-    } else if (nameParts.length === 1 && !isFem) {
-      let stem = clean;
-      let gen = `${clean}а`;
-      let dat = `${clean}у`;
-      let acc = `${clean}а`;
-      let ins = `${clean}ом`;
-      let pre = `${clean}е`;
-      if (clean.endsWith('ь')) {
-        stem = clean.slice(0, -1);
-        gen = `${stem}я`;
-        dat = `${stem}ю`;
-        acc = `${stem}я`;
-        ins = `${stem}ем`;
-        pre = `${stem}е`;
-      } else if (clean.endsWith('й')) {
-        stem = clean.slice(0, -1);
-        gen = `${stem}я`;
-        dat = `${stem}ю`;
-        acc = `${stem}я`;
-        ins = `${stem}ем`;
-        pre = `${stem}е`;
-      }
-      addForm('nom_sg', wrapQuotes(clean));
-      addForm('gen_sg', wrapQuotes(gen));
-      addForm('dat_sg', wrapQuotes(dat));
-      addForm('acc_sg', wrapQuotes(acc));
-      addForm('ins_sg', wrapQuotes(ins));
-      addForm('pre_sg', wrapQuotes(pre));
-      return Array.from(formsMap.entries()).map(([caseLabel, form]) => ({ caseLabel, form }));
+  let sample = combined;
+  if (eng && contextSnippet) {
+    const idx = contextSnippet.toLowerCase().indexOf(eng.toLowerCase());
+    if (idx >= 0) {
+      const start = Math.max(0, idx - 100);
+      const end = Math.min(contextSnippet.length, idx + eng.length + 140);
+      sample = contextSnippet.slice(start, end);
     }
   }
 
-  // 2. Head-Modifier Split for Compound Terms (CompoundTermInflector)
-  // E.g., «Пилюля Девяти Превращений Лазурного Дракона», «Великий Канон Багрового Пламени»
-  const compound = splitCompoundRussianTerm(term);
-  if (compound.frozenTail && compound.frozenTail.length > 0) {
-    const headForms = buildInflectedRussianForms(compound.headGroup);
-    for (const hf of headForms) {
-      const full = compound.hasQuotes
-        ? `${compound.quoteOpen}${hf.form} ${compound.frozenTail}${compound.quoteClose}`
-        : `${hf.form} ${compound.frozenTail}`;
-      addForm(hf.caseLabel, full);
-    }
-    return Array.from(formsMap.entries()).map(([caseLabel, form]) => ({ caseLabel, form }));
-  }
+  const femMatches = sample.match(
+    /\b(?:she|her|hers|herself|lady|queen|princess|sister|girl|maiden|woman|empress|goddess|duchess|fairy|matriarch|mother|wife|bride|daughter|concubine|saintess)\b/gi
+  );
+  const mascMatches = sample.match(
+    /\b(?:he|his|him|himself|lord|king|prince|brother|boy|man|emperor|god|duke|patriarch|father|husband|groom|son)\b/gi
+  );
 
-  // Irregular dictionary overrides for common Xianxia terms
-  if (lower.startsWith('очки ')) {
-    const tail = clean.slice(4).trim();
-    addForm('nom_pl', wrapQuotes(cap(`очки ${tail}`)));
-    addForm('gen_pl', wrapQuotes(cap(`очков ${tail}`)));
-    addForm('dat_pl', wrapQuotes(cap(`очкам ${tail}`)));
-    addForm('acc_pl', wrapQuotes(cap(`очки ${tail}`)));
-    addForm('ins_pl', wrapQuotes(cap(`очками ${tail}`)));
-    addForm('pre_pl', wrapQuotes(cap(`очках ${tail}`)));
-  } else if (lower.startsWith('врата ')) {
-    const tail = clean.slice(5).trim();
-    addForm('nom_pl', wrapQuotes(cap(`врата ${tail}`)));
-    addForm('gen_pl', wrapQuotes(cap(`врат ${tail}`)));
-    addForm('dat_pl', wrapQuotes(cap(`вратам ${tail}`)));
-    addForm('acc_pl', wrapQuotes(cap(`врата ${tail}`)));
-    addForm('ins_pl', wrapQuotes(cap(`вратами ${tail}`)));
-    addForm('pre_pl', wrapQuotes(cap(`вратах ${tail}`)));
-  } else if (lower === 'духовный камень' || lower === 'духовные камни') {
-    addForm('nom_sg', wrapQuotes(cap('духовный камень')));
-    addForm('gen_sg', wrapQuotes(cap('духовного камня')));
-    addForm('dat_sg', wrapQuotes(cap('духовному камню')));
-    addForm('acc_sg', wrapQuotes(cap('духовный камень')));
-    addForm('ins_sg', wrapQuotes(cap('духовным камнем')));
-    addForm('pre_sg', wrapQuotes(cap('духовном камне')));
-    addForm('nom_pl', wrapQuotes(cap('духовные камни')));
-    addForm('gen_pl', wrapQuotes(cap('духовных камней')));
-    addForm('dat_pl', wrapQuotes(cap('духовным камням')));
-    addForm('acc_pl', wrapQuotes(cap('духовные камни')));
-    addForm('ins_pl', wrapQuotes(cap('духовными камнями')));
-    addForm('pre_pl', wrapQuotes(cap('духовных камнях')));
-  } else if (lower === 'секта каменного демона' || lower === 'секта каменных демонов') {
-    const demTail = lower.includes('демонов') ? 'Каменных Демонов' : 'Каменного Демона';
-    addForm('nom_sg', wrapQuotes(cap(`Секта ${demTail}`)));
-    addForm('gen_sg', wrapQuotes(cap(`Секты ${demTail}`)));
-    addForm('dat_sg', wrapQuotes(cap(`Секте ${demTail}`)));
-    addForm('acc_sg', wrapQuotes(cap(`Секту ${demTail}`)));
-    addForm('ins_sg', wrapQuotes(cap(`Сектой ${demTail}`)));
-    addForm('pre_sg', wrapQuotes(cap(`Секте ${demTail}`)));
-    addForm('nom_pl', wrapQuotes(cap(`Секты ${demTail}`)));
-    addForm('gen_pl', wrapQuotes(cap(`Сект ${demTail}`)));
-    addForm('dat_pl', wrapQuotes(cap(`Сектам ${demTail}`)));
-    addForm('acc_pl', wrapQuotes(cap(`Секты ${demTail}`)));
-    addForm('ins_pl', wrapQuotes(cap(`Сектами ${demTail}`)));
-    addForm('pre_pl', wrapQuotes(cap(`Сектах ${demTail}`)));
-  } else {
-    // General algorithmic declension
-    const words = clean.split(/\s+/);
-    const firstWord = words[0];
-    const tail = words.slice(1).join(' ');
-
-    const isAdj = (w: string) => /^(?:[а-яёА-ЯЁ]+)(?:ый|ий|ой|ая|яя|ое|ее)$/i.test(w);
-    if (words.length >= 2 && words.slice(0, -1).every(isAdj)) {
-      // Pattern B: 1 or more Adjectives + Noun (e.g., духовный кристалл, высший истинный канон, девятилистная трава, лазурное пламя)
-      const adjs = words.slice(0, -1);
-      const noun = words[words.length - 1];
-      const isFemAdj = /ая|яя$/i.test(adjs[0]);
-      const isNeutAdj = /ое|ее$/i.test(adjs[0]);
-
-      const inflectSingleAdj = (adj: string, c: string, isPlural = false) => {
-        const stem = adj.slice(0, -2);
-        const hasSibilant = /[жшчщгкхц]$/i.test(stem);
-        if (isPlural) {
-          if (c === 'nom' || c === 'acc') return `${stem}${hasSibilant ? 'ие' : 'ые'}`;
-          if (c === 'gen' || c === 'pre') return `${stem}${hasSibilant ? 'их' : 'ых'}`;
-          if (c === 'dat') return `${stem}${hasSibilant ? 'им' : 'ым'}`;
-          if (c === 'ins') return `${stem}${hasSibilant ? 'ими' : 'ыми'}`;
-        }
-        if (isFemAdj) {
-          if (c === 'nom') return adj;
-          if (c === 'acc') return `${stem}ую`;
-          return `${stem}ой`; // gen, dat, ins, pre
-        }
-        if (isNeutAdj) {
-          if (c === 'nom' || c === 'acc') return adj;
-          if (c === 'gen') return `${stem}${hasSibilant ? 'его' : 'ого'}`;
-          if (c === 'dat') return `${stem}${hasSibilant ? 'ему' : 'ому'}`;
-          if (c === 'ins') return `${stem}${hasSibilant ? 'им' : 'ым'}`;
-          if (c === 'pre') return `${stem}${hasSibilant ? 'ем' : 'ом'}`;
-        }
-        // Masculine
-        if (c === 'nom' || c === 'acc') return adj;
-        if (c === 'gen') return `${stem}${hasSibilant ? 'его' : 'ого'}`;
-        if (c === 'dat') return `${stem}${hasSibilant ? 'ему' : 'ому'}`;
-        if (c === 'ins') return `${stem}${hasSibilant ? 'им' : 'ым'}`;
-        if (c === 'pre') return `${stem}${hasSibilant ? 'ем' : 'ом'}`;
-        return adj;
-      };
-
-      const inflectAdjs = (c: string, isPlural = false) =>
-        adjs.map((a) => inflectSingleAdj(a, c, isPlural)).join(' ');
-
-      if (isFemAdj) {
-        // Feminine: девятилистная трава
-        const nStem = noun.endsWith('а') || noun.endsWith('я') ? noun.slice(0, -1) : noun;
-        const nounGenPl = noun.endsWith('я') ? `${nStem}ь` : nStem;
-        addForm('nom_sg', `${inflectAdjs('nom')} ${nStem}а`);
-        addForm('gen_sg', `${inflectAdjs('gen')} ${nStem}ы`);
-        addForm('dat_sg', `${inflectAdjs('dat')} ${nStem}е`);
-        addForm('acc_sg', `${inflectAdjs('acc')} ${nStem}у`);
-        addForm('ins_sg', `${inflectAdjs('ins')} ${nStem}ой`);
-        addForm('pre_sg', `${inflectAdjs('pre')} ${nStem}е`);
-        addForm('nom_pl', `${inflectAdjs('nom', true)} ${nStem}ы`);
-        addForm('gen_pl', `${inflectAdjs('gen', true)} ${nounGenPl}`);
-        addForm('dat_pl', `${inflectAdjs('dat', true)} ${nStem}ам`);
-        addForm('acc_pl', `${inflectAdjs('acc', true)} ${nStem}ы`);
-        addForm('ins_pl', `${inflectAdjs('ins', true)} ${nStem}ами`);
-        addForm('pre_pl', `${inflectAdjs('pre', true)} ${nStem}ах`);
-      } else if (isNeutAdj) {
-        // Neuter: тайное царство, лазурное пламя
-        const nStem = noun.endsWith('о') || noun.endsWith('е') ? noun.slice(0, -1) : noun;
-        addForm('nom_sg', `${inflectAdjs('nom')} ${noun}`);
-        addForm('gen_sg', `${inflectAdjs('gen')} ${nStem}а`);
-        addForm('dat_sg', `${inflectAdjs('dat')} ${nStem}у`);
-        addForm('acc_sg', `${inflectAdjs('acc')} ${noun}`);
-        addForm('ins_sg', `${inflectAdjs('ins')} ${nStem}ом`);
-        addForm('pre_sg', `${inflectAdjs('pre')} ${nStem}е`);
-        addForm('nom_pl', `${inflectAdjs('nom', true)} ${nStem}а`);
-        addForm('gen_pl', `${inflectAdjs('gen', true)} ${nStem}`);
-        addForm('dat_pl', `${inflectAdjs('dat', true)} ${nStem}ам`);
-        addForm('acc_pl', `${inflectAdjs('acc', true)} ${nStem}а`);
-        addForm('ins_pl', `${inflectAdjs('ins', true)} ${nStem}ами`);
-        addForm('pre_pl', `${inflectAdjs('pre', true)} ${nStem}ах`);
-      } else {
-        // Masculine: высший истинный канон, духовный кристалл, золотой меч
-        const nStem = noun.endsWith('ь') || noun.endsWith('й') ? noun.slice(0, -1) : noun;
-        const nEndingPl = noun.endsWith('ь') ? 'и' : 'ы';
-        const nEndingGenPl = noun.endsWith('ь') ? 'ей' : 'ов';
-        const nGen = noun.endsWith('ь') || noun.endsWith('й') ? `${nStem}я` : `${noun}а`;
-        const nDat = noun.endsWith('ь') || noun.endsWith('й') ? `${nStem}ю` : `${noun}у`;
-        const nIns = noun.endsWith('ь') || noun.endsWith('й') ? `${nStem}ем` : `${noun}ом`;
-        addForm('nom_sg', `${inflectAdjs('nom')} ${noun}`);
-        addForm('gen_sg', `${inflectAdjs('gen')} ${nGen}`);
-        addForm('dat_sg', `${inflectAdjs('dat')} ${nDat}`);
-        addForm('acc_sg', `${inflectAdjs('acc')} ${noun}`);
-        addForm('ins_sg', `${inflectAdjs('ins')} ${nIns}`);
-        addForm('pre_sg', `${inflectAdjs('pre')} ${nStem}е`);
-        addForm('nom_pl', `${inflectAdjs('nom', true)} ${nStem}${nEndingPl}`);
-        addForm('gen_pl', `${inflectAdjs('gen', true)} ${nStem}${nEndingGenPl}`);
-        addForm('dat_pl', `${inflectAdjs('dat', true)} ${nStem}ам`);
-        addForm('acc_pl', `${inflectAdjs('acc', true)} ${nStem}${nEndingPl}`);
-        addForm('ins_pl', `${inflectAdjs('ins', true)} ${nStem}ами`);
-        addForm('pre_pl', `${inflectAdjs('pre', true)} ${nStem}ах`);
-      }
-    } else {
-      // Pattern A: Head Noun + Genitive Complement (e.g. Пилюля Конденсации Крови)
-      const h = firstWord;
-      const tSuffix = tail ? ` ${tail}` : '';
-
-      if (/[а-яёА-ЯЁ]+[иы]$/i.test(h)) {
-        // Plural head noun (e.g., Очки, Врата)
-        const stem = h.slice(0, -1);
-        addForm('nom_pl', `${h}${tSuffix}`);
-        addForm('gen_pl', `${stem}ов${tSuffix}`);
-        addForm('dat_pl', `${stem}ам${tSuffix}`);
-        addForm('acc_pl', `${h}${tSuffix}`);
-        addForm('ins_pl', `${stem}ами${tSuffix}`);
-        addForm('pre_pl', `${stem}ах${tSuffix}`);
-      } else if (/[а-яёА-ЯЁ]+а$/i.test(h)) {
-        // Feminine in -а (Секта, Трава)
-        const stem = h.slice(0, -1);
-        addForm('nom_sg', `${h}${tSuffix}`);
-        addForm('gen_sg', `${stem}ы${tSuffix}`);
-        addForm('dat_sg', `${stem}е${tSuffix}`);
-        addForm('acc_sg', `${stem}у${tSuffix}`);
-        addForm('ins_sg', `${stem}ой${tSuffix}`);
-        addForm('pre_sg', `${stem}е${tSuffix}`);
-        addForm('nom_pl', `${stem}ы${tSuffix}`);
-        addForm('gen_pl', `${stem}${tSuffix}`);
-        addForm('dat_pl', `${stem}ам${tSuffix}`);
-        addForm('acc_pl', `${stem}ы${tSuffix}`);
-        addForm('ins_pl', `${stem}ами${tSuffix}`);
-        addForm('pre_pl', `${stem}ах${tSuffix}`);
-      } else if (/[а-яёА-ЯЁ]+я$/i.test(h)) {
-        // Feminine in -я (Пилюля)
-        const stem = h.slice(0, -1);
-        addForm('nom_sg', `${h}${tSuffix}`);
-        addForm('gen_sg', `${stem}и${tSuffix}`);
-        addForm('dat_sg', `${stem}е${tSuffix}`);
-        addForm('acc_sg', `${stem}ю${tSuffix}`);
-        addForm('ins_sg', `${stem}ей${tSuffix}`);
-        addForm('pre_sg', `${stem}е${tSuffix}`);
-        addForm('nom_pl', `${stem}и${tSuffix}`);
-        addForm('gen_pl', `${stem}ь${tSuffix}`); // Пилюль!
-        addForm('dat_pl', `${stem}ям${tSuffix}`);
-        addForm('acc_pl', `${stem}и${tSuffix}`);
-        addForm('ins_pl', `${stem}ями${tSuffix}`);
-        addForm('pre_pl', `${stem}ях${tSuffix}`);
-      } else if (/[а-яёА-ЯЁ]+(?:ие|ье)$/i.test(h)) {
-        // Neuter in -ие (Заложение, Писание)
-        const stem = h.slice(0, -2);
-        addForm('nom_sg', `${h}${tSuffix}`);
-        addForm('gen_sg', `${stem}ия${tSuffix}`);
-        addForm('dat_sg', `${stem}ию${tSuffix}`);
-        addForm('acc_sg', `${h}${tSuffix}`);
-        addForm('ins_sg', `${stem}ием${tSuffix}`);
-        addForm('pre_sg', `${stem}ии${tSuffix}`);
-        addForm('nom_pl', `${stem}ия${tSuffix}`);
-        addForm('gen_pl', `${stem}ий${tSuffix}`);
-        addForm('dat_pl', `${stem}иям${tSuffix}`);
-        addForm('acc_pl', `${stem}ия${tSuffix}`);
-        addForm('ins_pl', `${stem}иями${tSuffix}`);
-        addForm('pre_pl', `${stem}иях${tSuffix}`);
-      } else if (/[а-яёА-ЯЁ]+о$/i.test(h)) {
-        // Neuter in -о (Царство)
-        const stem = h.slice(0, -1);
-        addForm('nom_sg', `${h}${tSuffix}`);
-        addForm('gen_sg', `${stem}а${tSuffix}`);
-        addForm('dat_sg', `${stem}у${tSuffix}`);
-        addForm('acc_sg', `${h}${tSuffix}`);
-        addForm('ins_sg', `${stem}ом${tSuffix}`);
-        addForm('pre_sg', `${stem}е${tSuffix}`);
-        addForm('nom_pl', `${stem}а${tSuffix}`);
-        addForm('gen_pl', `${stem}${tSuffix}`);
-        addForm('dat_pl', `${stem}ам${tSuffix}`);
-        addForm('acc_pl', `${stem}а${tSuffix}`);
-        addForm('ins_pl', `${stem}ами${tSuffix}`);
-        addForm('pre_pl', `${stem}ах${tSuffix}`);
-      } else if (/[иуюэ]$/i.test(h)) {
-        // Foreign stem ending in -и, -у, -ю, -э (Гу, Се, Луффи) - indeclinable
-        addForm('nom_sg', `${h}${tSuffix}`);
-        addForm('gen_sg', `${h}${tSuffix}`);
-        addForm('dat_sg', `${h}${tSuffix}`);
-        addForm('acc_sg', `${h}${tSuffix}`);
-        addForm('ins_sg', `${h}${tSuffix}`);
-        addForm('pre_sg', `${h}${tSuffix}`);
-      } else if (h.endsWith('ь') || h.endsWith('й')) {
-        // Soft masculine ending in -ь or -й (Чэнь, Меч, Край)
-        const stem = h.slice(0, -1);
-        addForm('nom_sg', `${h}${tSuffix}`);
-        addForm('gen_sg', `${stem}я${tSuffix}`);
-        addForm('dat_sg', `${stem}ю${tSuffix}`);
-        addForm('acc_sg', `${h}${tSuffix}`);
-        addForm('ins_sg', `${stem}ем${tSuffix}`);
-        addForm('pre_sg', `${stem}е${tSuffix}`);
-        addForm('nom_pl', `${stem}и${tSuffix}`);
-        addForm('gen_pl', `${stem}ей${tSuffix}`);
-        addForm('dat_pl', `${stem}ям${tSuffix}`);
-        addForm('acc_pl', `${stem}и${tSuffix}`);
-        addForm('ins_pl', `${stem}ями${tSuffix}`);
-        addForm('pre_pl', `${stem}ях${tSuffix}`);
-      } else {
-        // Hard masculine consonant ending (Павильон, Канон, Котёл)
-        addForm('nom_sg', `${h}${tSuffix}`);
-        addForm('gen_sg', `${h}а${tSuffix}`);
-        addForm('dat_sg', `${h}у${tSuffix}`);
-        addForm('acc_sg', `${h}${tSuffix}`);
-        addForm('ins_sg', `${h}ом${tSuffix}`);
-        addForm('pre_sg', `${h}е${tSuffix}`);
-        addForm('nom_pl', `${h}ы${tSuffix}`);
-        addForm('gen_pl', `${h}ов${tSuffix}`);
-        addForm('dat_pl', `${h}ам${tSuffix}`);
-        addForm('acc_pl', `${h}ы${tSuffix}`);
-        addForm('ins_pl', `${h}ами${tSuffix}`);
-        addForm('pre_pl', `${h}ах${tSuffix}`);
-      }
-    }
-  }
-
-  const result: InflectedFormItem[] = [];
-  formsMap.forEach((form, caseLabel) => {
-    result.push({ caseLabel, form });
-  });
-  return result;
+  const fCount = femMatches?.length ?? 0;
+  const mCount = mascMatches?.length ?? 0;
+  if (fCount > mCount) return 'F';
+  if (mCount > fCount) return 'M';
+  return 'UNKNOWN';
 }
+
 
 export interface CanonRippleChapterChange {
   chapterId: string;
@@ -805,7 +306,7 @@ export function batchLookaheadScoutChapters(
             eng,
             rus: meta.rus,
             category: meta.cat,
-            gender: meta.gender || 'M',
+            gender: meta.gender || inferGenderFromContext(eng, ch.engText),
             firstChapter: ch.number,
             chapterOccurrences: 1,
             snippet: ch.engText.slice(0, 140),
@@ -826,7 +327,7 @@ export function batchLookaheadScoutChapters(
           eng: term.eng,
           rus: term.rus_suggested,
           category: term.category,
-          gender: term.gender || 'M',
+          gender: term.gender || inferGenderFromContext(term.eng, term.context_snippet || ch.engText),
           firstChapter: ch.number,
           chapterOccurrences: 1,
           snippet: term.context_snippet || ch.engText.slice(0, 140),
@@ -893,21 +394,55 @@ export function computeChapterGlossaryCoverage(
   const lowerRus = (chapter.rusText || '').toLowerCase().replace(/ё/g, 'е');
 
   if (chapter.rusText && chapter.rusText.trim()) {
-    Object.values(filteredGlossary).forEach((bucket) => {
+    Object.entries(filteredGlossary).forEach(([cat, bucket]) => {
       Object.values(bucket || {}).forEach((rusTerm) => {
-        const rusStr = String(rusTerm || '');
-        const stems = rusStr
+        const rusStr = String(rusTerm || '').trim();
+        if (!rusStr) return;
+
+        // 1. Check all inflected forms with strict Cyrillic boundaries
+        const forms = buildInflectedRussianForms(rusStr, {
+          category: cat,
+          isPersonName: cat === 'characters',
+        });
+        const formMatched = forms.some((f) => {
+          const normForm = f.form.toLowerCase().replace(/ё/g, 'е').replace(/^[«"]|[»"]$/g, '');
+          if (!normForm) return false;
+          const esc = normForm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          return new RegExp(`(?<![а-яё])${esc}(?![а-яё])`, 'i').test(lowerRus);
+        });
+        if (formMatched) {
+          canonMatchedInRus++;
+          return;
+        }
+
+        // 2. Fallback to stem tokens, using strict Cyrillic word boundaries for stems <= 3 chars
+        const tokens = rusStr
           .toLowerCase()
           .replace(/ё/g, 'е')
-          .split(/\s+/)
-          .filter((w) => w.length >= 2)
-          .map((w) => {
-            if (w.startsWith('камен')) return 'кам';
-            if (w.startsWith('корен')) return 'кор';
-            return w.slice(0, Math.min(4, Math.max(2, w.length - 2)));
+          .split(/[\s\-«»"()]+/)
+          .filter((w) => w.length >= 2);
+
+        const matched =
+          tokens.length === 0 ||
+          tokens.every((w) => {
+            if (w.startsWith('камен')) {
+              return /(?<![а-яё])(?:камен|камн)[а-яё]*/i.test(lowerRus);
+            }
+            if (w.startsWith('корен')) {
+              return /(?<![а-яё])(?:корен|корн)[а-яё]*/i.test(lowerRus);
+            }
+            if (w.length <= 3) {
+              const esc = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              return new RegExp(`(?<![а-яё])${esc}(?![а-яё])`, 'i').test(lowerRus);
+            }
+            const stem = w.slice(0, Math.min(4, Math.max(4, w.length - 2)));
+            if (stem.length <= 3) {
+              const esc = stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              return new RegExp(`(?<![а-яё])${esc}(?![а-яё])`, 'i').test(lowerRus);
+            }
+            return lowerRus.includes(stem);
           });
 
-        const matched = stems.length === 0 || stems.every((stem) => lowerRus.includes(stem));
         if (matched) {
           canonMatchedInRus++;
         }
@@ -1137,16 +672,6 @@ export function applyCanonRippleToNovel<
   return { updatedNovel, rippleReport };
 }
 
-export interface SocialRegisterEdge {
-  fromCharacter: string;
-  toCharacter: string;
-  valence: number; // [-1.0 .. +1.0] (вражда <-> близость)
-  coarseRole: 'hierarchical' | 'peer' | 'kinship' | 'hostile';
-  fineRole: string; // e.g., "ученик -> старейшина", "старший брат -> младший брат"
-  pronounMode: 'ты' | 'Вы';
-  updatedAtChapter: number;
-}
-
 export function buildSocialRegisterPromptBlock(
   edges: SocialRegisterEdge[],
   activeCharacters?: string[]
@@ -1336,7 +861,7 @@ export function deriveDefaultSpeechVector(
       sentenceLengthBias: 'ornate_periodic',
       ellipsisRate: 'low',
       inversionTendency: 'high',
-      preferredParticles: ['же', 'ведь', 'ибо'],
+      preferredParticles: ['ведь', 'ибо'],
       forbiddenLexicon: ['окей', 'круто', 'проблема', 'парень', 'чувак'],
       catchphrasesOrTics: ['Дерзость.', 'Ничтожество.'],
       contrastiveDialogueSamples: [
@@ -1374,7 +899,7 @@ export function deriveDefaultSpeechVector(
       sentenceLengthBias: 'balanced_conversational',
       ellipsisRate: 'medium',
       inversionTendency: 'medium',
-      preferredParticles: ['же', 'разве', 'уж'],
+      preferredParticles: ['разве', 'уж'],
       forbiddenLexicon: ['братан', 'чувак', 'бабло', 'парень'],
       contrastiveDialogueSamples: [
         {
@@ -1392,7 +917,7 @@ export function deriveDefaultSpeechVector(
     sentenceLengthBias: 'balanced_conversational',
     ellipsisRate: 'low',
     inversionTendency: 'medium',
-    preferredParticles: ['же', '-то', 'ну', 'что ли'],
+    preferredParticles: ['-то', 'ну', 'что ли'],
     forbiddenLexicon: ['окей', 'круто', 'информация', 'проблема'],
     contrastiveDialogueSamples: [
       {
@@ -1423,7 +948,7 @@ export function buildCharacterVoicePromptBlock(
   for (const [eng, rus] of entries) {
     const meta = glossaryMeta?.[eng];
     const vector = deriveDefaultSpeechVector(rus, meta);
-    const gender = meta?.gender || 'M';
+    const gender = meta?.gender || inferGenderFromContext(eng, meta?.voiceNote || meta?.declensionNote);
 
     lines.push(`### ${rus} (${eng}) · Gender: ${gender}`);
     if (meta?.declensionNote) {

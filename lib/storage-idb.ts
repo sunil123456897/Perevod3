@@ -4,8 +4,8 @@
  * and unified bundle serialization/deserialization supporting v2.5 and v4.1 formats.
  */
 
-import type { NovelProject } from './seed-data.ts';
-import type { LlmProviderConfig } from './qa-linter.ts';
+import type { ChapterRecord, NovelProject } from './seed-data.ts';
+import type { LlmProviderConfig } from './pipeline-types.ts';
 
 const DB_NAME = 'xianxia_canon_studio_db';
 const DB_VERSION = 1;
@@ -25,11 +25,13 @@ export type SaveStorageResult =
   | 'IndexedDB'
   | 'localStorage'
   | 'in_memory'
-  | 'skipped_unhydrated';
+  | 'skipped_unhydrated'
+  | 'conflict_disk_newer';
 
 export interface LoadNovelsResult {
   novels: NovelProject[];
   engine: StorageEngineType;
+  updatedAt?: string | null;
 }
 
 /**
@@ -78,6 +80,7 @@ export function setStorageHydrated(hydrated: boolean): void {
  */
 export class BrowserDiskAndIdbAdapter implements ProjectRepository {
   public hydrated: boolean;
+  public lastKnownDiskUpdatedAt: string | null = null;
 
   constructor(initialHydrated = false) {
     this.hydrated = initialHydrated;
@@ -95,7 +98,7 @@ export class BrowserDiskAndIdbAdapter implements ProjectRepository {
   async loadNovels(fallbackSeed: NovelProject[]): Promise<LoadNovelsResult> {
     if (typeof window === 'undefined') {
       this.setHydrated(true);
-      return { novels: fallbackSeed, engine: 'seed' };
+      return { novels: fallbackSeed, engine: 'seed', updatedAt: null };
     }
 
     // 1. Try local PC disk storage (`data/novels_db.json` via `/api/projects`) first
@@ -104,8 +107,14 @@ export class BrowserDiskAndIdbAdapter implements ProjectRepository {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data?.novels) && data.novels.length > 0) {
+          this.lastKnownDiskUpdatedAt =
+            typeof data.updatedAt === 'string' ? data.updatedAt : null;
           this.setHydrated(true);
-          return { novels: data.novels, engine: 'Disk+IndexedDB' };
+          return {
+            novels: data.novels,
+            engine: 'Disk+IndexedDB',
+            updatedAt: this.lastKnownDiskUpdatedAt,
+          };
         }
       }
     } catch {
@@ -127,14 +136,21 @@ export class BrowserDiskAndIdbAdapter implements ProjectRepository {
       db.close();
 
       if (Array.isArray(loaded) && loaded.length > 0) {
-        // Mirror existing IndexedDB data to PC disk in the background
+        // Mirror existing IndexedDB data to PC disk in the background if disk was empty
         fetch('/api/projects', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ novels: loaded }),
-        }).catch(() => {});
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => {
+            if (typeof d?.updatedAt === 'string') {
+              this.lastKnownDiskUpdatedAt = d.updatedAt;
+            }
+          })
+          .catch(() => {});
         this.setHydrated(true);
-        return { novels: loaded, engine: 'IndexedDB' };
+        return { novels: loaded, engine: 'IndexedDB', updatedAt: null };
       }
     } catch {
       // Fall back to localStorage
@@ -147,7 +163,7 @@ export class BrowserDiskAndIdbAdapter implements ProjectRepository {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
           this.setHydrated(true);
-          return { novels: parsed, engine: 'localStorage' };
+          return { novels: parsed, engine: 'localStorage', updatedAt: null };
         }
       }
     } catch {
@@ -155,7 +171,7 @@ export class BrowserDiskAndIdbAdapter implements ProjectRepository {
     }
 
     this.setHydrated(true);
-    return { novels: fallbackSeed, engine: 'seed' };
+    return { novels: fallbackSeed, engine: 'seed', updatedAt: null };
   }
 
   async saveNovels(novels: NovelProject[]): Promise<SaveStorageResult> {
@@ -166,15 +182,27 @@ export class BrowserDiskAndIdbAdapter implements ProjectRepository {
 
     if (typeof window === 'undefined') return 'localStorage';
 
-    // Mirror to PC disk (`data/novels_db.json`) via `/api/projects`
+    // Mirror to PC disk (`data/studio.db` + `data/novels_db.json`) via `/api/projects` with Optimistic Concurrency Control
     let savedToDisk = false;
     try {
       const res = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ novels }),
+        body: JSON.stringify({
+          novels,
+          baseUpdatedAt: this.lastKnownDiskUpdatedAt,
+        }),
       });
-      savedToDisk = res.ok;
+      if (res.status === 409) {
+        return 'conflict_disk_newer';
+      }
+      if (res.ok) {
+        savedToDisk = true;
+        const data = await res.json().catch(() => null);
+        if (typeof data?.updatedAt === 'string') {
+          this.lastKnownDiskUpdatedAt = data.updatedAt;
+        }
+      }
     } catch {
       savedToDisk = false;
     }
@@ -441,4 +469,112 @@ export function parseDiskDatabasePayload(rawInput: unknown): {
     novels: res.novels,
     updatedAt: res.updatedAt ?? null,
   };
+}
+
+export interface PatchChapterServerResult {
+  ok: boolean;
+  conflict?: boolean;
+  chapter?: ChapterRecord;
+  revision?: number;
+  updatedAt?: string;
+  error?: string;
+}
+
+/**
+ * Atomically patches a single chapter on the server SQLite database via `PATCH /api/projects`
+ * using optimistic revision checking (`409` on revision conflict).
+ */
+export async function patchChapterOnServer(
+  novelId: string,
+  chapterId: string,
+  chapterPatch: Partial<ChapterRecord>,
+  expectedRevision?: number
+): Promise<PatchChapterServerResult> {
+  if (typeof window === 'undefined') {
+    return { ok: false, error: 'patchChapterOnServer is browser-only' };
+  }
+
+  try {
+    const res = await fetch('/api/projects', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'patch_chapter',
+        novelId,
+        chapterId,
+        chapterPatch,
+        expectedRevision,
+      }),
+    });
+    const data = await res.json().catch(() => null);
+
+    if (res.status === 409) {
+      return {
+        ok: false,
+        conflict: true,
+        error: data?.error || 'Конфликт ревизий главы на сервере',
+      };
+    }
+
+    if (!res.ok || !data?.ok) {
+      return {
+        ok: false,
+        error: data?.error || `HTTP ${res.status}`,
+      };
+    }
+
+    if (typeof data.updatedAt === 'string') {
+      defaultProjectRepository.lastKnownDiskUpdatedAt = data.updatedAt;
+    }
+
+    return {
+      ok: true,
+      chapter: data.chapter as ChapterRecord | undefined,
+      revision: typeof data.revision === 'number' ? data.revision : undefined,
+      updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : undefined,
+    };
+  } catch (err: unknown) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Network error',
+    };
+  }
+}
+
+export async function fetchChapterFromServer(
+  novelId: string,
+  chapterId: string
+): Promise<{
+  ok: boolean;
+  chapter?: ChapterRecord;
+  updatedAt?: string | null;
+  status?: number;
+}> {
+  if (typeof window === 'undefined') {
+    return { ok: false };
+  }
+  try {
+    const res = await fetch(
+      `/api/projects?novelId=${encodeURIComponent(novelId)}&chapterId=${encodeURIComponent(chapterId)}`,
+      { cache: 'no-store' }
+    );
+    if (!res.ok) {
+      return { ok: false, status: res.status };
+    }
+    const data = await res.json().catch(() => null);
+    if (!data?.ok || !data?.chapter) {
+      return { ok: false, status: res.status };
+    }
+    if (typeof data.updatedAt === 'string') {
+      defaultProjectRepository.lastKnownDiskUpdatedAt = data.updatedAt;
+    }
+    return {
+      ok: true,
+      chapter: data.chapter as ChapterRecord,
+      updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : null,
+      status: res.status,
+    };
+  } catch {
+    return { ok: false };
+  }
 }

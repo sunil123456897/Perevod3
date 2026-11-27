@@ -4,5 +4,11 @@ coverage/
 .DS_Store
 *.log
 *.tsbuildinfo
+*.tmp.*
 .env*
 !.env.example
+__pycache__/
+*.pyc
+data/studio.db
+data/studio.db-wal
+data/studio.db-shm

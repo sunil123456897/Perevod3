@@ -1,15 +1,17 @@
-import {
-  getDefaultRulesForGenre,
-  type CanonicalGlossary,
-  type ScoutedTerm,
-  type GenrePreset,
-  type ProseTone,
-  type LintRuleId,
-  type GlossaryTermMeta,
-  type HeroStateLedger,
-  type CsiCulturalNote,
-  type DitingQualityReport,
-} from './qa-linter.ts';
+import { getDefaultRulesForGenre } from './qa-linter.ts';
+import type {
+  ChapterQaSummary,
+  ChapterStatus,
+  CanonicalGlossary,
+  ScoutedTerm,
+  GenrePreset,
+  ProseTone,
+  LintRuleId,
+  GlossaryTermMeta,
+  HeroStateLedger,
+  CsiCulturalNote,
+  DitingQualityReport,
+} from './pipeline-types.ts';
 
 export interface ChapterVersionSnapshot {
   id: string;
@@ -35,6 +37,13 @@ export interface ChapterRecord {
   csiNotes?: CsiCulturalNote[]; // CHORUS C3 cultural footnotes & rationales
   ditingReport?: DitingQualityReport; // DITING 6-dimension narrative & cultural evaluation
   versionHistory?: ChapterVersionSnapshot[];
+  status?: ChapterStatus;
+  quarantineReason?: string;
+  degradedWarnings?: string[];
+  lastEngineUsed?: string;
+  qaSummary?: ChapterQaSummary;
+  pacingMode?: string;
+  revision?: number;
   scouted: boolean;
   translated: boolean;
   edited: boolean;

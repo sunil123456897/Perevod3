@@ -8,19 +8,58 @@ import {
   GitMerge,
   ShieldCheck,
   BookOpen,
-  Sparkles,
   FileCode2,
 } from 'lucide-react';
 import {
   buildRulateExportPackages,
-  buildEpub3Archive,
-  buildChaptersZipArchive,
   GENRE_PRESET_LABELS,
   type RulateExportPackage,
-  type HeroStateLedger,
-  type GenrePreset,
 } from '@/lib/qa-linter';
+import {
+  buildEpub3Archive,
+  createStoredZipArchive,
+} from '@/lib/epub-archive';
+import type { HeroStateLedger, GenrePreset } from '@/lib/pipeline-types';
 import type { ChapterRecord } from '@/lib/seed-data';
+
+function sanitizeArchiveSlug(name: string): string {
+  const cleaned = (name || 'novel')
+    .toLowerCase()
+    .replace(/[^a-z0-9а-яё_-]+/gi, '_')
+    .replace(/^_+|_+$/g, '');
+  return cleaned || 'novel';
+}
+
+function buildChapterZipFilename(
+  ch: { number: number; subPart?: string },
+  usedNames: Set<string>
+): string {
+  const padded = String(Math.max(0, Math.floor(ch.number))).padStart(4, '0');
+  let suffix = '';
+  if (ch.subPart && ch.subPart.trim()) {
+    const rawSub = ch.subPart.trim();
+    const prefixWithDot = `${Math.floor(ch.number)}.`;
+    const subOnly = rawSub.startsWith(prefixWithDot)
+      ? rawSub.slice(prefixWithDot.length)
+      : rawSub.includes('.')
+      ? rawSub.split('.').slice(1).join('_')
+      : rawSub;
+    const cleanSub = subOnly.replace(/[^a-z0-9_-]+/gi, '_').replace(/^_+|_+$/g, '');
+    if (cleanSub) suffix = `_${cleanSub}`;
+  } else if (ch.number % 1 !== 0) {
+    const frac = String(ch.number).split('.')[1]?.replace(/[^a-z0-9_-]+/gi, '_');
+    if (frac) suffix = `_${frac}`;
+  }
+
+  let candidate = `Chapter_${padded}${suffix}.txt`;
+  let dedup = 2;
+  while (usedNames.has(candidate)) {
+    candidate = `Chapter_${padded}${suffix}_dup${dedup}.txt`;
+    dedup += 1;
+  }
+  usedNames.add(candidate);
+  return candidate;
+}
 
 interface RulateExportViewProps {
   novelName: string;
@@ -39,7 +78,7 @@ export default function RulateExportView({
 }: RulateExportViewProps) {
   const [subTab, setSubTab] = useState<'rulate' | 'epub' | 'merge'>('rulate');
   const [batchSize, setBatchSize] = useState(20);
-  const [onlyVerified, setOnlyVerified] = useState(false);
+  const [includeUnverified, setIncludeUnverified] = useState(false);
   const [selectedBatchIdx, setSelectedBatchIdx] = useState(0);
   const [copied, setCopied] = useState(false);
 
@@ -58,51 +97,87 @@ export default function RulateExportView({
   const [targetMergeNum, setTargetMergeNum] = useState(7);
   const [mergeSuccessMsg, setMergeSuccessMsg] = useState('');
 
-  const exportableChapters = useMemo(() => {
-    return chapters
-      .filter((c) => c.translated && c.rusText.trim().length > 0)
-      .filter((c) => (onlyVerified ? c.verified : true))
+  const {
+    exportableChapters,
+    quarantinedCount,
+    unverifiedExcludedCount,
+  } = useMemo(() => {
+    const translatedReady = chapters.filter(
+      (c) => c.translated && c.rusText.trim().length > 0
+    );
+    const qCount = translatedReady.filter((c) => c.status === 'quarantined').length;
+    const unverifiedCount = translatedReady.filter(
+      (c) => c.status !== 'quarantined' && !c.verified
+    ).length;
+
+    const filtered = translatedReady
+      .filter((c) => c.status !== 'quarantined')
+      .filter((c) => (includeUnverified ? true : Boolean(c.verified)))
+      .sort((a, b) => {
+        if (a.number !== b.number) return a.number - b.number;
+        return (a.subPart || '').localeCompare(b.subPart || '');
+      })
       .map((c) => ({
         number: c.number,
-        titleRus: c.titleRus || `Глава ${c.number}`,
+        subPart: c.subPart,
+        titleRus: c.titleRus || `Глава ${c.subPart || c.number}`,
         titleEng: c.titleEng,
         contentRus: c.rusText,
         summaryRus: c.summary,
         csiNotes: includeCsiFootnotes ? c.csiNotes : undefined,
       }));
-  }, [chapters, onlyVerified, includeCsiFootnotes]);
+
+    return {
+      exportableChapters: filtered,
+      quarantinedCount: qCount,
+      unverifiedExcludedCount: unverifiedCount,
+    };
+  }, [chapters, includeUnverified, includeCsiFootnotes]);
 
   const packages: RulateExportPackage[] = useMemo(
     () => buildRulateExportPackages(novelName, exportableChapters, batchSize),
     [novelName, exportableChapters, batchSize]
   );
 
-  const epubPackage = useMemo(() => {
-    if (exportableChapters.length === 0) return null;
-    return buildEpub3Archive({
-      novelTitle: novelName,
-      author: epubAuthor,
-      translator: epubTranslator,
-      genreLabel: GENRE_PRESET_LABELS[genrePreset]?.title || 'Сянься / ЛитРПГ',
-      heroLedger: includeHeroPassport ? heroLedger : undefined,
-      chapters: exportableChapters,
-    });
-  }, [
-    novelName,
-    epubAuthor,
-    epubTranslator,
-    genrePreset,
-    includeHeroPassport,
-    heroLedger,
-    exportableChapters,
-  ]);
+  const totalExportWords = useMemo(
+    () =>
+      exportableChapters.reduce((sum, ch) => {
+        const trimmed = ch.contentRus.trim();
+        return sum + (trimmed ? trimmed.split(/\s+/).length : 0);
+      }, 0),
+    [exportableChapters]
+  );
 
-  const chaptersZipPackage = useMemo(() => {
-    if (exportableChapters.length === 0) return null;
-    return buildChaptersZipArchive(novelName, exportableChapters, 'txt');
-  }, [novelName, exportableChapters]);
+  const estimatedTextKb = useMemo(() => {
+    const totalChars = exportableChapters.reduce(
+      (sum, ch) => sum + ch.contentRus.length + ch.titleRus.length + 128,
+      0
+    );
+    return Math.max(1, Math.round(totalChars / 1024));
+  }, [exportableChapters]);
+
+  const epubFilenamePreview = useMemo(
+    () => `${sanitizeArchiveSlug(novelName)}.epub`,
+    [novelName]
+  );
 
   const activePackage = packages[selectedBatchIdx] || packages[0] || null;
+
+  const triggerBinaryDownload = (
+    bytes: Uint8Array,
+    filename: string,
+    mimeType: string
+  ) => {
+    const copy = new Uint8Array(bytes.byteLength);
+    copy.set(bytes);
+    const blob = new Blob([copy.buffer], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const handleDownloadPackage = (pkg: RulateExportPackage) => {
     const blob = new Blob([pkg.content], { type: 'text/markdown;charset=utf-8' });
@@ -114,30 +189,81 @@ export default function RulateExportView({
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadAllRulateZip = () => {
+    if (packages.length === 0) return;
+    const encoder = new TextEncoder();
+    const files = packages.map((pkg) => ({
+      path: pkg.filename,
+      data: encoder.encode(pkg.content),
+    }));
+    const zipBytes = createStoredZipArchive(files);
+    const slug = sanitizeArchiveSlug(novelName);
+    triggerBinaryDownload(
+      zipBytes,
+      `${slug}_rulate_all_${packages.length}_volumes.zip`,
+      'application/zip'
+    );
+  };
+
   const handleDownloadChaptersZip = () => {
-    if (!chaptersZipPackage) return;
-    const blob = new Blob([chaptersZipPackage.bytes.buffer as ArrayBuffer], {
-      type: 'application/zip',
+    if (exportableChapters.length === 0) return;
+    const encoder = new TextEncoder();
+    const usedNames = new Set<string>();
+    const manifestChapters: Array<{
+      number: number;
+      subPart?: string;
+      filename: string;
+      titleRus: string;
+    }> = [];
+
+    const files = exportableChapters.map((ch) => {
+      const filename = buildChapterZipFilename(ch, usedNames);
+      manifestChapters.push({
+        number: ch.number,
+        subPart: ch.subPart,
+        filename,
+        titleRus: ch.titleRus,
+      });
+      const normalizedBody = ch.contentRus.replace(/\r\n/g, '\n').trim();
+      const textPayload = `${ch.titleRus}\n\n${normalizedBody}\n`;
+      return {
+        path: filename,
+        data: encoder.encode(textPayload),
+      };
     });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = chaptersZipPackage.filename;
-    a.click();
-    URL.revokeObjectURL(url);
+
+    files.unshift({
+      path: '00_MANIFEST.json',
+      data: encoder.encode(
+        JSON.stringify(
+          {
+            novelTitle: novelName,
+            chapterCount: exportableChapters.length,
+            exportedAt: new Date().toISOString(),
+            chapters: manifestChapters,
+          },
+          null,
+          2
+        )
+      ),
+    });
+
+    const zipBytes = createStoredZipArchive(files);
+    const slug = sanitizeArchiveSlug(novelName);
+    triggerBinaryDownload(zipBytes, `${slug}_chapters.zip`, 'application/zip');
   };
 
   const handleDownloadEpub = () => {
-    if (!epubPackage) return;
-    const blob = new Blob([epubPackage.bytes.buffer as ArrayBuffer], {
-      type: 'application/epub+zip',
+    if (exportableChapters.length === 0) return;
+    const built = buildEpub3Archive({
+      novelTitle: novelName,
+      author: epubAuthor,
+      translator: epubTranslator,
+      genreLabel: GENRE_PRESET_LABELS[genrePreset]?.title || 'Сянься / ЛитРПГ',
+      heroLedger: includeHeroPassport ? heroLedger : undefined,
+      chapters: exportableChapters,
     });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = epubPackage.filename;
-    a.click();
-    URL.revokeObjectURL(url);
+    triggerBinaryDownload(built.bytes, built.filename, 'application/epub+zip');
   };
 
   const handleCopyContent = async () => {
@@ -199,18 +325,30 @@ export default function RulateExportView({
 
         <div className="flex flex-wrap items-center gap-3">
           {subTab !== 'merge' && (
-            <label className="inline-flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={onlyVerified}
-                onChange={(e) => {
-                  setOnlyVerified(e.target.checked);
-                  setSelectedBatchIdx(0);
-                }}
-                className="rounded border-slate-700 bg-slate-950 text-amber-500"
-              />
-              Только проверенные QA
-            </label>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <label className="inline-flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includeUnverified}
+                  onChange={(e) => {
+                    setIncludeUnverified(e.target.checked);
+                    setSelectedBatchIdx(0);
+                  }}
+                  className="rounded border-slate-700 bg-slate-950 text-amber-500"
+                />
+                Включать непроверенные
+              </label>
+              {unverifiedExcludedCount > 0 && !includeUnverified && (
+                <span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-mono tabular-nums text-amber-300">
+                  скрыто непроверенных: {unverifiedExcludedCount}
+                </span>
+              )}
+              {quarantinedCount > 0 && (
+                <span className="rounded border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 text-[11px] font-mono tabular-nums text-rose-300">
+                  в карантине: {quarantinedCount}
+                </span>
+              )}
+            </div>
           )}
 
           {subTab === 'rulate' && (
@@ -229,26 +367,37 @@ export default function RulateExportView({
             </select>
           )}
 
-          {chaptersZipPackage && (
+          {subTab === 'rulate' && packages.length > 0 && (
             <button
               type="button"
-              onClick={handleDownloadChaptersZip}
-              title="Каждая глава отдельным файлом Chapter_0001.txt внутри ZIP (для Ranobelib, Author.Today, Boosty)"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3.5 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/25 transition-colors"
+              onClick={handleDownloadAllRulateZip}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3.5 py-2 text-xs font-semibold text-slate-950 hover:bg-amber-400 transition-colors"
             >
-              <Download className="h-3.5 w-3.5 text-emerald-400" />
-              ZIP по главам · Ranobelib/AT ({chaptersZipPackage.chapterCount} ф.)
+              <Download className="h-3.5 w-3.5" />
+              Скачать все тома Rulate единым .zip ({packages.length})
             </button>
           )}
 
-          {epubPackage && subTab !== 'epub' && (
+          {exportableChapters.length > 0 && (
+            <button
+              type="button"
+              onClick={handleDownloadChaptersZip}
+              title="Каждая глава отдельным файлом Chapter_0001.txt (или Chapter_0007_1.txt для дробных) внутри ZIP"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3.5 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/25 transition-colors tabular-nums"
+            >
+              <Download className="h-3.5 w-3.5 text-emerald-400" />
+              ZIP по главам · Ranobelib/AT ({exportableChapters.length} ф.)
+            </button>
+          )}
+
+          {exportableChapters.length > 0 && subTab !== 'epub' && (
             <button
               type="button"
               onClick={handleDownloadEpub}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 px-3.5 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-500/25 transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 px-3.5 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-500/25 transition-colors tabular-nums"
             >
               <BookOpen className="h-3.5 w-3.5 text-amber-400" />
-              Скачать .epub ({(epubPackage.byteSize / 1024).toFixed(1)} КБ)
+              Скачать .epub ({exportableChapters.length} гл.)
             </button>
           )}
         </div>
@@ -256,10 +405,15 @@ export default function RulateExportView({
 
       {subTab === 'rulate' ? (
         packages.length === 0 ? (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/30 py-12 text-center">
+          <div className="rounded-xl border border-slate-800 bg-slate-900/30 py-12 text-center space-y-1">
             <p className="text-sm font-medium text-slate-300">
-              Нет переведённых глав для экспорта
+              Нет глав, готовых к экспорту
             </p>
+            {(unverifiedExcludedCount > 0 || quarantinedCount > 0) && (
+              <p className="text-xs text-slate-400 tabular-nums">
+                Исключено непроверенных: {unverifiedExcludedCount} · в карантине: {quarantinedCount}
+              </p>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
@@ -351,11 +505,16 @@ export default function RulateExportView({
           </div>
         )
       ) : subTab === 'epub' ? (
-        !epubPackage ? (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/30 py-12 text-center">
+        exportableChapters.length === 0 ? (
+          <div className="rounded-xl border border-slate-800 bg-slate-900/30 py-12 text-center space-y-1">
             <p className="text-sm font-medium text-slate-300">
-              Нет переведённых глав для компиляции книги EPUB 3
+              Нет глав, готовых для компиляции книги EPUB 3
             </p>
+            {(unverifiedExcludedCount > 0 || quarantinedCount > 0) && (
+              <p className="text-xs text-slate-400 tabular-nums">
+                Исключено непроверенных: {unverifiedExcludedCount} · в карантине: {quarantinedCount}
+              </p>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
@@ -371,7 +530,7 @@ export default function RulateExportView({
                   </h3>
                 </div>
                 <span className="rounded-md border border-emerald-500/30 bg-emerald-950/30 px-2.5 py-1 font-mono text-xs tabular-nums text-emerald-300">
-                  {(epubPackage.byteSize / 1024).toFixed(1)} КБ
+                  ~{estimatedTextKb} КБ текст
                 </span>
               </div>
 
@@ -427,7 +586,7 @@ export default function RulateExportView({
 
               <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-3">
                 <div className="text-xs text-slate-400 font-mono tabular-nums">
-                  {epubPackage.chapterCount} глав · UTF-8 XHTML
+                  {exportableChapters.length} гл. · {totalExportWords.toLocaleString('ru-RU')} сл.
                 </div>
                 <button
                   type="button"
@@ -435,7 +594,7 @@ export default function RulateExportView({
                   className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-xs font-semibold text-slate-950 hover:bg-amber-400 transition-colors"
                 >
                   <Download className="h-4 w-4" />
-                  Скачать {epubPackage.filename}
+                  Скачать {epubFilenamePreview}
                 </button>
               </div>
             </div>
@@ -467,7 +626,7 @@ export default function RulateExportView({
                   <div className="text-slate-300">├── OEBPS/styles.css</div>
                   <div className="text-slate-300">├── OEBPS/title.xhtml (Паспорт)</div>
                   <div className="text-emerald-300">
-                    └── OEBPS/chapter_1..{epubPackage.chapterCount}.xhtml
+                    └── OEBPS/chapter_1..{exportableChapters.length}.xhtml
                   </div>
                 </div>
 
@@ -475,7 +634,7 @@ export default function RulateExportView({
                   <div className="text-[11px] uppercase tracking-wider text-slate-400">
                     Предпросмотр рамки <code className="font-mono text-amber-300">.system-box</code> в читалке
                   </div>
-                  <div className="rounded-md border border-slate-600 border-l-4 border-l-amber-500 bg-slate-900 px-3 py-2 font-mono text-[11px] text-slate-200">
+                  <div className="rounded-md border border-amber-500/40 bg-slate-900 px-3 py-2 font-mono text-[11px] text-slate-200">
                     [Система: Обнаружен прорыв на 3-й уровень Конденсации Ци!]
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed">
@@ -491,12 +650,12 @@ export default function RulateExportView({
                 <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950 p-3 space-y-1.5 text-xs">
                   {exportableChapters.map((ch) => (
                     <div
-                      key={ch.number}
+                      key={`${ch.number}-${ch.subPart || ''}`}
                       className="flex items-center justify-between gap-2 border-b border-slate-900 pb-1 last:border-0"
                     >
                       <span className="text-slate-200 truncate">
-                        <strong className="font-mono text-amber-400 mr-2">
-                          #{ch.number}
+                        <strong className="font-mono text-amber-400 mr-2 tabular-nums">
+                          #{ch.subPart || ch.number}
                         </strong>
                         {ch.titleRus}
                       </span>

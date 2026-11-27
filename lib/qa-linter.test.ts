@@ -12,17 +12,10 @@ import {
   alignChapterParagraphs,
   detectTautologies,
   computeWordDiff,
-  previewAndApplyCanonRipple,
   surgicalRepairDriftedParagraphs,
   updateHeroStateLedgerFromChapter,
-  batchLookaheadScoutChapters,
   computeChapterPipelineProgress,
   runAdditionBySubtractionScout,
-  buildDelTAContextPacket,
-  extractCsiCulturalNotes,
-  evaluateDitingQuality,
-  SlidingWindowPriorityQueue,
-  buildEpub3Archive,
   COLAB_L4_MODEL_CATALOG,
   normalizeColabEndpointUrl,
   extractResilientJsonFromLlm,
@@ -30,64 +23,95 @@ import {
   XIANXIA_ANTI_CALQUE_DICTIONARY,
   AI_SLOP_PHRASES,
   repairPunctuationArtifacts,
-  sanitizeRawChapterText,
-  parseEpubArchiveToChapters,
   applySurgicalPatches,
-  buildChaptersZipArchive,
-  finalizeAndVerifyChapter,
-  extractFlawedParagraphsPayload,
-  mergeRepairedParagraphsByIndex,
-  createPipelineLlmPort,
-  FallbackChainAdapter,
-  DeterministicCanonAdapter,
-  AntigravityCliAdapter,
-  parseAgyStreamJsonOutput,
   AGY_CLI_MODEL_CATALOG,
-  buildTranslatePass1Prompts,
-  buildSurgicalCriticPass2Prompts,
-  buildSelfRepairPrompts,
-  buildInflectedRussianForms,
+  computeParagraphHashAnchor,
+} from './qa-linter.ts';
+import {
+  previewAndApplyCanonRipple,
+  batchLookaheadScoutChapters,
   computeChapterGlossaryCoverage,
   approveScoutedTermInVault,
   autoApprovePendingTermsInVault,
   upsertCanonTermInVault,
   removeCanonTermFromVault,
   applyCanonRippleToNovel,
+  lintGlossaryVault,
+  buildSocialRegisterPromptBlock,
+  deriveDefaultSpeechVector,
+  buildCharacterVoicePromptBlock,
+  type CanonVaultState,
+} from './canon-glossary-vault.ts';
+import {
+  buildInflectedRussianForms,
+  splitCompoundRussianTerm,
+} from './russian-morphology.ts';
+import {
+  buildDelTAContextPacket,
+  extractCsiCulturalNotes,
+  evaluateDitingQuality,
+  SlidingWindowPriorityQueue,
+} from './delta-diting.ts';
+import {
+  buildEpub3Archive,
+  sanitizeRawChapterText,
+  parseEpubArchiveToChapters,
+  buildChaptersZipArchive,
+} from './epub-archive.ts';
+import {
+  finalizeAndVerifyChapter,
+  extractFlawedParagraphsPayload,
+  mergeRepairedParagraphsByIndex,
+  verifyAndRollbackStylistPass,
+} from './chapter-verifier.ts';
+import {
+  createPipelineLlmPort,
+  FallbackChainAdapter,
+  DeterministicCanonAdapter,
+  AntigravityCliAdapter,
+  parseAgyStreamJsonOutput,
+  buildTranslatePass1Prompts,
+  buildSurgicalCriticPass2Prompts,
+  buildSelfRepairPrompts,
+  buildBlindStylistPass3Prompts,
+  type LlmInferencePort,
+} from './llm-inference-port.ts';
+import {
+  annotateSceneDialogueAndZeroPronouns,
+  classifyScenePacingMode,
+  selectContrastiveFewShotTriplets,
+  capStylisticDirectivesPerParagraph,
+  type StylisticSpanDirective,
+} from './scene-analysis.ts';
+import {
   autoMergeSplitChaptersInNovel,
   prepareGlossaryStopGateTerms,
   runPipelineBatchOnNovel,
   InMemoryPipelineTransportAdapter,
+} from './pipeline-run-engine.ts';
+import {
   InMemoryProjectStorageAdapter,
   serializeProjectBundle,
   deserializeProjectBundle,
-  splitCompoundRussianTerm,
-  lintGlossaryVault,
-  buildSocialRegisterPromptBlock,
-  computeParagraphHashAnchor,
-  annotateSceneDialogueAndZeroPronouns,
-  detectTranslationDegenerationAndDuplicates,
-  evaluateLorebookStateMachine,
-  sampleChaptersStratifiedMonteCarlo,
+  type ProjectRepository,
+} from './storage-idb.ts';
+import {
   parseRubyAndGikunMarkup,
   normalizeKoreanOneLineParagraphs,
   chunkChapterWithSceneAndDialogueLocks,
-  deriveDefaultSpeechVector,
-  buildCharacterVoicePromptBlock,
-  classifyScenePacingMode,
-  selectContrastiveFewShotTriplets,
-  capStylisticDirectivesPerParagraph,
-  buildBlindStylistPass3Prompts,
-  verifyAndRollbackStylistPass,
-  type StylisticSpanDirective,
-  type SocialRegisterEdge,
+} from './ruby-korean-parser.ts';
+import {
+  detectTranslationDegenerationAndDuplicates,
+  evaluateLorebookStateMachine,
+  sampleChaptersStratifiedMonteCarlo,
   type LorebookEntry,
-  type ProjectRepository,
-  type LlmInferencePort,
-  type CanonicalGlossary,
-  type GlossaryTermMeta,
-  type CanonVaultState,
-  type ScoutedTerm,
 } from './qa-linter.ts';
+import type {
+  SocialRegisterEdge,
+  CanonicalGlossary,
+  GlossaryTermMeta,
+  ScoutedTerm,
+} from './pipeline-types.ts';
 import type { NovelProject } from './seed-data.ts';
 
 const sampleGlossary: CanonicalGlossary = {
@@ -1853,13 +1877,36 @@ test('AntigravityCliAdapter routes Pass 1 to gemini-3.8-flash-high and Pass 2 Cr
   ].join('\n');
   assert.equal(parseAgyStreamJsonOutput(ndjsonSample), '{"patches":[]}');
 
-  // 5. Verify createPipelineLlmPort wires AntigravityCliAdapter first when provider === 'antigravity_cli'
-  const port = createPipelineLlmPort({
-    provider: 'antigravity_cli',
-    modelId: 'gemini-3.8-flash-high',
-    criticModelId: 'gemini-4-argon-medium',
-  }) as FallbackChainAdapter;
-  assert.ok(port.adapters[0] instanceof AntigravityCliAdapter);
+  // 5. Verify createPipelineLlmPort keeps AntigravityCliAdapter disabled by default (opt-in ENABLE_CLIENT_AGY_CLI=1)
+  const prevEnableAgy = process.env.ENABLE_CLIENT_AGY_CLI;
+  const prevDisableAgy = process.env.DISABLE_CLIENT_AGY_CLI;
+  try {
+    delete process.env.ENABLE_CLIENT_AGY_CLI;
+    delete process.env.DISABLE_CLIENT_AGY_CLI;
+    const blockedPort = createPipelineLlmPort({
+      provider: 'antigravity_cli',
+      modelId: 'gemini-3.8-flash-high',
+      criticModelId: 'gemini-4-argon-medium',
+    }) as FallbackChainAdapter;
+    assert.equal(
+      blockedPort.adapters.some((a) => a instanceof AntigravityCliAdapter),
+      false,
+      'antigravity_cli must stay disabled when ENABLE_CLIENT_AGY_CLI !== "1"'
+    );
+
+    process.env.ENABLE_CLIENT_AGY_CLI = '1';
+    const port = createPipelineLlmPort({
+      provider: 'antigravity_cli',
+      modelId: 'gemini-3.8-flash-high',
+      criticModelId: 'gemini-4-argon-medium',
+    }) as FallbackChainAdapter;
+    assert.ok(port.adapters[0] instanceof AntigravityCliAdapter);
+  } finally {
+    if (prevEnableAgy !== undefined) process.env.ENABLE_CLIENT_AGY_CLI = prevEnableAgy;
+    else delete process.env.ENABLE_CLIENT_AGY_CLI;
+    if (prevDisableAgy !== undefined) process.env.DISABLE_CLIENT_AGY_CLI = prevDisableAgy;
+    else delete process.env.DISABLE_CLIENT_AGY_CLI;
+  }
 });
 
 test('Wave 3: Step 0.1 parseRubyAndGikunMarkup parses all 6 categories (reading_aid, bouten, nomenclature, litrpg_term, deictic, subtext)', () => {

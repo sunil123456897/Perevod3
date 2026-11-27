@@ -1,37 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
 import {
-  parseDiskDatabasePayload,
-  serializeDiskDatabasePayload,
-} from '@/lib/storage-idb';
+  getStudioSqliteDb,
+  readSqliteDatabaseAsync,
+  writeSqliteDatabaseAtomicAsync,
+  DiskDatabaseConflictError,
+} from '@/lib/sqlite-db-server';
+import { verifyStudioApiRequest } from '@/lib/api-security';
+import type { ChapterRecord } from '@/lib/seed-data';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-const DB_FILE_PATH = path.join(DATA_DIR, 'novels_db.json');
-const TMP_FILE_PATH = path.join(DATA_DIR, 'novels_db.json.tmp');
-
-export async function GET() {
-  try {
-    const raw = await fs.readFile(DB_FILE_PATH, 'utf-8');
-    const parsed = parseDiskDatabasePayload(raw);
-    if (Array.isArray(parsed.novels) && parsed.novels.length > 0) {
-      return NextResponse.json({
-        ok: true,
-        novels: parsed.novels,
-        updatedAt: parsed.updatedAt || null,
-        diskPath: DB_FILE_PATH,
-      });
-    }
-    return NextResponse.json({ ok: true, novels: [], diskPath: DB_FILE_PATH });
-  } catch {
-    return NextResponse.json({ ok: true, novels: [], diskPath: DB_FILE_PATH });
+export async function GET(req: NextRequest) {
+  const auth = verifyStudioApiRequest(req, { requireMutationOrigin: false });
+  if (!auth.ok) {
+    return NextResponse.json(
+      { ok: false, error: auth.error || 'Unauthorized' },
+      { status: auth.status }
+    );
   }
+
+  const { searchParams } = new URL(req.url);
+  const novelId = (searchParams.get('novelId') || '').trim();
+  const chapterId = (searchParams.get('chapterId') || '').trim();
+
+  if (novelId && chapterId) {
+    const found = getStudioSqliteDb().getChapterById(novelId, chapterId);
+    if (!found) {
+      return NextResponse.json(
+        { ok: false, error: `Глава ${chapterId} в новелле ${novelId} не найдена` },
+        { status: 404 }
+      );
+    }
+    return NextResponse.json({
+      ok: true,
+      chapter: found.chapter,
+      updatedAt: found.updatedAt,
+    });
+  }
+
+  const result = await readSqliteDatabaseAsync();
+  return NextResponse.json({
+    ok: true,
+    novels: result.novels,
+    updatedAt: result.updatedAt,
+    diskPath: result.diskPath,
+  });
 }
 
 export async function POST(req: NextRequest) {
+  const auth = verifyStudioApiRequest(req);
+  if (!auth.ok) {
+    return NextResponse.json(
+      { ok: false, error: auth.error || 'Unauthorized' },
+      { status: auth.status }
+    );
+  }
+
   try {
     const body = await req.json();
     const novels = body?.novels;
+    const baseUpdatedAt =
+      typeof body?.baseUpdatedAt === 'string' ? body.baseUpdatedAt : null;
+
     if (!Array.isArray(novels)) {
       return NextResponse.json(
         { error: 'Ожидался массив проектов novels[]' },
@@ -39,20 +67,107 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await fs.mkdir(DATA_DIR, { recursive: true });
-    const payload = serializeDiskDatabasePayload(novels);
+    const saved = await writeSqliteDatabaseAtomicAsync(novels, { baseUpdatedAt });
+    return NextResponse.json({
+      ok: true,
+      savedCount: saved.savedCount,
+      updatedAt: saved.updatedAt,
+      diskPath: saved.diskPath,
+    });
+  } catch (err: unknown) {
+    if (err instanceof DiskDatabaseConflictError) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: 'DISK_DB_CONFLICT',
+          diskUpdatedAt: err.diskUpdatedAt,
+          error:
+            'База студии на диске была обновлёна внешним процессом (фоновой задачей или CLI-раннером). Перезапись отменена для защиты прогресса.',
+        },
+        { status: 409 }
+      );
+    }
+    const msg = err instanceof Error ? err.message : 'Unknown disk write error';
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
 
-    // Atomic crash-safe write (tmp -> rename, ported from Perevod_Ready checkpoint.py)
-    await fs.writeFile(TMP_FILE_PATH, payload, 'utf-8');
-    await fs.rename(TMP_FILE_PATH, DB_FILE_PATH);
+export async function PATCH(req: NextRequest) {
+  const auth = verifyStudioApiRequest(req);
+  if (!auth.ok) {
+    return NextResponse.json(
+      { ok: false, error: auth.error || 'Unauthorized' },
+      { status: auth.status }
+    );
+  }
+
+  try {
+    const body = await req.json();
+    const action = body?.action;
+    const novelId = typeof body?.novelId === 'string' ? body.novelId.trim() : '';
+    const chapterId = typeof body?.chapterId === 'string' ? body.chapterId.trim() : '';
+    const chapterPatch = body?.chapterPatch as Partial<ChapterRecord> | undefined;
+    const expectedRevision =
+      typeof body?.expectedRevision === 'number' && Number.isFinite(body.expectedRevision)
+        ? body.expectedRevision
+        : undefined;
+
+    if (
+      action !== 'patch_chapter' ||
+      !novelId ||
+      !chapterId ||
+      !chapterPatch ||
+      typeof chapterPatch !== 'object' ||
+      Array.isArray(chapterPatch)
+    ) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Ожидались action: "patch_chapter", novelId, chapterId и объект chapterPatch.',
+        },
+        { status: 400 }
+      );
+    }
+
+    const sanitizedPatch: Partial<ChapterRecord> = { ...chapterPatch };
+    delete sanitizedPatch.revision;
+
+    const result = getStudioSqliteDb().patchChapterAtomic(
+      novelId,
+      chapterId,
+      (current) => ({
+        ...current,
+        ...sanitizedPatch,
+        id: current.id,
+      }),
+      {
+        expectedRevision,
+        syncJsonMirror: 'debounced',
+      }
+    );
 
     return NextResponse.json({
       ok: true,
-      savedCount: novels.length,
-      diskPath: DB_FILE_PATH,
+      chapter: result.chapter,
+      revision: result.revision,
+      updatedAt: result.updatedAt,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Unknown disk write error';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    if (err instanceof DiskDatabaseConflictError) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: 'DISK_DB_CONFLICT',
+          diskUpdatedAt: err.diskUpdatedAt,
+          expectedRevision: err.expectedRevision,
+          currentRevision: err.currentRevision,
+          error: err.message,
+        },
+        { status: 409 }
+      );
+    }
+    const msg = err instanceof Error ? err.message : 'Unknown chapter patch error';
+    const status = /not found/i.test(msg) ? 404 : 500;
+    return NextResponse.json({ ok: false, error: msg }, { status });
   }
 }

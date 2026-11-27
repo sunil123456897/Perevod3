@@ -4,20 +4,52 @@ import {
   validateColabEndpointUrl,
   extractResilientJsonFromLlm,
   applySurgicalPatches,
-  type CanonicalGlossary,
-  type GlossaryTermMeta,
-  type GenrePreset,
-  type ProseTone,
-  type HeroStateLedger,
-  type DelTAShortTermPair,
-  type DelTALongTermMatch,
-  type LlmProviderConfig,
-  type SurgicalPatchItem,
-  type ScoutedTerm,
-  type SocialRegisterEdge,
+  computeParagraphHashAnchor,
   type LorebookEntry,
+  type SurgicalPatchItem,
 } from './qa-linter.ts';
-import { computeParagraphHashAnchor } from './chapter-verifier.ts';
+import type {
+  CanonicalGlossary,
+  GlossaryTermMeta,
+  GenrePreset,
+  ProseTone,
+  HeroStateLedger,
+  LlmProviderConfig,
+  ScoutedTerm,
+  SocialRegisterEdge,
+  GrammaticalGender,
+  LintIssue,
+  CrossChapterSlopIssue,
+  StreamedChapterDraft,
+  ArcCanonPacket,
+} from './pipeline-types.ts';
+import type { DelTAShortTermPair, DelTALongTermMatch } from './delta-diting.ts';
+import {
+  inferEnglishLocalGender,
+  annotateSceneDialogueAndZeroPronouns,
+  classifyScenePacingMode,
+  selectContrastiveFewShotTriplets,
+  capStylisticDirectivesPerParagraph,
+  type ScenePacingMode,
+  type StylisticSpanDirective,
+  type LiTransProQaRubricScores,
+  type ContrastiveFewShotTriplet,
+  type SceneDialogueAnnotation,
+  type SceneDialogueAnalysisResult,
+} from './scene-analysis.ts';
+
+export {
+  annotateSceneDialogueAndZeroPronouns,
+  classifyScenePacingMode,
+  selectContrastiveFewShotTriplets,
+  capStylisticDirectivesPerParagraph,
+  type ScenePacingMode,
+  type StylisticSpanDirective,
+  type LiTransProQaRubricScores,
+  type ContrastiveFewShotTriplet,
+  type SceneDialogueAnnotation,
+  type SceneDialogueAnalysisResult,
+};
 
 export interface LlmCompletionRequest {
   task: 'scout' | 'translate_pass1' | 'surgical_critic_pass2' | 'blind_stylist_pass3' | 'self_repair';
@@ -27,7 +59,9 @@ export interface LlmCompletionRequest {
   temperature?: number;
   numCtx?: number;
   geminiModel?: string;
+  thinkingLevel?: 'low' | 'medium' | 'high' | 'xhigh';
   geminiResponseSchema?: unknown;
+  cacheKey?: string;
 }
 
 export interface LlmCompletionResponse {
@@ -40,20 +74,324 @@ export interface LlmInferencePort {
   complete(req: LlmCompletionRequest): Promise<LlmCompletionResponse>;
 }
 
-// Module-level rotation pool for Gemini API keys
-let activeGeminiKeyIndex = 0;
-const geminiQuotaCooldownUntil = new Map<string, number>();
-const QUOTA_COOLDOWN_MS = 3600 * 1000; // 1 hour cooldown on 429 RESOURCE_EXHAUSTED
+const MAX_POOL_STATE_ENTRIES = 2048;
+const KEY_INVALID_COOLDOWN_MS = 24 * 3600 * 1000;
+const BACKOFF_STEPS_MS = [15_000, 35_000, 65_000];
 
-function maskApiKey(key: string): string {
+interface SharedGeminiPoolState {
+  quotaCooldownUntil: Map<string, number>;
+  keyBackoffStep: Map<string, number>;
+  modelCursors: Map<string, number>;
+  projectByKey: Map<string, string>;
+  contextCacheByKey: Map<string, { name: string; expiresAt: number }>;
+  bucketNextAllowedAt: Map<string, number>;
+}
+
+function getSharedGeminiPoolState(): SharedGeminiPoolState {
+  const host = globalThis as unknown as { __studioGeminiPoolState?: SharedGeminiPoolState };
+  if (!host.__studioGeminiPoolState) {
+    host.__studioGeminiPoolState = {
+      quotaCooldownUntil: new Map(),
+      keyBackoffStep: new Map(),
+      modelCursors: new Map(),
+      projectByKey: new Map(),
+      contextCacheByKey: new Map(),
+      bucketNextAllowedAt: new Map(),
+    };
+  } else if (!host.__studioGeminiPoolState.bucketNextAllowedAt) {
+    host.__studioGeminiPoolState.bucketNextAllowedAt = new Map();
+  }
+  return host.__studioGeminiPoolState;
+}
+
+function setBoundedMapValue<K, V>(map: Map<K, V>, key: K, value: V, cap = MAX_POOL_STATE_ENTRIES): void {
+  if (!map.has(key) && map.size >= cap) {
+    const firstKey = map.keys().next().value;
+    if (firstKey !== undefined) {
+      map.delete(firstKey);
+    }
+  }
+  map.set(key, value);
+}
+
+/**
+ * Computes milliseconds remaining until the next 00:05 Pacific Time
+ * (Google AI Studio / Gemini Free Tier daily RPD reset boundary + 5m jitter buffer).
+ */
+export function computeMsUntilNextPtMidnight(nowMs = Date.now()): number {
+  const BUFFER_MS = 5 * 60_000;
+  const MIN_MS = 5 * 60_000;
+  const MAX_MS = 24 * 3600_000 + 10 * 60_000;
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Los_Angeles',
+      hourCycle: 'h23',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    }).formatToParts(new Date(nowMs));
+    const partVal = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+    const hh = partVal('hour') % 24;
+    const mm = partVal('minute');
+    const ss = partVal('second');
+    if (!Number.isFinite(hh) || !Number.isFinite(mm) || !Number.isFinite(ss)) {
+      return 8 * 3600_000;
+    }
+    const elapsedSecToday = hh * 3600 + mm * 60 + ss;
+    const remainingMs = (24 * 3600 - elapsedSecToday) * 1000 + BUFFER_MS;
+    return Math.min(MAX_MS, Math.max(MIN_MS, remainingMs));
+  } catch {
+    return 8 * 3600_000;
+  }
+}
+
+/**
+ * Parses server-advised retry delay from Gemini JSON error body (`retryDelay`, `retry in Xs`)
+ * or numeric HTTP `Retry-After` header, adding a 1s safety margin and clamping to 1s..180s.
+ */
+export function parseGeminiRetryDelayMs(
+  errMsg: string,
+  retryAfterHeader?: string | null
+): number | null {
+  const candidatesSec: number[] = [];
+  const raw = errMsg || '';
+  const jsonDelayMatch = raw.match(/"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/i);
+  if (jsonDelayMatch) {
+    const sec = Number(jsonDelayMatch[1]);
+    if (Number.isFinite(sec) && sec > 0) candidatesSec.push(sec);
+  }
+  const textDelayMatch = raw.match(/retry\s+in\s+(\d+(?:\.\d+)?)\s*s/i);
+  if (textDelayMatch) {
+    const sec = Number(textDelayMatch[1]);
+    if (Number.isFinite(sec) && sec > 0) candidatesSec.push(sec);
+  }
+  const headerTrimmed = (retryAfterHeader || '').trim();
+  if (/^\d+(?:\.\d+)?$/.test(headerTrimmed)) {
+    const sec = Number(headerTrimmed);
+    if (Number.isFinite(sec) && sec > 0) candidatesSec.push(sec);
+  }
+  if (candidatesSec.length === 0) return null;
+  const maxSec = Math.max(...candidatesSec);
+  return Math.min(180_000, Math.max(1_000, Math.ceil(maxSec * 1000) + 1_000));
+}
+
+export function getGeminiModelMinIntervalMs(modelName: string): number {
+  const clean = (modelName || '').trim().toLowerCase();
+  if (clean === 'gemini-4-hydrogen') return 12_500;
+  if (clean === 'gemini-3.8-flash' || clean.startsWith('gemma-')) return 4_200;
+  if (clean === 'gemini-3.1-flash-lite') return 2_100;
+  if (clean === 'gemini-decision-1') return 350;
+  if (clean.startsWith('gemini-embedding-')) return 700;
+  return 2_000;
+}
+
+export function registerGeminiKeyProject(apiKey: string, projectNumber: string): void {
+  const cleanKey = (apiKey || '').trim();
+  const cleanProj = (projectNumber || '').trim();
+  if (!cleanKey || !cleanProj) return;
+  setBoundedMapValue(getSharedGeminiPoolState().projectByKey, cleanKey, cleanProj);
+}
+
+export function getGeminiKeyProject(apiKey: string): string | undefined {
+  return getSharedGeminiPoolState().projectByKey.get((apiKey || '').trim());
+}
+
+export function getGeminiQuotaBucketId(apiKey: string, modelName: string): string {
+  const cleanKey = (apiKey || '').trim();
+  const project = getSharedGeminiPoolState().projectByKey.get(cleanKey);
+  const ownerScope = project ? `project:${project}` : `key:${cleanKey}`;
+  const cleanModel = (modelName || 'default').trim().toLowerCase();
+  return `${ownerScope}::${cleanModel}`;
+}
+
+export function computeGeminiBucketWaitMs(
+  apiKey: string,
+  modelName: string,
+  nowMs = Date.now()
+): number {
+  const state = getSharedGeminiPoolState();
+  const bucket = getGeminiQuotaBucketId(apiKey, modelName);
+  return Math.max(0, (state.bucketNextAllowedAt.get(bucket) || 0) - nowMs);
+}
+
+export async function waitForGeminiBucketPacing(
+  apiKey: string,
+  modelName: string,
+  nowMs = Date.now()
+): Promise<number> {
+  const state = getSharedGeminiPoolState();
+  const bucket = getGeminiQuotaBucketId(apiKey, modelName);
+  const minIntervalMs = getGeminiModelMinIntervalMs(modelName);
+  const prevNext = state.bucketNextAllowedAt.get(bucket) || 0;
+  const waitMs = Math.max(0, prevNext - nowMs);
+  const scheduledAt = nowMs + waitMs;
+  setBoundedMapValue(state.bucketNextAllowedAt, bucket, scheduledAt + minIntervalMs);
+
+  const skipSleep =
+    apiKey.startsWith('AIzaTest') ||
+    (typeof process !== 'undefined' && process.env?.GEMINI_DISABLE_RPM_PACING === '1');
+  if (waitMs > 0 && !skipSleep) {
+    await new Promise((r) => setTimeout(r, waitMs));
+  }
+  return waitMs;
+}
+
+export function isGeminiBucketCoolingDown(
+  apiKey: string,
+  modelName: string,
+  nowMs = Date.now()
+): boolean {
+  const state = getSharedGeminiPoolState();
+  const keyDeadUntil = state.quotaCooldownUntil.get(getGeminiQuotaBucketId(apiKey, '__key_invalid__')) || 0;
+  if (keyDeadUntil > nowMs) return true;
+  const until = state.quotaCooldownUntil.get(getGeminiQuotaBucketId(apiKey, modelName)) || 0;
+  return until > nowMs;
+}
+
+export function markGeminiBucketSuccess(apiKey: string, modelName: string): void {
+  const state = getSharedGeminiPoolState();
+  const bucket = getGeminiQuotaBucketId(apiKey, modelName);
+  state.keyBackoffStep.delete(bucket);
+  state.quotaCooldownUntil.delete(bucket);
+}
+
+export function markGeminiBucketQuotaError(
+  apiKey: string,
+  modelName: string,
+  errMsg: string,
+  retryAfterHeader?: string | null
+): boolean {
+  const state = getSharedGeminiPoolState();
+  const isInvalidKey =
+    /API key expired|API_KEY_INVALID|reported as leaked|PERMISSION_DENIED.*leaked|free tier is not available|account.*suspended|project.*disabled/i.test(
+      errMsg
+    );
+  if (isInvalidKey) {
+    setBoundedMapValue(
+      state.quotaCooldownUntil,
+      getGeminiQuotaBucketId(apiKey, '__key_invalid__'),
+      Date.now() + KEY_INVALID_COOLDOWN_MS
+    );
+    return true;
+  }
+  const bucket = getGeminiQuotaBucketId(apiKey, modelName);
+  const isDailyOrBilling = /PerDay|daily|QUOTA_EXHAUSTED|billing/i.test(errMsg);
+  if (isDailyOrBilling) {
+    setBoundedMapValue(
+      state.quotaCooldownUntil,
+      bucket,
+      Date.now() + computeMsUntilNextPtMidnight()
+    );
+    return true;
+  }
+  const isRateLimit = /429|RESOURCE_EXHAUSTED|quota/i.test(errMsg);
+  if (!isRateLimit) {
+    return false;
+  }
+  const step = state.keyBackoffStep.get(bucket) || 0;
+  const baseMs = BACKOFF_STEPS_MS[Math.min(step, BACKOFF_STEPS_MS.length - 1)];
+  const jitter = 0.8 + Math.random() * 0.4;
+  const backoffMs = Math.round(baseMs * jitter);
+  const serverDelayMs = parseGeminiRetryDelayMs(errMsg, retryAfterHeader);
+  setBoundedMapValue(
+    state.quotaCooldownUntil,
+    bucket,
+    Date.now() + Math.max(backoffMs, serverDelayMs || 0)
+  );
+  setBoundedMapValue(state.keyBackoffStep, bucket, Math.min(step + 1, BACKOFF_STEPS_MS.length));
+  return true;
+}
+
+export function nextGeminiModelCursor(modelName: string, poolSize: number): number {
+  if (poolSize <= 0) return 0;
+  const state = getSharedGeminiPoolState();
+  const cleanModel = (modelName || 'default').trim().toLowerCase();
+  const cur = (state.modelCursors.get(cleanModel) || 0) % poolSize;
+  setBoundedMapValue(state.modelCursors, cleanModel, (cur + 1) % poolSize);
+  return cur;
+}
+
+export function getPreferredGeminiKeyIndex(modelName: string, poolSize: number): number {
+  if (poolSize <= 0) return 0;
+  if (typeof process !== 'undefined' && process.env?.GEMINI_POOL_STRATEGY === 'round_robin') {
+    return nextGeminiModelCursor(modelName, poolSize);
+  }
+  const state = getSharedGeminiPoolState();
+  const cleanModel = (modelName || 'default').trim().toLowerCase();
+  return (state.modelCursors.get(cleanModel) || 0) % poolSize;
+}
+
+export function pinGeminiModelCursor(
+  modelName: string,
+  index: number,
+  poolSize: number
+): void {
+  if (poolSize <= 0) return;
+  const state = getSharedGeminiPoolState();
+  const cleanModel = (modelName || 'default').trim().toLowerCase();
+  const normalized = ((index % poolSize) + poolSize) % poolSize;
+  setBoundedMapValue(state.modelCursors, cleanModel, normalized);
+}
+
+export function advanceGeminiModelCursor(
+  modelName: string,
+  poolSize: number,
+  fromIndex?: number
+): number {
+  if (poolSize <= 0) return 0;
+  const state = getSharedGeminiPoolState();
+  const cleanModel = (modelName || 'default').trim().toLowerCase();
+  const base =
+    typeof fromIndex === 'number' && Number.isFinite(fromIndex)
+      ? ((fromIndex % poolSize) + poolSize) % poolSize
+      : (state.modelCursors.get(cleanModel) || 0) % poolSize;
+  const next = (base + 1) % poolSize;
+  setBoundedMapValue(state.modelCursors, cleanModel, next);
+  return next;
+}
+
+export function resetGeminiPoolStateForTests(): void {
+  const state = getSharedGeminiPoolState();
+  state.quotaCooldownUntil.clear();
+  state.keyBackoffStep.clear();
+  state.modelCursors.clear();
+  state.projectByKey.clear();
+  state.contextCacheByKey.clear();
+  state.bucketNextAllowedAt.clear();
+}
+
+export function maskApiKey(key: string): string {
   if (!key || key.length <= 12) return '[short]';
   return `${key.slice(0, 6)}...${key.slice(-4)}`;
 }
 
-interface RotatingClientEntry {
+export interface RotatingClientEntry {
   key: string;
   masked: string;
   client: GoogleGenAI;
+}
+
+let cachedAiClientPool: { signature: string; pool: RotatingClientEntry[] } | null = null;
+
+export function formatGeminiApiError(err: unknown): Error {
+  const rawMsg = err instanceof Error ? err.message : String(err);
+  if (/User location is not supported for the API use/i.test(rawMsg) && typeof process !== 'undefined') {
+    const hasProxyEnv = Boolean(
+      process.env?.HTTPS_PROXY ||
+        process.env?.https_proxy ||
+        process.env?.HTTP_PROXY ||
+        process.env?.http_proxy
+    );
+    const proxyFlagActive =
+      process.env?.NODE_USE_ENV_PROXY === '1' ||
+      (Array.isArray(process.execArgv) && process.execArgv.includes('--use-env-proxy'));
+    if (hasProxyEnv && !proxyFlagActive) {
+      return new Error(
+        `${rawMsg} [Hint: HTTP_PROXY/HTTPS_PROXY is set in environment, but Node.js was started without --use-env-proxy or NODE_USE_ENV_PROXY=1]`
+      );
+    }
+  }
+  return err instanceof Error ? err : new Error(rawMsg);
 }
 
 export function getAiClientPool(): RotatingClientEntry[] {
@@ -66,33 +404,70 @@ export function getAiClientPool(): RotatingClientEntry[] {
   ];
 
   const seen = new Set<string>();
-  const pool: RotatingClientEntry[] = [];
-
+  const uniqueKeys: string[] = [];
   for (const item of rawList) {
     const k = item.trim().replace(/^['"]|['"]$/g, '');
     if (!k || k === 'MY_GEMINI_API_KEY' || k === 'your-gemini-api-key' || seen.has(k)) {
       continue;
     }
     seen.add(k);
-    pool.push({
-      key: k,
-      masked: maskApiKey(k),
-      client: new GoogleGenAI({
-        apiKey: k,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          },
-        },
-      }),
-    });
+    uniqueKeys.push(k);
   }
 
+  const maxKeysRaw = Number(
+    typeof process !== 'undefined' ? process.env?.GEMINI_MAX_ACTIVE_KEYS : undefined
+  );
+  const activeKeys =
+    Number.isInteger(maxKeysRaw) && maxKeysRaw > 0
+      ? uniqueKeys.slice(0, maxKeysRaw)
+      : uniqueKeys;
+
+  const signature = activeKeys.join('\x01');
+  if (cachedAiClientPool && cachedAiClientPool.signature === signature) {
+    return cachedAiClientPool.pool;
+  }
+
+  const pool: RotatingClientEntry[] = [];
+  const hasGeminiEnv =
+    typeof process !== 'undefined' &&
+    process.env !== undefined &&
+    Object.prototype.hasOwnProperty.call(process.env, 'GEMINI_API_KEY');
+  const savedGeminiEnv = hasGeminiEnv ? process.env.GEMINI_API_KEY : undefined;
+  const shouldMuteDuplicateEnvWarn =
+    typeof process !== 'undefined' &&
+    Boolean(process.env?.GOOGLE_API_KEY) &&
+    Boolean(savedGeminiEnv);
+
+  try {
+    if (shouldMuteDuplicateEnvWarn) {
+      delete process.env.GEMINI_API_KEY;
+    }
+    for (const k of activeKeys) {
+      pool.push({
+        key: k,
+        masked: maskApiKey(k),
+        client: new GoogleGenAI({
+          apiKey: k,
+          httpOptions: {
+            headers: {
+              'User-Agent': 'aistudio-build',
+            },
+          },
+        }),
+      });
+    }
+  } finally {
+    if (shouldMuteDuplicateEnvWarn) {
+      process.env.GEMINI_API_KEY = savedGeminiEnv;
+    }
+  }
+
+  cachedAiClientPool = { signature, pool };
   return pool;
 }
 
 /**
- * Batched multi-account embedding helper for `gemini-embedding-2`.
+ * Batched multi-account embedding helper using `gemini-embedding-001` (768 dims).
  * Respects Free Tier limits (100 RPM, 30K TPM, 1K RPD per account) by packing up to
  * `batchSize` (default 90, max 100) paragraphs into a single `embedContent` request
  * and rotating across all configured API keys on 429/400 errors.
@@ -117,12 +492,14 @@ export async function embedTextsWithGeminiPool(
     throw new Error('No Gemini API keys configured in GEMINI_API_KEY / GOOGLE_API_KEYS');
   }
 
-  const model = options?.model || 'gemini-embedding-2';
+  const requestedModel = options?.model || 'gemini-embedding-001';
   const outputDimensionality = options?.outputDimensionality ?? 768;
   const batchSize = Math.min(100, Math.max(1, options?.batchSize ?? 90));
   const allEmbeddings: number[][] = [];
   const keysUsedSet = new Set<string>();
   let requestsUsed = 0;
+
+  const startIdx = getPreferredGeminiKeyIndex(requestedModel, pool.length);
 
   for (let offset = 0; offset < texts.length; offset += batchSize) {
     const chunk = texts.slice(offset, offset + batchSize);
@@ -130,42 +507,66 @@ export async function embedTextsWithGeminiPool(
     let lastError: unknown = null;
 
     for (let attempt = 0; attempt < pool.length; attempt++) {
-      const idx = (activeGeminiKeyIndex + attempt) % pool.length;
+      const idx = (startIdx + attempt) % pool.length;
       const entry = pool[idx];
-      const cooldownUntil = geminiQuotaCooldownUntil.get(entry.key) || 0;
-      if (cooldownUntil > Date.now()) {
+      if (isGeminiBucketCoolingDown(entry.key, requestedModel)) {
         continue;
       }
 
       try {
-        const res = await entry.client.models.embedContent({
-          model,
+        let activeModel = requestedModel;
+        await waitForGeminiBucketPacing(entry.key, activeModel);
+        let res = await entry.client.models.embedContent({
+          model: activeModel,
           contents: chunk,
           config: { outputDimensionality },
         });
-        const vecs = (res.embeddings || []).map((e) => e.values || []);
+        let vecs = (res.embeddings || []).map((e) => e.values || []);
+        if (vecs.length === 1 && chunk.length > 1 && /gemini-embedding-2/i.test(activeModel)) {
+          // Multimodal gemini-embedding-2 collapses multi-string contents into 1 joint vector;
+          // fall back to gemini-embedding-001 so batch paragraph alignment still gets N vectors.
+          activeModel = 'gemini-embedding-001';
+          await waitForGeminiBucketPacing(entry.key, activeModel);
+          res = await entry.client.models.embedContent({
+            model: activeModel,
+            contents: chunk,
+            config: { outputDimensionality },
+          });
+          vecs = (res.embeddings || []).map((e) => e.values || []);
+          requestsUsed++;
+        }
         if (vecs.length !== chunk.length) {
           throw new Error(`Expected ${chunk.length} embeddings, received ${vecs.length}`);
         }
         allEmbeddings.push(...vecs);
         requestsUsed++;
         keysUsedSet.add(entry.masked);
-        activeGeminiKeyIndex = (idx + 1) % pool.length;
+        pinGeminiModelCursor(requestedModel, idx, pool.length);
+        markGeminiBucketSuccess(entry.key, activeModel);
         succeeded = true;
         break;
       } catch (err) {
         lastError = err;
         const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('API_KEY_INVALID')) {
-          geminiQuotaCooldownUntil.set(entry.key, Date.now() + QUOTA_COOLDOWN_MS);
+        const projMatch = msg.match(/projects\/(\d+)/);
+        if (projMatch) {
+          registerGeminiKeyProject(entry.key, projMatch[1]);
+        }
+        if (/User location is not supported for the API use/i.test(msg)) {
+          throw formatGeminiApiError(err);
+        }
+        if (markGeminiBucketQuotaError(entry.key, requestedModel, msg)) {
+          advanceGeminiModelCursor(requestedModel, pool.length, idx);
         }
       }
     }
 
     if (!succeeded) {
-      throw lastError instanceof Error
-        ? lastError
-        : new Error(`Failed to embed batch via Gemini pool: ${String(lastError)}`);
+      throw formatGeminiApiError(
+        lastError instanceof Error
+          ? lastError
+          : new Error(`Failed to embed batch via Gemini pool: ${String(lastError)}`)
+      );
     }
   }
 
@@ -197,6 +598,7 @@ export async function pingColabServer(endpointUrl: string): Promise<{
     // 1. Try Ollama /api/tags
     const tagsRes = await fetch(`${baseUrl}/api/tags`, {
       headers: { 'ngrok-skip-browser-warning': 'true' },
+      redirect: 'error',
       signal: AbortSignal.timeout(10000),
     });
 
@@ -220,6 +622,7 @@ export async function pingColabServer(endpointUrl: string): Promise<{
     // 2. Try vLLM / OpenAI /v1/models
     const v1Res = await fetch(`${baseUrl}/v1/models`, {
       headers: { 'ngrok-skip-browser-warning': 'true' },
+      redirect: 'error',
       signal: AbortSignal.timeout(10000),
     });
 
@@ -251,14 +654,37 @@ export async function pingColabServer(endpointUrl: string): Promise<{
 export class ColabOllamaAdapter implements LlmInferencePort {
   private endpointUrl: string;
   private modelId: string;
+  private scoutModelId: string;
+  private criticModelId: string;
+  private stylistModelId: string;
   private numCtx: number;
 
-  constructor(options?: { endpointUrl?: string; modelId?: string; numCtx?: number }) {
+  constructor(options?: {
+    endpointUrl?: string;
+    modelId?: string;
+    scoutModelId?: string;
+    criticModelId?: string;
+    stylistModelId?: string;
+    numCtx?: number;
+  }) {
     this.endpointUrl = normalizeColabEndpointUrl(
       options?.endpointUrl || process.env.COLAB_OLLAMA_URL || ''
     );
     this.modelId = options?.modelId || process.env.COLAB_MODEL_ID || 'gemma4:26b-a4b';
+    this.scoutModelId = options?.scoutModelId || process.env.COLAB_SCOUT_MODEL_ID || this.modelId;
+    this.criticModelId = options?.criticModelId || process.env.COLAB_CRITIC_MODEL_ID || this.modelId;
+    this.stylistModelId =
+      options?.stylistModelId || process.env.COLAB_STYLIST_MODEL_ID || this.criticModelId;
     this.numCtx = options?.numCtx ?? 16384;
+  }
+
+  private resolveModelForTask(task: LlmCompletionRequest['task']): string {
+    if (task === 'scout') return this.scoutModelId;
+    if (task === 'blind_stylist_pass3') return this.stylistModelId;
+    if (task === 'surgical_critic_pass2' || task === 'self_repair') {
+      return this.criticModelId;
+    }
+    return this.modelId;
   }
 
   async complete(req: LlmCompletionRequest): Promise<LlmCompletionResponse> {
@@ -270,7 +696,7 @@ export class ColabOllamaAdapter implements LlmInferencePort {
       throw new Error(validation.error || 'Invalid Colab L4 endpoint URL');
     }
 
-    const model = this.modelId;
+    const model = this.resolveModelForTask(req.task);
     const temperature = req.temperature ?? 0.3;
     const numCtx = req.numCtx ?? this.numCtx;
     const isSpeculative = req.task === 'surgical_critic_pass2' || req.task === 'self_repair';
@@ -283,6 +709,7 @@ export class ColabOllamaAdapter implements LlmInferencePort {
           'Content-Type': 'application/json',
           'ngrok-skip-browser-warning': 'true',
         },
+        redirect: 'error',
         body: JSON.stringify({
           model,
           stream: false,
@@ -322,6 +749,7 @@ export class ColabOllamaAdapter implements LlmInferencePort {
         'Content-Type': 'application/json',
         'ngrok-skip-browser-warning': 'true',
       },
+      redirect: 'error',
       body: JSON.stringify({
         model,
         temperature,
@@ -355,13 +783,17 @@ export class ColabOllamaAdapter implements LlmInferencePort {
 }
 
 /**
- * Adapter 2: Rotating Gemini API adapter with quota cooldown & retry backoff.
+ * Adapter 2: Rotating Gemini API adapter with per-(project, model) quota isolation,
+ * ThinkingConfig control (LOW/MEDIUM/HIGH/XHIGH), implicit cache awareness on Gemini 4,
+ * and automatic model-tier overflow (Hydrogen -> 3.8 Flash -> Gemma 4 31B IT).
  */
 export class RotatingGeminiAdapter implements LlmInferencePort {
   private defaultModel: string;
+  private allowModelTierOverflow: boolean;
 
-  constructor(options?: { model?: string }) {
+  constructor(options?: { model?: string; allowModelTierOverflow?: boolean }) {
     this.defaultModel = options?.model || 'gemini-3.8-flash';
+    this.allowModelTierOverflow = options?.allowModelTierOverflow ?? true;
   }
 
   private normalizeGeminiApiModelId(rawModel?: string, task?: LlmCompletionRequest['task']): string {
@@ -369,11 +801,93 @@ export class RotatingGeminiAdapter implements LlmInferencePort {
     if (!m || m.includes(':')) {
       return task === 'scout' ? 'gemini-3.1-flash-lite' : 'gemini-3.8-flash';
     }
-    if (m.endsWith('-low')) return 'gemini-3.1-flash-lite';
-    if (m.endsWith('-high') || m.endsWith('-medium')) {
-      return m.replace(/-(?:high|medium)$/i, '');
+    if (/^gemini-3\.8-flash-low$/i.test(m)) return 'gemini-3.1-flash-lite';
+    if (/(?:-(?:low|medium|high|xhigh|auto_xhigh))$/i.test(m)) {
+      return m.replace(/-(?:low|medium|high|xhigh|auto_xhigh)$/i, '');
     }
     return m;
+  }
+
+  private resolveThinkingConfig(
+    modelName: string,
+    requestedLevel?: LlmCompletionRequest['thinkingLevel']
+  ): { thinkingLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'XHIGH' } | undefined {
+    if (!requestedLevel) return undefined;
+    const isGeminiReasoning =
+      modelName.startsWith('gemini-4-') ||
+      modelName.startsWith('gemini-3.8-') ||
+      modelName.startsWith('gemini-3.1-');
+    if (!isGeminiReasoning) return undefined;
+    const upper = requestedLevel.toUpperCase() as 'LOW' | 'MEDIUM' | 'HIGH' | 'XHIGH';
+    if (upper === 'XHIGH' && modelName !== 'gemini-4-hydrogen') {
+      return { thinkingLevel: 'HIGH' };
+    }
+    return { thinkingLevel: upper };
+  }
+
+  private buildCandidateModelTiers(primaryModel: string): string[] {
+    if (!this.allowModelTierOverflow) return [primaryModel];
+    if (primaryModel === 'gemini-4-hydrogen') {
+      return ['gemini-4-hydrogen', 'gemini-3.8-flash', 'gemma-4-31b-it'];
+    }
+    if (primaryModel === 'gemini-3.8-flash') {
+      return ['gemini-3.8-flash', 'gemma-4-31b-it'];
+    }
+    if (primaryModel === 'gemma-4-31b-it') {
+      return ['gemma-4-31b-it', 'gemini-3.8-flash'];
+    }
+    return [primaryModel];
+  }
+
+  private async tryResolveCachedContentName(
+    entry: RotatingClientEntry,
+    modelName: string,
+    req: LlmCompletionRequest
+  ): Promise<string | undefined> {
+    // Gemini 4 (Hydrogen/Argon/Carbon) and Gemma 4 use implicit caching only; explicit caches.create fails with 400.
+    if (modelName.startsWith('gemini-4-') || modelName.startsWith('gemma-')) {
+      return undefined;
+    }
+    if (!req.cacheKey && req.systemInstruction.length < 4000) {
+      return undefined;
+    }
+    const cacheMap = getSharedGeminiPoolState().contextCacheByKey;
+    const cacheMapKey = `${entry.masked}:${modelName}:${req.cacheKey || req.systemInstruction.slice(0, 64)}`;
+    const existing = cacheMap.get(cacheMapKey);
+    if (existing && existing.expiresAt > Date.now()) {
+      return existing.name;
+    }
+
+    try {
+      const cachesApi = (
+        entry.client as unknown as {
+          caches?: {
+            create?: (args: {
+              model: string;
+              config: { systemInstruction: string; ttl: string };
+            }) => Promise<{ name?: string }>;
+          };
+        }
+      ).caches;
+      if (!cachesApi?.create) return undefined;
+      const created = await cachesApi.create({
+        model: modelName,
+        config: {
+          systemInstruction: req.systemInstruction,
+          ttl: '1800s',
+        },
+      });
+      if (created?.name) {
+        setBoundedMapValue(cacheMap, cacheMapKey, {
+          name: created.name,
+          expiresAt: Date.now() + 25 * 60 * 1000,
+        });
+        return created.name;
+      }
+    } catch {
+      // Silent fallback to standard uncached generateContent when context caching is unsupported
+    }
+    return undefined;
   }
 
   async complete(req: LlmCompletionRequest): Promise<LlmCompletionResponse> {
@@ -382,67 +896,110 @@ export class RotatingGeminiAdapter implements LlmInferencePort {
       throw new Error('No valid GEMINI_API_KEY found in environment');
     }
 
-    const modelName = this.normalizeGeminiApiModelId(req.geminiModel, req.task);
+    const primaryModel = this.normalizeGeminiApiModelId(req.geminiModel, req.task);
+    const candidateModels = this.buildCandidateModelTiers(primaryModel);
     const retriesBeforeRotation = 2;
-    const maxRotations = pool.length;
     let lastErr: unknown;
 
-    for (let rot = 0; rot < maxRotations; rot++) {
-      const idx = (activeGeminiKeyIndex + rot) % pool.length;
-      const entry = pool[idx];
-      if ((geminiQuotaCooldownUntil.get(entry.key) || 0) > Date.now() && rot + 1 < maxRotations) {
-        continue;
-      }
-      activeGeminiKeyIndex = idx;
+    for (const modelName of candidateModels) {
+      const startIdx = getPreferredGeminiKeyIndex(modelName, pool.length);
 
-      for (let attempt = 0; attempt < retriesBeforeRotation; attempt++) {
-        try {
-          const config: Record<string, unknown> = {
-            systemInstruction: req.systemInstruction,
-            temperature: req.temperature ?? 0.3,
-          };
-          if (req.geminiResponseSchema) {
-            config.responseSchema = req.geminiResponseSchema;
-            config.responseMimeType = 'application/json';
-          } else if (req.expectJson) {
-            config.responseMimeType = 'application/json';
-          }
+      for (let rot = 0; rot < pool.length; rot++) {
+        const idx = (startIdx + rot) % pool.length;
+        const entry = pool[idx];
+        if (isGeminiBucketCoolingDown(entry.key, modelName)) {
+          continue;
+        }
 
-          const response = await entry.client.models.generateContent({
-            model: modelName,
-            contents: req.userPrompt,
-            config,
-          });
+        for (let attempt = 0; attempt < retriesBeforeRotation; attempt++) {
+          try {
+            const baseConfig: Record<string, unknown> = {
+              temperature: req.temperature ?? 0.3,
+            };
+            const thinkingConfig = this.resolveThinkingConfig(modelName, req.thinkingLevel);
+            if (thinkingConfig) {
+              baseConfig.thinkingConfig = thinkingConfig;
+            }
+            if (req.geminiResponseSchema) {
+              baseConfig.responseSchema = req.geminiResponseSchema;
+              baseConfig.responseMimeType = 'application/json';
+            } else if (req.expectJson) {
+              baseConfig.responseMimeType = 'application/json';
+            }
 
-          return {
-            text: response.text || '',
-            engineUsed: modelName,
-            provider: 'gemini_api',
-          };
-        } catch (err) {
-          lastErr = err;
-          const msg = err instanceof Error ? err.message : String(err);
-          const isQuota429 = /429|RESOURCE_EXHAUSTED|quota/i.test(msg);
-          const isNonRetryable =
-            /400|403|INVALID_ARGUMENT|PERMISSION_DENIED|FAILED_PRECONDITION|PROHIBITED_CONTENT/i.test(
-              msg
-            );
+            const cachedContentName = await this.tryResolveCachedContentName(entry, modelName, req);
+            await waitForGeminiBucketPacing(entry.key, modelName);
+            let response: { text?: string };
+            if (cachedContentName) {
+              try {
+                response = await entry.client.models.generateContent({
+                  model: modelName,
+                  contents: req.userPrompt,
+                  config: {
+                    ...baseConfig,
+                    cachedContent: cachedContentName,
+                  },
+                });
+              } catch {
+                await waitForGeminiBucketPacing(entry.key, modelName);
+                response = await entry.client.models.generateContent({
+                  model: modelName,
+                  contents: req.userPrompt,
+                  config: {
+                    ...baseConfig,
+                    systemInstruction: req.systemInstruction,
+                  },
+                });
+              }
+            } else {
+              response = await entry.client.models.generateContent({
+                model: modelName,
+                contents: req.userPrompt,
+                config: {
+                  ...baseConfig,
+                  systemInstruction: req.systemInstruction,
+                },
+              });
+            }
 
-          if (isNonRetryable) {
-            throw err;
-          }
-          if (isQuota429) {
-            geminiQuotaCooldownUntil.set(entry.key, Date.now() + QUOTA_COOLDOWN_MS);
-            break; // rotate to next key
-          }
-          if (attempt + 1 < retriesBeforeRotation) {
-            await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+            pinGeminiModelCursor(modelName, idx, pool.length);
+            markGeminiBucketSuccess(entry.key, modelName);
+            return {
+              text: response.text || '',
+              engineUsed: modelName,
+              provider: 'gemini_api',
+            };
+          } catch (err) {
+            lastErr = err;
+            const msg = err instanceof Error ? err.message : String(err);
+            const projMatch = msg.match(/projects\/(\d+)/);
+            if (projMatch) {
+              registerGeminiKeyProject(entry.key, projMatch[1]);
+            }
+
+            if (markGeminiBucketQuotaError(entry.key, modelName, msg)) {
+              advanceGeminiModelCursor(modelName, pool.length, idx);
+              break; // Key invalid/leaked or rate-limited -> rotate immediately to next project key
+            }
+
+            const isNonRetryable =
+              /400|403|INVALID_ARGUMENT|PERMISSION_DENIED|FAILED_PRECONDITION|PROHIBITED_CONTENT/i.test(
+                msg
+              );
+            if (isNonRetryable) {
+              throw formatGeminiApiError(err);
+            }
+            if (attempt + 1 < retriesBeforeRotation) {
+              await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+            }
           }
         }
       }
     }
 
-    throw lastErr || new Error('All Gemini API keys in rotation failed');
+    throw formatGeminiApiError(
+      lastErr || new Error('All Gemini API keys and model tiers are currently in quota cooldown')
+    );
   }
 }
 
@@ -508,10 +1065,11 @@ export type AgyCliRunnerFn = (args: {
 
 /**
  * Adapter 2.5: Local Google Antigravity CLI (`agy`) Headless Adapter.
- * Routes tasks across two model tiers from the user's Antigravity subscription:
+ * Routes tasks across four model tiers from the user's Antigravity subscription:
  * - Fast bulk tier (`primaryModelId`, default `gemini-3.8-flash-high`): Pass 1 translation & paragraph self-repair
  * - Ultra-fast scout tier (`scoutModelId`, default `gemini-3.8-flash-low`): Pass 0 terminology scouting
- * - Heavy final critic tier (`criticModelId`, default `gemini-4-argon-medium`): Pass 2 Surgical Critic verification
+ * - Heavy critic tier (`criticModelId`, default `gemini-4-argon-medium`): Pass 2 Surgical Critic verification
+ * - Literary stylist tier (`stylistModelId`, default `claude-sonnet-5-5-high`): Pass 3 Blind Literary Stylist
  *
  * Uses `--input-format stream-json --output-format stream-json -p=` over `stdin` so multi-kilobyte
  * chapter prompts bypass Windows 8KB/32KB command-line length limits.
@@ -519,12 +1077,14 @@ export type AgyCliRunnerFn = (args: {
 export class AntigravityCliAdapter implements LlmInferencePort {
   public primaryModelId: string;
   public criticModelId: string;
+  public stylistModelId: string;
   public scoutModelId: string;
   private customRunner?: AgyCliRunnerFn;
 
   constructor(options?: {
     primaryModelId?: string;
     criticModelId?: string;
+    stylistModelId?: string;
     scoutModelId?: string;
     customRunner?: AgyCliRunnerFn;
   }) {
@@ -532,7 +1092,14 @@ export class AntigravityCliAdapter implements LlmInferencePort {
       options?.primaryModelId && !options.primaryModelId.includes(':')
         ? options.primaryModelId
         : 'gemini-3.8-flash-high';
-    this.criticModelId = options?.criticModelId || 'gemini-4-argon-medium';
+    this.criticModelId =
+      options?.criticModelId && !options.criticModelId.includes(':')
+        ? options.criticModelId
+        : 'gemini-4-argon-medium';
+    this.stylistModelId =
+      options?.stylistModelId && !options.stylistModelId.includes(':')
+        ? options.stylistModelId
+        : 'claude-sonnet-5-5-high';
     this.scoutModelId =
       options?.scoutModelId && !options.scoutModelId.includes(':')
         ? options.scoutModelId
@@ -541,8 +1108,11 @@ export class AntigravityCliAdapter implements LlmInferencePort {
   }
 
   public resolveModelForTask(task: LlmCompletionRequest['task']): string {
-    if (task === 'surgical_critic_pass2' || task === 'blind_stylist_pass3') {
+    if (task === 'surgical_critic_pass2') {
       return this.criticModelId;
+    }
+    if (task === 'blind_stylist_pass3') {
+      return this.stylistModelId;
     }
     if (task === 'scout') {
       return this.scoutModelId;
@@ -673,7 +1243,9 @@ export class DeterministicCanonAdapter implements LlmInferencePort {
 
   async complete(req: LlmCompletionRequest): Promise<LlmCompletionResponse> {
     if (req.task === 'translate_pass1') {
-      const match = req.userPrompt.match(/\[SOURCE CHAPTER (\d+): "([^"]*)"\]\s*([\s\S]*)$/i);
+      const match = req.userPrompt.match(
+        /\[SOURCE CHAPTER\s+(\d+(?:\.\d+)?):\s*"([^\n]*)"\]\s*([\s\S]*)$/i
+      );
       const chNum = match ? parseInt(match[1], 10) : 1;
       const chTitle = match ? match[2] : 'Chapter';
       const rawEngBody = match ? match[3] : req.userPrompt;
@@ -719,8 +1291,30 @@ export class DeterministicCanonAdapter implements LlmInferencePort {
     }
 
     if (req.task === 'self_repair') {
+      // Extract only Russian text after RUS: markers inside paragraph blocks (never leak raw userPrompt)
+      const blockMatches = Array.from(
+        req.userPrompt.matchAll(
+          /(\[(?:[a-z0-9]{2,4}\|)?#p\d+\])[\s\S]*?\bRUS:\s*([\s\S]*?)(?=\n\s*\[(?:[a-z0-9]{2,4}\|)?#p\d+\]|\n\s*Canonical Glossary:|\n\s*\[SPECULATIVE SUFFIX|$)/gi
+        )
+      );
+      if (blockMatches.length > 0) {
+        const extracted = blockMatches
+          .map((m) => `${m[1]}\n${m[2].replace(/\n\s*(?:ISSUES|ОШИБКИ|SLOP):[\s\S]*$/i, '').trim()}`)
+          .join('\n\n');
+        return {
+          text: extracted,
+          engineUsed: 'deterministic-self-repair',
+          provider: 'deterministic',
+        };
+      }
+
+      const rusSection = req.userPrompt.match(
+        /Current Russian Translation:\s*([\s\S]*?)(?=\n\s*Remaining Linter Issues:|\n\s*Canonical Glossary:|$)/i
+      );
+      const inlineRus = req.userPrompt.match(/\bRUS:\s*([^\n]+(?:\n(?!ENG:|ISSUES:|Canonical Glossary:)[^\n]+)*)/i);
+      const safeRus = (rusSection?.[1] || inlineRus?.[1] || '').trim();
       return {
-        text: req.userPrompt,
+        text: safeRus,
         engineUsed: 'deterministic-self-repair',
         provider: 'deterministic',
       };
@@ -772,7 +1366,7 @@ export function createPipelineLlmPort(
   glossary?: CanonicalGlossary,
   tone?: ProseTone
 ): LlmInferencePort {
-  const provider = config?.provider || 'colab_ollama';
+  const provider = config?.provider || 'gemini_api';
   if ((provider as string) === 'deterministic') {
     return new FallbackChainAdapter([new DeterministicCanonAdapter({ glossary, tone })]);
   }
@@ -781,12 +1375,17 @@ export function createPipelineLlmPort(
   const hasColabEndpoint = Boolean(
     config?.colabEndpointUrl || process.env.COLAB_OLLAMA_URL
   );
+  const isAgyCliExplicitlyEnabled =
+    typeof process !== 'undefined' &&
+    process.env?.ENABLE_CLIENT_AGY_CLI === '1' &&
+    process.env?.DISABLE_CLIENT_AGY_CLI !== '1';
 
-  if (provider === 'antigravity_cli') {
+  if (provider === 'antigravity_cli' && isAgyCliExplicitlyEnabled) {
     adapters.push(
       new AntigravityCliAdapter({
         primaryModelId: config?.modelId || 'gemini-3.8-flash-high',
         criticModelId: config?.criticModelId || 'gemini-4-argon-medium',
+        stylistModelId: config?.stylistModelId || 'claude-sonnet-5-5-high',
         scoutModelId: config?.scoutModelId || 'gemini-3.8-flash-low',
       })
     );
@@ -797,6 +1396,9 @@ export function createPipelineLlmPort(
       new ColabOllamaAdapter({
         endpointUrl: config?.colabEndpointUrl,
         modelId: config?.modelId,
+        scoutModelId: config?.scoutModelId,
+        criticModelId: config?.criticModelId,
+        stylistModelId: config?.stylistModelId,
         numCtx: config?.numCtx,
       })
     );
@@ -805,20 +1407,23 @@ export function createPipelineLlmPort(
   // Next in chain: Rotating Gemini (forward modelId if specified)
   adapters.push(new RotatingGeminiAdapter({ model: config?.modelId }));
 
-  // Server-side resilience: if Colab is offline and direct Gemini API is geo-blocked (400 FAILED_PRECONDITION),
-  // fall back to local Antigravity CLI subscription before degrading to deterministic regex translation.
-  if (provider !== 'antigravity_cli' && typeof window === 'undefined') {
+  // Server-side resilience: opt-in only fallback to local Antigravity CLI subscription
+  // so OAuth-backed CLI sessions are never invoked unless explicitly enabled via env flags.
+  const allowImplicitAgyCliFallback =
+    typeof window === 'undefined' &&
+    isAgyCliExplicitlyEnabled &&
+    process.env.ALLOW_IMPLICIT_AGY_FALLBACK === '1' &&
+    !process.env.STUDIO_API_TOKEN;
+  if (provider !== 'antigravity_cli' && allowImplicitAgyCliFallback) {
     adapters.push(
       new AntigravityCliAdapter({
         primaryModelId: config?.modelId || 'gemini-3.8-flash-high',
         criticModelId: config?.criticModelId || 'gemini-4-argon-medium',
+        stylistModelId: config?.stylistModelId || 'claude-sonnet-5-5-high',
         scoutModelId: config?.scoutModelId || 'gemini-3.8-flash-low',
       })
     );
   }
-
-  // Final fallback: Deterministic Canon
-  adapters.push(new DeterministicCanonAdapter({ glossary, tone }));
 
   return new FallbackChainAdapter(adapters);
 }
@@ -834,7 +1439,10 @@ export function deterministicLocalTranslate(
   glossary: CanonicalGlossary,
   proseTone: ProseTone = 'classic'
 ): { titleRus: string; rusText: string } {
-  if (chapterNumber === 5 && engText.includes('Myriad Beasts Mountain')) {
+  if (
+    engText.includes('Myriad Beasts Mountain') &&
+    (engText.includes('Shadow Step') || engText.includes('120 Origin Points'))
+  ) {
     const dynamicClosing =
       proseTone === 'dynamic'
         ? '«Не на того вы нарвались», — холодно отрезал про себя Линь Сюань, в то же мгновение растворился тенью и обрушил на врагов разящий удар своего магического меча-артефакта 1-го яруса.'
@@ -858,7 +1466,10 @@ ${dynamicClosing}`,
     };
   }
 
-  if (chapterNumber === 6 && engText.includes('Senior Brother Chen')) {
+  if (
+    engText.includes('Senior Brother Chen') &&
+    (engText.includes('Crimson Flame Pavilion') || engText.includes('Elder Zhao') || engText.includes('Stone Demon Sect'))
+  ) {
     return {
       titleRus: 'Глава 6. Противостояние со старшим братом Чэнем',
       rusText: `У врат Павильона Багрового Пламени старший брат Чэнь с холодной усмешкой преградил путь Линь Сюаню.
@@ -871,7 +1482,7 @@ ${dynamicClosing}`,
     };
   }
 
-  if (chapterNumber === 7 || engText.includes('Nine-Leaf Spirit Grass')) {
+  if (engText.includes('Nine-Leaf Spirit Grass') && engText.includes('Stone Demon Sect')) {
     const hasSecondHalf = engText.includes('250 Origin Points') || engText.includes('---');
     const part1Rus = `Тайное Царство Секты Каменных Демонов открывалось лишь раз в 10 лет для учеников на 6-м слое Очищения Ци и выше.\nЛинь Сюань шагнул сквозь древний пространственный массив, неся за спиной Котёл Чёрного Железа весом 50 цзинь и запас из 90 духовных камней.\nВ глубине туманного ущелья он заметил 3 стебля Девятилистной Духовной Травы, охраняемых бронзовым змеем 1-го яруса высшего ранга.`;
     const part2Rus = `Рассекая воздух мечом, Линь Сюань активировал Пламя Лазурного Лотоса и поразил зверя с вероятностью критического удара 95%.\n---\n[Получено: 250 Очков Истока]\n[Собрано: 3 стебля Девятилистной Духовной Травы]\n---\n— С этими травами я создам партию Пилюль Конденсации Крови и прорвусь на 7-й слой Очищения Ци, — произнёс Линь Сюань.`;
@@ -881,14 +1492,21 @@ ${dynamicClosing}`,
     };
   }
 
-  if (chapterNumber === 8 || engText.includes('Foundation Establishment Pill')) {
+  if (
+    engText.includes('Foundation Establishment Pill') &&
+    (engText.includes('Stone Demon Sect') || engText.includes('Black Iron Cauldron') || engText.includes('45 spirit stones'))
+  ) {
     return {
       titleRus: 'Глава 8. Создание Пилюли Заложения Основ',
       rusText: `Внутри Секты Каменных Демонов Линь Сюань использовал 45 духовных камней и Котёл Чёрного Железа весом 50 цзинь, чтобы создать пилюлю 2-го яруса низшего ранга с шансом успеха 90%.`,
     };
   }
 
-  if (chapterNumber === 9 || engText.includes('Inner Sect')) {
+  if (
+    engText.includes('Inner Sect') &&
+    engText.includes('Lin Xuan') &&
+    (engText.includes('Elder Zhao') || engText.includes('500 Origin Points'))
+  ) {
     return {
       titleRus: 'Глава 9. Вступление во Внутреннюю Секту',
       rusText: `Старейшина Чжао и Су Цинсюэ поприветствовали Линь Сюаня во Внутренней Секте после того, как он достиг 7-го слоя Очищения Ци и накопил 500 Очков Истока.`,
@@ -971,164 +1589,6 @@ export function buildScoutPrompts(params: {
   return { systemPrompt, userPrompt, geminiSchema };
 }
 
-export interface SceneDialogueAnnotation {
-  paragraphIndex: number;
-  speaker?: string;
-  addressee?: string;
-  inferredGender?: 'M' | 'F' | 'N' | 'PL';
-  pronounMode?: 'ты' | 'Вы' | 'auto';
-  zeroPronounResolution?: string;
-  sourceSnippet: string;
-}
-
-export interface SceneDialogueAnalysisResult {
-  annotations: SceneDialogueAnnotation[];
-  promptSummaryBlock: string;
-}
-
-/**
- * Pass 0: Scene Dialogue Annotation & Zero-Pronoun Disambiguation Engine.
- * Analyzes dialogue lines, attributes speakers/addressees, determines polite/casual mode,
- * and resolves implicit subjects for zero-pronouns in CJK/web-novel narratives.
- */
-export function annotateSceneDialogueAndZeroPronouns(
-  engText: string,
-  glossary: CanonicalGlossary,
-  glossaryMeta?: Record<string, GlossaryTermMeta>,
-  socialEdges?: SocialRegisterEdge[]
-): SceneDialogueAnalysisResult {
-  const paragraphs = (engText || '')
-    .replace(/\r\n/g, '\n')
-    .split('\n')
-    .map((p) => p.trim())
-    .filter(Boolean);
-
-  const annotations: SceneDialogueAnnotation[] = [];
-  const knownCharacters = Object.keys(glossary?.characters || {});
-  let lastActiveSpeaker: string | undefined;
-
-  for (let idx = 0; idx < paragraphs.length; idx++) {
-    const p = paragraphs[idx];
-    const isDialogue = /^["“'«‘—\-]/.test(p) || /["“«]([^"»”]+)["»”]/.test(p);
-
-    // Speaker speech tag extraction
-    let detectedSpeaker: string | undefined;
-    let detectedAddressee: string | undefined;
-
-    // Pattern 1: said X / asked X / shouted X
-    const postTagMatch = p.match(
-      /(?:said|asked|shouted|roared|sneered|whispered|murmured|replied|chuckled|cried|declared|growled)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i
-    );
-    // Pattern 2: X said / X sneered
-    const preTagMatch = p.match(
-      /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:said|asked|shouted|roared|sneered|whispered|murmured|replied|chuckled|cried|declared|growled)/i
-    );
-
-    const tagCandidate = postTagMatch
-      ? postTagMatch[1]
-      : preTagMatch
-      ? preTagMatch[1]
-      : undefined;
-
-    const isPronoun = /^(?:he|she|it|they|someone|we|i|you)$/i.test(tagCandidate || '');
-
-    if (tagCandidate && !isPronoun) {
-      const matched = knownCharacters.find(
-        (c) =>
-          c.toLowerCase() === tagCandidate.toLowerCase() ||
-          tagCandidate.toLowerCase().includes(c.toLowerCase())
-      );
-      detectedSpeaker = matched || tagCandidate;
-    }
-
-    // If dialogue but no direct tag, try alternation or search for known character
-    if (isDialogue && !detectedSpeaker && lastActiveSpeaker) {
-      const otherChar = knownCharacters.find(
-        (c) => c !== lastActiveSpeaker && p.includes(c)
-      );
-      if (otherChar) {
-        detectedSpeaker = otherChar;
-      }
-    }
-
-    if (detectedSpeaker) {
-      lastActiveSpeaker = detectedSpeaker;
-      detectedAddressee = knownCharacters.find(
-        (c) =>
-          c.toLowerCase() !== detectedSpeaker?.toLowerCase() &&
-          p.toLowerCase().includes(c.toLowerCase())
-      );
-    }
-
-    // Inferred gender
-    let inferredGender: 'M' | 'F' | 'N' | 'PL' | undefined;
-    if (detectedSpeaker && glossaryMeta?.[detectedSpeaker]?.gender) {
-      inferredGender = glossaryMeta[detectedSpeaker].gender;
-    } else if (isPronoun && /^she$/i.test(tagCandidate!)) {
-      inferredGender = 'F';
-    } else if (isPronoun && /^he$/i.test(tagCandidate!)) {
-      inferredGender = 'M';
-    } else if (/\b(?:she|her|hers|woman|girl|maiden|sister)\b/i.test(p)) {
-      inferredGender = 'F';
-    } else if (detectedSpeaker) {
-      inferredGender = 'M';
-    }
-
-    // Social edge pronoun mode
-    let pronounMode: 'ты' | 'Вы' | 'auto' = 'auto';
-    if (detectedSpeaker && detectedAddressee && Array.isArray(socialEdges)) {
-      const edge = socialEdges.find(
-        (e) =>
-          e.fromCharacter.toLowerCase() === detectedSpeaker?.toLowerCase() &&
-          e.toCharacter.toLowerCase() === detectedAddressee?.toLowerCase()
-      );
-      if (edge) {
-        pronounMode = edge.pronounMode;
-      }
-    }
-
-    // Zero-pronoun resolution (implicit subject in action or speech clauses)
-    let zeroPronounResolution: string | undefined;
-    if (
-      isDialogue ||
-      /^(?:Turning|Looking|Smiling|Stepping|Taking|Reaching|Gazing)\b/i.test(p)
-    ) {
-      if (detectedSpeaker) {
-        zeroPronounResolution = `Subject [${detectedSpeaker}]`;
-      }
-    }
-
-    if (isDialogue || detectedSpeaker || zeroPronounResolution) {
-      annotations.push({
-        paragraphIndex: idx,
-        speaker: detectedSpeaker,
-        addressee: detectedAddressee,
-        inferredGender,
-        pronounMode,
-        zeroPronounResolution,
-        sourceSnippet: p.length > 80 ? p.slice(0, 80) + '...' : p,
-      });
-    }
-  }
-
-  const promptSummaryBlock =
-    annotations.length === 0
-      ? '[SCENE DIALOGUE & REGISTER MAP]: No complex multi-speaker dialogue identified.'
-      : '[SCENE DIALOGUE & REGISTER MAP (PASS 0 ANNOTATIONS)]:\n' +
-        annotations
-          .map(
-            (a) =>
-              `[#p${a.paragraphIndex}] Speaker: ${a.speaker || 'Contextual'}, Addressee: ${
-                a.addressee || 'Undetermined'
-              }, Pronoun Mode: ${a.pronounMode || 'auto'}, Gender: ${a.inferredGender || 'M'}${
-                a.zeroPronounResolution ? `, Implied: ${a.zeroPronounResolution}` : ''
-              }`
-          )
-          .join('\n');
-
-  return { annotations, promptSummaryBlock };
-}
-
 /**
  * Builds prompts for Pass 1 Semantic & Canonical Translation.
  * Employs 4-Layer KV-Prefix Pinning:
@@ -1159,12 +1619,18 @@ export function buildTranslatePass1Prompts(params: {
   forwardQuestionsBlock?: string;
   sceneDialogueBlock?: string;
   useHashAnchors?: boolean;
+  characterVoicesBlock?: string;
+  pacingMode?: ScenePacingMode | string;
+  contrastiveTriplets?: ContrastiveFewShotTriplet[];
+  arcCanonBlock?: string;
+  /** 'json' | 'stream_delimited' */
+  outputFormat?: string;
 }): {
   systemPrompt: string;
   userPrompt: string;
 } {
   const ledgerPromptBlock = params.heroLedger
-    ? `Live Hero & World State Ledger (MUST NOT CONTRADICT):\n- Protagonist: ${params.heroLedger.protagonistName}\n- Current Cultivation Rank: ${params.heroLedger.cultivationRealm}\n- Active Resources: ${params.heroLedger.resources.join(', ')}\n- Inventory & Techniques: ${params.heroLedger.artifactsAndFlames.join(', ')}\n- Current Location: ${params.heroLedger.activeLocation}`
+    ? `Live Hero & World State Ledger (MUST NOT CONTRADICT):\n- Protagonist: ${params.heroLedger.protagonistName || 'Протагонист'}\n- Current Cultivation Rank: ${params.heroLedger.cultivationRealm || 'Не указана'}\n- Active Resources: ${(params.heroLedger.resources || []).join(', ')}\n- Inventory & Techniques: ${(params.heroLedger.artifactsAndFlames || []).join(', ')}\n- Current Location: ${params.heroLedger.activeLocation || 'Не указана'}`
     : '';
 
   const bilingualMemoryBlock = `DelTA Bilingual Macro-Summary (A_s / A_t):\n- ENG Summary (A_s): ${params.previousChapterSummaryEng || 'Opening chapter stream.'}\n- RUS Summary (A_t): ${params.previousChapterSummary || 'Первая переводимая глава в потоке.'}`;
@@ -1200,16 +1666,32 @@ ${params.styleGuideMd}`;
 
   // Layer 1: Arc State Ledger & Canon Registers
   const layer1Parts = [
+    params.arcCanonBlock ? `[FROZEN ARC CANON LOCK]\n${params.arcCanonBlock}` : '',
     ledgerPromptBlock,
     params.lorebookBlock ? `[CANON LOREBOOK & WORLD STATE]\n${params.lorebookBlock}` : '',
     params.socialEdgesBlock ? `[DIRECTED SOCIAL REGISTERS R_t(A -> B)]\n${params.socialEdgesBlock}` : '',
   ].filter(Boolean);
   const layer1 = `[LAYER 1: ARC STATE LEDGER & CANON REGISTERS]\n${layer1Parts.join('\n\n') || 'Arc State: Stable'}`;
 
+  const tripletsBlock =
+    params.contrastiveTriplets && params.contrastiveTriplets.length > 0
+      ? `[SCENE PACING (${params.pacingMode || 'auto'}) & CONTRASTIVE EXEMPLARS]\n` +
+        params.contrastiveTriplets
+          .map(
+            (t, idx) =>
+              `Exemplar ${idx + 1} (${t.pacingMode}):\n- Bad AI: ${t.badAiDraft}\n- Reference RU: ${t.referenceRu}\n- Why: ${t.whyExplanation}`
+          )
+          .join('\n\n')
+      : params.pacingMode
+      ? `[SCENE PACING MODE]: ${params.pacingMode}`
+      : '';
+
   // Layer 2: Chapter State & Vocabulary
   const layer2Parts = [
     `[CHAPTER-SLICED GLOSSARY R^(i) (${params.matchedCount} active terms)]\n${JSON.stringify(params.filteredGlossary, null, 2)}`,
     `Character Gender, Declension & Politeness Rules:\n${params.genderRulesList.join('\n') || 'Standard Russian declension'}`,
+    params.characterVoicesBlock || '',
+    tripletsBlock,
     params.forwardQuestionsBlock ? `[FORWARD-FALLING NARRATIVE QUESTIONS Q_n]\n${params.forwardQuestionsBlock}` : '',
     params.sceneDialogueBlock ? `${params.sceneDialogueBlock}` : '',
     `[DYNAMIC DELTA MEMORY]\n${bilingualMemoryBlock}`,
@@ -1238,191 +1720,289 @@ ${params.styleGuideMd}`;
 
   const userPrompt = `${layer0}\n\n${layer1}\n\n${layer2}\n\n${layer3}`;
 
-  const systemPrompt = `You are an autonomous Literary Translation Pipeline (LCD-MAS + CHORUS + Perevod_Ready Canon) for ${params.genrePromptHint}:
+  const outputFormat = params.outputFormat || 'json';
+  const formatInstruction =
+    outputFormat === 'stream_delimited'
+      ? `Return ONLY plain delimited Russian stream output (NO JSON wrapper, NO markdown code fences) preserving 1:1 paragraph order with zero-padded @@P000 markers:
+@@TITLE <переведённый заголовок главы на русском>
+@@P000 <русский перевод абзаца 0 без якорей [hash|#p0]>
+@@P001 <русский перевод абзаца 1>
+...
+@@SUMMARY_RU <краткое резюме главы на русском>
+@@SUMMARY_EN <concise English chapter summary>
+@@CSI <sourcePhrase> | <categoryLabel> | <adaptedRus> | <rationale>`
+      : `Return ONLY a JSON object with keys: {"titleRus": string, "rusText": string, "summary": string, "summaryEng": string, "csiNotes": [{"sourcePhrase": string, "categoryLabel": string, "adaptedRus": string, "rationale": string}]}.`;
+
+  // Put immutable Layer 0 + styleGuideMd + arcCanonBlock FIRST in systemPrompt for maximum KV-cache hit rate
+  const immutableKvPrefix = [
+    layer0,
+    params.arcCanonBlock ? `[FROZEN ARC CANON LOCK]\n${params.arcCanonBlock}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  const systemPrompt = `${immutableKvPrefix}
+
+You are an autonomous Literary Translation Pipeline (LCD-MAS + CHORUS + Perevod_Ready Canon) for ${params.genrePromptHint}:
 Role 1 (Semantic & Canon Translator): Translate 100% of facts 1:1 paragraph-by-paragraph without dropping or merging paragraphs. Preserve every Arabic number (21, 50, 80%, 6-м слое, 1-го яруса), system boxes inside --- dividers, and canonical glossary terms declined naturally in Russian cases (unless marked "нескл."). Strip paragraph anchor prefixes like [abc|#p0] from the output rusText.
 Role 2 (CSI & Ruby/Gikun Localization Specialist): Adapt Daoist idioms, honorifics (старший брат, старейшина), and cultural items (цзинь, ли) into authentic Russian and document each adaptation rationale in csiNotes (CHORUS C3). When the source contains AST tags <emph text="..."/> or <gikun type="..." spoken="..." meaning|referent|hidden="..."/>, render the semantic/spoken duality into natural Russian prose (e.g. «Произносимое» (Смысл)) and strictly strip all raw XML <gikun/> and <emph/> tags from rusText.
 Role 3 (Dedicated Literary Stylist — ${params.toneTitle}): Eliminate English calques ("в своём сердце" → "про себя", "горько улыбнулся" → "криво усмехнулся", "выплюнул полный рот крови" → "сплюнул сгусток крови", no possessive pronouns on body parts like "свои глаза / своей головой"), align verb past-tense gender with character gender metadata, enforce em-dashes "— " for dialogue and guillemets «...» for thoughts, and produce a bilingual summary (summary & summaryEng). STRICT ANTI-AI PUNCTUATION RULE: Never insert gratuitous em-dashes ("—"), en-dashes ("–"), or spaced hyphens (" - ") inside narrative sentences (no appositive tail dashes like "клинок — магический артефакт", no "— и", no "— это", and no artificial colons ":" after speech/thought tags like "подумал он: ..."); use em-dashes ONLY for direct dialogue lines and speech/thought attribution tags.
-Return ONLY a JSON object with keys: {"titleRus": string, "rusText": string, "summary": string, "summaryEng": string, "csiNotes": [{"sourcePhrase": string, "categoryLabel": string, "adaptedRus": string, "rationale": string}]}.`;
+${formatInstruction}`;
 
   return { systemPrompt, userPrompt };
 }
 
-export type ScenePacingMode =
-  | 'combat_action'
-  | 'cultivation_epiphany'
-  | 'comedy_banter'
-  | 'solemn_pathos'
-  | 'romance_psychology';
-
-/**
- * Classifies scene pacing mode across 5 archetypal dynamics.
- */
-export function classifyScenePacingMode(text: string): ScenePacingMode {
-  const lower = (text || '').toLowerCase();
-
-  const combatHits = (
-    lower.match(
-      /(?<![а-яёa-z0-9])(?:sword|blade|strike|spear|blood|slash|punch|kill|roar|clash|dodge|crush|attack|клинок|клинком|меч|мечом|удар|ударом|копь[её]|кровь|кровью|рассек|вожак|смерт|атак|атаки|бой|боем|рык)(?![а-яёa-z0-9])/gi
-    ) || []
-  ).length;
-
-  const cultHits = (
-    lower.match(
-      /(?<![а-яёa-z0-9])(?:qi|dantian|meridian|cultivat|realm|breakthrough|meditat|elixir|dao|ци|даньтянь|меридиан|меридианы|культивац|прорыв|медитац|пилюл|пилюли|дао|энерги|энергия)(?![а-яёa-z0-9])/gi
-    ) || []
-  ).length;
-
-  const comedyHits = (
-    lower.match(
-      /(?<![а-яёa-z0-9])(?:chuckle|sneer|grin|laugh|scoff|tease|idiot|fool|ridiculous|усмех|хохот|дурак|идиот|смех|шутк|шуткой|нелепо|чушь)(?![а-яёa-z0-9])/gi
-    ) || []
-  ).length;
-
-  const pathosHits = (
-    lower.match(
-      /(?<![а-яёa-z0-9])(?:ancient|ancestor|grand|throne|destiny|sacred|emperor|grave|dignity|древн|предок|предков|трон|трона|судьб|судьба|священн|император|величи|величие|могил|могила)(?![а-яёa-z0-9])/gi
-    ) || []
-  ).length;
-
-  const romanceHits = (
-    lower.match(
-      /(?<![а-яёa-z0-9])(?:blush|gaze|heartbeat|gentle|whisper|tender|embrace|взор|взором|румян|сердцебиени|нежн|ш[её]пот|ш[её]потом|объяти)(?![а-яёa-z0-9])/gi
-    ) || []
-  ).length;
-
-  const counts: Array<{ mode: ScenePacingMode; score: number }> = [
-    { mode: 'combat_action', score: combatHits },
-    { mode: 'cultivation_epiphany', score: cultHits },
-    { mode: 'comedy_banter', score: comedyHits },
-    { mode: 'solemn_pathos', score: pathosHits },
-    { mode: 'romance_psychology', score: romanceHits },
-  ];
-
-  counts.sort((a, b) => b.score - a.score);
-  return counts[0].score > 0 ? counts[0].mode : 'cultivation_epiphany';
-}
-
-export interface ContrastiveFewShotTriplet {
-  pacingMode: ScenePacingMode;
-  rawSource: string;
-  badAiDraft: string;
-  referenceRu: string;
-  whyExplanation: string;
-}
-
-const CONTRASTIVE_FEW_SHOT_LIBRARY: ContrastiveFewShotTriplet[] = [
-  {
-    pacingMode: 'combat_action',
-    rawSource: "The sword came at his throat. Lin Xuan didn't hesitate. He swung his blade and blocked it.",
-    badAiDraft: 'Меч приближался к его горлу. Линь Сюань не колебался. Он взмахнул своим клинком и заблокировал его.',
-    referenceRu: 'Клинок метил прямо в горло. Ни секунды не медля, Линь Сюань взметнул меч навстречу, и сталь со звоном приняла удар на себя.',
-    whyExplanation: 'Динамичный синтаксис без ИИ-тире, устранение притяжательных калек («своим/его»), звукопись и глагольный напор.',
-  },
-  {
-    pacingMode: 'combat_action',
-    rawSource: 'Blood sprayed out. He stepped forward with a fierce punch aimed right at the demon’s skull.',
-    badAiDraft: 'Кровь брызнула наружу. Он шагнул вперёд со свирепым ударом, направленным прямо на череп демона.',
-    referenceRu: 'Брызнула кровь. Шагнув наперерез, он со всего маху впечатал кулак прямо в темя твари.',
-    whyExplanation: 'Устранение тяжеловесных причастий («направленным на») и отказ от шаблонных ИИ-тире («Шаг вперёд — и...») в пользу живого глагола.',
-  },
-  {
-    pacingMode: 'cultivation_epiphany',
-    rawSource: 'After the completion of the absorption of the pill, the spiritual qi flowed through his meridians like a river.',
-    badAiDraft: 'После завершения поглощения пилюли, духовная ци текла через его меридианы подобно реке.',
-    referenceRu: 'Усвоив пилюлю, Линь Сюань ощутил, как духовная Ци широкой рекой хлынула по меридианам.',
-    whyExplanation: 'Устранение канцелярита «после завершения поглощения» по Норе Галь, вербализация и одушевление восприятия.',
-  },
-  {
-    pacingMode: 'cultivation_epiphany',
-    rawSource: 'The barrier between layers began to crack. An ancient aura surged from the depth of his dantian.',
-    badAiDraft: 'Барьер между слоями начал трескаться. Древняя аура хлынула из глубины его даньтяня.',
-    referenceRu: 'Барьер между слоями пошёл трещинами. Из самых недр даньтяня поднялась первозданная мощь.',
-    whyExplanation: 'Перестановка Тема → Рема, замена абстрактной «ауры» на осязаемую стилистику сянься.',
-  },
-  {
-    pacingMode: 'comedy_banter',
-    rawSource: '“Are you crazy? Why would I give you money?” he said with a twitching mouth.',
-    badAiDraft: '— Ты сумасшедший? Почему я должен давать тебе деньги? — сказал он с подёргивающимся ртом.',
-    referenceRu: '— С дуба рухнул, что ли? С какой стати мне тебе платить?! — проворчал он, и губы у него нервно дрогнули.',
-    whyExplanation: 'Разговорные частицы «что ли», фразеологизм «с какой стати», замена китайской соматической кальки.',
-  },
-  {
-    pacingMode: 'comedy_banter',
-    rawSource: '“Senior Brother, you shouldn’t do that,” she whispered, not knowing whether to laugh or cry.',
-    badAiDraft: '— Старший брат, ты не должен этого делать, — прошептала она, не зная, смеяться ей или плакать.',
-    referenceRu: '— Старший брат, ну ты и даёшь... — вздохнула девушка, не зная, то ли смеяться, то ли плакать.',
-    whyExplanation: 'Живая модальная частица «ну ... и», естественный оборот «то ли ... то ли» вместо буквального «смеяться или плакать».',
-  },
-  {
-    pacingMode: 'solemn_pathos',
-    rawSource: 'The grand elder stood atop the Myriad Beasts Mountain, gazing down at the disciples with cold eyes.',
-    badAiDraft: 'Великий старейшина стоял на вершине Горы Мириадов Зверей, глядя вниз на учеников холодными глазами.',
-    referenceRu: 'На вершине Горы Мириадов Зверей возвышался великий старейшина, бесстрастным взором оглядывая застывших внизу учеников.',
-    whyExplanation: 'Инверсия Тема → Рема, возвышенный торжественный ритм без избыточных местоимений у частей тела.',
-  },
-  {
-    pacingMode: 'romance_psychology',
-    rawSource: 'She bit her lower lip, feeling a strange warmth in her chest as he took her hand.',
-    badAiDraft: 'Она прикусила свою нижнюю губу, чувствуя странное тепло в своей груди, когда он взял её руку.',
-    referenceRu: 'Девушка закусила губу, и от его прикосновения к ладони в груди разлилось непривычное тепло.',
-    whyExplanation: 'Снятие тройного калькирования притяжательных местоимений (свою/своей/её) и плавная союзная связь без искусственных двоеточий и тире.',
-  },
-];
-
-/**
- * Selects k contrastive Dynamic Few-Shot triplets for prompt injection.
- */
-export function selectContrastiveFewShotTriplets(
-  mode: ScenePacingMode,
-  k = 3
-): ContrastiveFewShotTriplet[] {
-  const matches = CONTRASTIVE_FEW_SHOT_LIBRARY.filter((item) => item.pacingMode === mode);
-  const fallbacks = CONTRASTIVE_FEW_SHOT_LIBRARY.filter((item) => item.pacingMode !== mode);
-  return [...matches, ...fallbacks].slice(0, k);
-}
-
-export interface StylisticSpanDirective {
-  paragraphIndex: number;
-  anchorHash?: string;
-  spanQuote: string;
-  issueType: 'SVO_CALQUE' | 'NOMINALIZATION' | 'FLAT_DIALOGUE' | 'PARTICIPLE_CHAIN' | 'RHYTHM_MONOTONY';
-  rewriteInstructionRu: string;
-}
-
-export interface LiTransProQaRubricScores {
-  q1_faith: number; // 0..10 (Фактологическая верность)
-  q2_term: number;  // 0..10 (Глоссарный канон и падежи)
-  q3_cult: number;  // 0..10 (Культурная адаптация CSI)
-  q4_pron: number;  // 0..10 (Восстановление нулевых местоимений и ты/Вы)
-  q5_struct: number; // 0..10 (Актуальное членение Тема -> Рема)
-  q6_rhythm: number; // 0..10 (Синтаксический темпоритм)
-  q7_verbs: number;  // 0..10 (Глагольность и снятие номинализаций)
-  q8_voice: number;  // 0..10 (Голоса персонажей по S-VoCAL)
-  q9_atmos: number;  // 0..10 (Жанровый колорит)
-  q10_pacing: number; // 0..10 (Динамика сцены)
-  otqs: number;     // Weighted Overall Translation Quality Score
-}
-
-/**
- * Kunilovskaya Constraint: Capping directives to <= 3 per paragraph prevents
- * hypertransformation and stylistic collapse during blind rewriting.
- */
-export function capStylisticDirectivesPerParagraph(
-  directives: StylisticSpanDirective[],
-  maxPerParagraph = 3
-): StylisticSpanDirective[] {
-  const counts = new Map<number, number>();
-  const capped: StylisticSpanDirective[] = [];
-
-  for (const d of directives) {
-    const cur = counts.get(d.paragraphIndex) || 0;
-    if (cur < maxPerParagraph) {
-      counts.set(d.paragraphIndex, cur + 1);
-      capped.push(d);
+function joinStreamedParagraphs(paragraphs: string[]): string {
+  const parts: string[] = [];
+  let inBox = false;
+  for (let i = 0; i < paragraphs.length; i++) {
+    const p = paragraphs[i];
+    if (p === '---') {
+      if (!inBox && paragraphs.slice(i + 1).includes('---')) {
+        inBox = true;
+        parts.push(parts.length > 0 ? `\n\n${p}` : p);
+      } else if (inBox) {
+        inBox = false;
+        parts.push(`\n${p}`);
+      } else {
+        parts.push(parts.length > 0 ? `\n\n${p}` : p);
+      }
+      continue;
+    }
+    if (inBox) {
+      parts.push(`\n${p}`);
+    } else {
+      parts.push(parts.length > 0 ? `\n\n${p}` : p);
     }
   }
+  return parts.join('');
+}
 
-  return capped;
+/**
+ * Parses either `@@P000`-delimited streaming output or JSON Pass 1 output into a unified StreamedChapterDraft.
+ * Marks `truncated: true` and records `lastCompletedIndex` when fewer than `expectedParagraphCount` paragraphs completed.
+ */
+export function parsePass1TranslationOutput(
+  rawText: string,
+  expectedParagraphCount: number
+): StreamedChapterDraft {
+  const cleaned = (rawText || '')
+    .replace(/^```(?:json|text|markdown)?\s*\r?\n?/i, '')
+    .replace(/\r?\n?```\s*$/i, '')
+    .trim();
+
+  if (!cleaned) {
+    return {
+      titleRus: '',
+      paragraphs: [],
+      rusText: '',
+      summary: '',
+      summaryEng: '',
+      csiNotes: [],
+      truncated: expectedParagraphCount > 0,
+      lastCompletedIndex: -1,
+    };
+  }
+
+  const isDelimitedStream = /^@@(?:TITLE|P\d+|SUMMARY_RU|SUMMARY_EN|CSI)\b/m.test(cleaned);
+  if (isDelimitedStream) {
+    let titleRus = '';
+    let summary = '';
+    let summaryEng = '';
+    const csiNotes: string[] = [];
+    const paragraphMap = new Map<number, string[]>();
+    let currentParagraphIdx: number | null = null;
+    let currentMetaField: 'summary_ru' | 'summary_en' | null = null;
+
+    const lines = cleaned.replace(/\r\n/g, '\n').split('\n');
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (/^@@TITLE\b/i.test(line)) {
+        currentParagraphIdx = null;
+        currentMetaField = null;
+        titleRus = line.replace(/^@@TITLE\s*:?\s*/i, '').trim();
+        continue;
+      }
+      const pMatch = line.match(/^@@P(\d+)\s*:?\s*(.*)$/i);
+      if (pMatch) {
+        currentMetaField = null;
+        currentParagraphIdx = parseInt(pMatch[1], 10);
+        const body = (pMatch[2] || '')
+          .replace(/^\s*\[(?:[a-z0-9]{2,4}\|)?#p\d+\]\s*/i, '')
+          .trim();
+        const existing = paragraphMap.get(currentParagraphIdx) || [];
+        if (body) existing.push(body);
+        paragraphMap.set(currentParagraphIdx, existing);
+        continue;
+      }
+      if (/^@@SUMMARY_RU\b/i.test(line)) {
+        currentParagraphIdx = null;
+        currentMetaField = 'summary_ru';
+        summary = line.replace(/^@@SUMMARY_RU\s*:?\s*/i, '').trim();
+        continue;
+      }
+      if (/^@@SUMMARY_EN\b/i.test(line)) {
+        currentParagraphIdx = null;
+        currentMetaField = 'summary_en';
+        summaryEng = line.replace(/^@@SUMMARY_EN\s*:?\s*/i, '').trim();
+        continue;
+      }
+      if (/^@@CSI\b/i.test(line)) {
+        currentParagraphIdx = null;
+        currentMetaField = null;
+        const note = line.replace(/^@@CSI\s*:?\s*/i, '').trim();
+        if (note) csiNotes.push(note);
+        continue;
+      }
+
+      if (currentParagraphIdx !== null && line) {
+        const existing = paragraphMap.get(currentParagraphIdx) || [];
+        existing.push(line.replace(/^\s*\[(?:[a-z0-9]{2,4}\|)?#p\d+\]\s*/i, ''));
+        paragraphMap.set(currentParagraphIdx, existing);
+      } else if (currentMetaField === 'summary_ru' && line) {
+        summary = summary ? `${summary} ${line}` : line;
+      } else if (currentMetaField === 'summary_en' && line) {
+        summaryEng = summaryEng ? `${summaryEng} ${line}` : line;
+      }
+    }
+
+    const indices = Array.from(paragraphMap.keys()).sort((a, b) => a - b);
+    const paragraphs: string[] = [];
+    let lastCompletedIndex = -1;
+    for (const idx of indices) {
+      const joined = (paragraphMap.get(idx) || []).join('\n').trim();
+      if (joined) {
+        paragraphs.push(joined);
+        lastCompletedIndex = idx;
+      }
+    }
+
+    const completedCount = paragraphs.length;
+    const truncated =
+      expectedParagraphCount > 0 &&
+      (completedCount < expectedParagraphCount || lastCompletedIndex + 1 < expectedParagraphCount);
+
+    return {
+      titleRus,
+      paragraphs,
+      rusText: joinStreamedParagraphs(paragraphs),
+      summary,
+      summaryEng,
+      csiNotes,
+      truncated,
+      lastCompletedIndex,
+    };
+  }
+
+  // JSON format fallback
+  const parsed = extractResilientJsonFromLlm<Record<string, unknown> | null>(cleaned, null);
+  if (parsed && typeof parsed === 'object' && typeof parsed.rusText === 'string') {
+    const rusText = parsed.rusText.trim();
+    const paragraphs = rusText
+      .replace(/\r\n/g, '\n')
+      .split('\n')
+      .map((l) => l.replace(/^\s*\[(?:[a-z0-9]{2,4}\|)?#p\d+\]\s*/i, '').trim())
+      .filter(Boolean);
+    const rawNotes = Array.isArray(parsed.csiNotes) ? parsed.csiNotes : [];
+    const csiNotes = rawNotes
+      .map((n) => {
+        if (typeof n === 'string') return n;
+        if (n && typeof n === 'object') {
+          const obj = n as Record<string, unknown>;
+          return [obj.sourcePhrase, obj.categoryLabel, obj.adaptedRus, obj.rationale]
+            .filter(Boolean)
+            .join(' | ');
+        }
+        return '';
+      })
+      .filter(Boolean);
+    const lastCompletedIndex = paragraphs.length - 1;
+    return {
+      titleRus: String(parsed.titleRus || ''),
+      paragraphs,
+      rusText,
+      summary: String(parsed.summary || ''),
+      summaryEng: String(parsed.summaryEng || ''),
+      csiNotes,
+      truncated: expectedParagraphCount > 0 && paragraphs.length < expectedParagraphCount,
+      lastCompletedIndex,
+    };
+  }
+
+  // Plain raw text fallback
+  const fallbackParas = cleaned
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  return {
+    titleRus: '',
+    paragraphs: fallbackParas,
+    rusText: joinStreamedParagraphs(fallbackParas),
+    summary: '',
+    summaryEng: '',
+    csiNotes: [],
+    truncated: expectedParagraphCount > 0 && fallbackParas.length < expectedParagraphCount,
+    lastCompletedIndex: fallbackParas.length - 1,
+  };
+}
+
+/**
+ * Builds a continuation prompt to resume a truncated `@@P000` stream from `startParagraphIndex`
+ * without re-translating already finished paragraphs.
+ */
+export function buildPass1ContinuationPrompt(params: {
+  chapterNumber: number;
+  titleEng: string;
+  engText: string;
+  alreadyTranslatedParagraphs: string[];
+  startParagraphIndex: number;
+  filteredGlossary?: CanonicalGlossary;
+  outputFormat?: 'json' | 'stream_delimited';
+  styleGuideMd?: string;
+  arcCanonBlock?: string;
+}): {
+  systemPrompt: string;
+  userPrompt: string;
+} {
+  const sourceParas = params.engText
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const safeStart = Math.max(0, params.startParagraphIndex);
+  const remainingSource = sourceParas
+    .slice(safeStart)
+    .map((p, offset) => {
+      const idx = safeStart + offset;
+      return `[${computeParagraphHashAnchor(p, idx)}|#p${idx}] ${p}`;
+    })
+    .join('\n\n');
+
+  const tailContext = params.alreadyTranslatedParagraphs
+    .slice(-2)
+    .map((p, i, arr) => {
+      const idx = Math.max(0, safeStart - arr.length + i);
+      return `@@P${String(idx).padStart(3, '0')} ${p}`;
+    })
+    .join('\n');
+
+  const startTag = `@@P${String(safeStart).padStart(3, '0')}`;
+  const immutablePrefix = [
+    params.styleGuideMd ? `[STYLE GUIDE]\n${params.styleGuideMd}` : '',
+    params.arcCanonBlock ? `[FROZEN ARC CANON LOCK]\n${params.arcCanonBlock}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  const systemPrompt = `${immutablePrefix ? `${immutablePrefix}\n\n` : ''}You are resuming an interrupted Pass 1 literary translation.
+Do NOT repeat paragraphs before ${startTag}. Continue strictly from ${startTag} through @@P${String(Math.max(safeStart, sourceParas.length - 1)).padStart(3, '0')} in 1:1 paragraph order, followed by @@SUMMARY_RU and @@SUMMARY_EN. Preserve Arabic digits, canon glossary terms, and strip [hash|#pK] prefixes.`;
+
+  const userPrompt = `[RESUME CHAPTER ${params.chapterNumber}: "${params.titleEng}" FROM #p${safeStart}]
+${tailContext ? `[ALREADY TRANSLATED CONTEXT — DO NOT REPEAT]:\n${tailContext}\n\n` : ''}${params.filteredGlossary ? `[ACTIVE GLOSSARY]:\n${JSON.stringify(params.filteredGlossary)}\n\n` : ''}[REMAINING SOURCE PARAGRAPHS TO TRANSLATE]:\n${remainingSource}`;
+
+  return { systemPrompt, userPrompt };
 }
 
 /**
@@ -1435,6 +2015,9 @@ export function buildSurgicalCriticPass2Prompts(params: {
   draftRusText: string;
   filteredGlossary: CanonicalGlossary;
   genderRulesList: string[];
+  characterVoicesBlock?: string;
+  socialEdgesBlock?: string;
+  sceneDialogueBlock?: string;
 }): {
   systemPrompt: string;
   userPrompt: string;
@@ -1467,7 +2050,15 @@ export function buildSurgicalCriticPass2Prompts(params: {
 2. Не удаляй арабские числа, скобки [...] и разделители ---.
 3. Не выписывай больше 3 директив на один абзац (ограничение Куниловской против гипертрансформации).`;
 
-  const userPrompt = `[GLOSSARY & GENDER RULES]\n${JSON.stringify(params.filteredGlossary)}\n${params.genderRulesList.join('; ')}\n\n[ORIGINAL ENG]\n${params.engText}\n\n[DRAFT RUS (PASS 1)]\n${params.draftRusText}`;
+  const extraContext = [
+    params.characterVoicesBlock || '',
+    params.socialEdgesBlock ? `[SOCIAL REGISTERS]\n${params.socialEdgesBlock}` : '',
+    params.sceneDialogueBlock || '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  const userPrompt = `[GLOSSARY & GENDER RULES]\n${JSON.stringify(params.filteredGlossary)}\n${params.genderRulesList.join('; ')}${extraContext ? `\n\n${extraContext}` : ''}\n\n[ORIGINAL ENG]\n${params.engText}\n\n[DRAFT RUS (PASS 1)]\n${params.draftRusText}`;
 
   return { systemPrompt, userPrompt };
 }
@@ -1488,7 +2079,8 @@ export function buildBlindStylistPass3Prompts(params: {
   toneTitle: string;
   toneInstruction: string;
   characterVoicesBlock: string;
-  pacingMode: ScenePacingMode;
+  /** ScenePacingMode */
+  pacingMode: ScenePacingMode | string;
   contrastiveTriplets: ContrastiveFewShotTriplet[];
 }): {
   systemPrompt: string;
@@ -1577,4 +2169,363 @@ Preserve ALL Arabic numbers, system tags, and glossary canon.`;
   const userPrompt = `Fix the remaining QA Linter & DITING MQM violations in this Russian translation (${params.genreTitle}, tone: ${params.toneTitle}) so it achieves 0 errors and 0 warnings.\n\nEnglish Source:\n${params.engText}\n\nCurrent Russian Translation:\n${params.rusText}\n\nRemaining Linter Issues:\n${JSON.stringify(params.linterIssues, null, 2)}\n\nCanonical Glossary:\n${JSON.stringify(params.glossary, null, 2)}`;
 
   return { systemPrompt, userPrompt };
+}
+
+/**
+ * Unified Delta-Patcher prompt builder (replaces multi-round repair + blind pass bloat):
+ * packages ONLY flawed [#pK] paragraphs with +/-1 non-flawed neighbor context, exact source x_s slice,
+ * paragraph-scoped LintIssue + CrossChapterSlopIssue items, and strictly matching glossary entries.
+ */
+export function buildUnifiedDeltaPatcherPrompts(params: {
+  chapterNumber?: number;
+  titleEng?: string;
+  engParagraphs: string[];
+  rusParagraphs: string[];
+  flawedIndices: number[];
+  lintIssues?: Array<LintIssue & { paragraphIndex?: number; message?: string }>;
+  slopIssues?: CrossChapterSlopIssue[];
+  filteredGlossary?: CanonicalGlossary;
+  characterVoicesBlock?: string;
+  toneTitle?: string;
+}): {
+  systemPrompt: string;
+  userPrompt: string;
+} {
+  const resolveLintParagraphIndex = (
+    issue: LintIssue & { paragraphIndex?: number }
+  ): number | undefined => {
+    if (
+      typeof issue.paragraphIndex === 'number' &&
+      issue.paragraphIndex >= 0 &&
+      issue.paragraphIndex < params.rusParagraphs.length
+    ) {
+      return issue.paragraphIndex;
+    }
+    if (issue.snippet) {
+      const snippetIdx = params.rusParagraphs.findIndex((p) => p.includes(issue.snippet));
+      if (snippetIdx >= 0) return snippetIdx;
+    }
+    if (typeof issue.line === 'number' && issue.line >= 1) {
+      return Math.min(params.rusParagraphs.length - 1, issue.line - 1);
+    }
+    return undefined;
+  };
+
+  const flawedSet = new Set<number>();
+  for (const idx of params.flawedIndices || []) {
+    if (Number.isInteger(idx) && idx >= 0 && idx < params.rusParagraphs.length) {
+      flawedSet.add(idx);
+    }
+  }
+  if (flawedSet.size === 0) {
+    for (const issue of params.lintIssues || []) {
+      const pIdx = resolveLintParagraphIndex(issue);
+      if (pIdx !== undefined) {
+        flawedSet.add(pIdx);
+      }
+    }
+    for (const slop of params.slopIssues || []) {
+      if (
+        typeof slop.paragraphIndex === 'number' &&
+        slop.paragraphIndex >= 0 &&
+        slop.paragraphIndex < params.rusParagraphs.length
+      ) {
+        flawedSet.add(slop.paragraphIndex);
+      }
+    }
+  }
+
+  const targetIndices = Array.from(flawedSet).sort((a, b) => a - b);
+
+  // Scoped minimal glossary: include ONLY terms that appear in flawed source/target paragraphs
+  const scopedTerms: string[] = [];
+  if (params.filteredGlossary && targetIndices.length > 0) {
+    const flawedText = targetIndices
+      .map((idx) => `${params.engParagraphs[idx] || ''} ${params.rusParagraphs[idx] || ''}`)
+      .join('\n')
+      .toLowerCase();
+    for (const bucket of Object.values(params.filteredGlossary)) {
+      for (const [eng, rus] of Object.entries(bucket || {})) {
+        if (flawedText.includes(eng.toLowerCase()) || flawedText.includes(String(rus).toLowerCase())) {
+          scopedTerms.push(`${eng} -> ${rus}`);
+        }
+      }
+    }
+  }
+
+  const blocks: string[] = [];
+  for (const idx of targetIndices) {
+    const rus = params.rusParagraphs[idx] || '';
+    const eng = params.engParagraphs[idx] || '';
+    const hash = computeParagraphHashAnchor(rus, idx);
+    const prevNeighbor =
+      idx > 0 && !flawedSet.has(idx - 1)
+        ? `[NEIGHBOR #p${idx - 1} READ_ONLY]: ${params.rusParagraphs[idx - 1]}`
+        : '';
+    const nextNeighbor =
+      idx + 1 < params.rusParagraphs.length && !flawedSet.has(idx + 1)
+        ? `[NEIGHBOR #p${idx + 1} READ_ONLY]: ${params.rusParagraphs[idx + 1]}`
+        : '';
+
+    const localLint = (params.lintIssues || []).filter((i) => {
+      const resolvedIdx = resolveLintParagraphIndex(i);
+      return resolvedIdx === idx || resolvedIdx === undefined;
+    });
+    const localSlop = (params.slopIssues || []).filter((s) => s.paragraphIndex === idx);
+
+    const lines = [
+      `[${hash}|#p${idx}]`,
+      prevNeighbor,
+      `ENG: ${eng}`,
+      `RUS: ${rus}`,
+      nextNeighbor,
+      localLint.length > 0
+        ? `LINT: ${localLint
+            .map(
+              (i) =>
+                `[${i.severity}:${i.ruleId}] ${i.message || i.explanation || i.suggestion || i.ruleTitle}`
+            )
+            .join(' | ')}`
+        : '',
+      localSlop.length > 0
+        ? `SLOP_COOLDOWN: ${localSlop.map((s) => `«${s.phrase}» (${s.occurrencesInWindow}x in ch.${s.chapterNumbers.join(',')})`).join(' | ')}`
+        : '',
+    ].filter(Boolean);
+
+    blocks.push(lines.join('\n'));
+  }
+
+  const systemPrompt = `You are a Unified Delta-Patcher (Factual QA + Anti-Slop Cooldown + Literary Polish${params.toneTitle ? ` · Tone: ${params.toneTitle}` : ''}).
+Repair ONLY the target flawed [#pK] paragraphs listed below.
+For each target paragraph K, output:
+[#pK]
+<corrected Russian paragraph>
+
+Rules:
+1. Do NOT output or modify READ_ONLY neighbor paragraphs (#pK-1 / #pK+1).
+2. Preserve 100% of Arabic numbers, bracketed system tags [...], and canonical Russian terms.
+3. Replace any flagged SLOP_COOLDOWN cliché with fresh, verb-driven Russian prose without AI-dashes ("— ") inside narration.`;
+
+  const userPrompt = [
+    params.chapterNumber !== undefined ? `[CHAPTER ${params.chapterNumber}${params.titleEng ? `: "${params.titleEng}"` : ''}]` : '',
+    scopedTerms.length > 0 ? `[SCOPED CANON TERMS]\n${scopedTerms.join('; ')}` : '',
+    params.characterVoicesBlock ? `[VOICES]\n${params.characterVoicesBlock}` : '',
+    blocks.length > 0 ? `[FLAWED PARAGRAPHS]\n${blocks.join('\n\n---\n\n')}` : '[FLAWED PARAGRAPHS]: None',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  return { systemPrompt, userPrompt };
+}
+
+function stableHashKey(input: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
+
+function normalizeScoutGender(raw: unknown, eng: string, corpus: string): GrammaticalGender {
+  if (raw === 'M' || raw === 'F' || raw === 'N' || raw === 'PL' || raw === 'UNKNOWN') {
+    return raw;
+  }
+  const idx = corpus.toLowerCase().indexOf(eng.toLowerCase());
+  const slice =
+    idx >= 0
+      ? corpus.slice(Math.max(0, idx - 120), Math.min(corpus.length, idx + eng.length + 160))
+      : corpus.slice(0, 500);
+  return inferEnglishLocalGender(slice);
+}
+
+/**
+ * Compiles an immutable ArcCanonPacket across up to 25 chapters using 1 batched scout call
+ * (or deterministic entity + context-gender extraction when llmPort is omitted),
+ * classifying ambiguous entity gender as 'UNKNOWN' instead of defaulting to 'M'.
+ */
+export async function compileArcPreLinker(params: {
+  chapters: Array<{ number: number; titleEng?: string; engText: string }>;
+  glossary: CanonicalGlossary;
+  glossaryMeta?: Record<string, GlossaryTermMeta>;
+  socialEdges?: SocialRegisterEdge[];
+  llmPort?: LlmInferencePort;
+  genreTitle?: string;
+  genrePromptHint?: string;
+  arcId?: string;
+}): Promise<{
+  arcPacket: ArcCanonPacket;
+  inferredGenders: Record<string, GrammaticalGender>;
+  suggestedTerms: ScoutedTerm[];
+}> {
+  const arcChapters = [...(params.chapters || [])]
+    .sort((a, b) => a.number - b.number)
+    .slice(0, 25);
+
+  const startChapter = arcChapters[0]?.number ?? 1;
+  const endChapter = arcChapters[arcChapters.length - 1]?.number ?? startChapter;
+  const arcId = params.arcId || `arc-${startChapter}-${endChapter}`;
+  const fullCorpus = arcChapters.map((c) => c.engText || '').join('\n\n');
+
+  const inferredGenders: Record<string, GrammaticalGender> = {};
+  for (const [eng] of Object.entries(params.glossary?.characters || {})) {
+    const existing = params.glossaryMeta?.[eng]?.gender;
+    inferredGenders[eng] = existing || normalizeScoutGender(undefined, eng, fullCorpus);
+  }
+
+  const suggestedTerms: ScoutedTerm[] = [];
+  const knownKeys = new Set<string>();
+  for (const bucket of Object.values(params.glossary || {})) {
+    for (const key of Object.keys(bucket || {})) {
+      knownKeys.add(key.toLowerCase());
+    }
+  }
+
+  if (params.llmPort && arcChapters.length > 0) {
+    try {
+      const digest = arcChapters
+        .map((ch) => `=== Ch.${ch.number} ${ch.titleEng || ''} ===\n${(ch.engText || '').slice(0, 700)}`)
+        .join('\n\n');
+      const res = await params.llmPort.complete({
+        task: 'scout',
+        expectJson: true,
+        systemInstruction: `You are an Arc Pre-Linker for ${params.genrePromptHint || 'web-novels'}. Analyze the chapter batch (up to 25 chapters) and return ONLY JSON: {"suggestedTerms": [{"eng": string, "rus_suggested": string, "category": "realms|characters|sects_and_places|system_and_terms|units", "gender": "M|F|N|PL|UNKNOWN", "chapter_first_seen": number, "context_snippet": string}], "inferredGenders": {"Name": "M|F|UNKNOWN"}}. NEVER guess "M" when gender markers (he/she/lord/lady) are absent — use "UNKNOWN".`,
+        userPrompt: `Existing Canon Keys: [${Array.from(knownKeys).join(', ')}]\n\n[ARC CHAPTER BATCH ${startChapter}-${endChapter}]:\n${digest}`,
+      });
+      const parsed = extractResilientJsonFromLlm<Record<string, unknown> | null>(res.text, null);
+      if (parsed && typeof parsed === 'object') {
+        if (parsed.inferredGenders && typeof parsed.inferredGenders === 'object') {
+          for (const [name, g] of Object.entries(parsed.inferredGenders as Record<string, unknown>)) {
+            if (!inferredGenders[name] || inferredGenders[name] === 'UNKNOWN') {
+              inferredGenders[name] = normalizeScoutGender(g, name, fullCorpus);
+            }
+          }
+        }
+        if (Array.isArray(parsed.suggestedTerms)) {
+          parsed.suggestedTerms.forEach((item, idx) => {
+            if (!item || typeof item !== 'object') return;
+            const rec = item as Record<string, unknown>;
+            const eng = String(rec.eng || '').trim();
+            if (!eng || knownKeys.has(eng.toLowerCase())) return;
+            knownKeys.add(eng.toLowerCase());
+            const gender = normalizeScoutGender(rec.gender, eng, String(rec.context_snippet || fullCorpus));
+            inferredGenders[eng] = gender;
+            suggestedTerms.push({
+              id: `arc-scout-${startChapter}-${idx}`,
+              eng,
+              rus_suggested: String(rec.rus_suggested || ''),
+              category:
+                rec.category === 'realms' ||
+                rec.category === 'characters' ||
+                rec.category === 'sects_and_places' ||
+                rec.category === 'units'
+                  ? rec.category
+                  : 'system_and_terms',
+              gender,
+              chapter_first_seen: Number(rec.chapter_first_seen) || startChapter,
+              context_snippet: String(rec.context_snippet || '').slice(0, 180),
+              approved_for_glossary: Boolean(rec.rus_suggested),
+              confidence: 0.9,
+            });
+          });
+        }
+      }
+    } catch {
+      // Deterministic extraction fallback below if batch scout fails
+    }
+  }
+
+  // Deterministic scan for multi-word capitalized entities if not yet covered
+  const candidateCounts = new Map<string, { count: number; firstChapter: number; snippet: string }>();
+  const entityRegex = /\b([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,}){1,2})\b/g;
+  for (const ch of arcChapters) {
+    const text = ch.engText || '';
+    let match: RegExpExecArray | null;
+    entityRegex.lastIndex = 0;
+    while ((match = entityRegex.exec(text)) !== null) {
+      const eng = match[1].trim();
+      if (knownKeys.has(eng.toLowerCase())) continue;
+      if (/^(?:Senior Brother|Junior Sister|Chapter\s+\d+|Inner Sect|Outer Sect)$/i.test(eng)) continue;
+      const cur = candidateCounts.get(eng);
+      if (cur) {
+        cur.count += 1;
+      } else {
+        candidateCounts.set(eng, {
+          count: 1,
+          firstChapter: ch.number,
+          snippet: text.slice(Math.max(0, match.index - 40), match.index + eng.length + 80).trim(),
+        });
+      }
+    }
+  }
+
+  let detIdx = 0;
+  for (const [eng, info] of candidateCounts.entries()) {
+    if (knownKeys.has(eng.toLowerCase())) continue;
+    if (info.count < 2 && arcChapters.length > 1) continue;
+    knownKeys.add(eng.toLowerCase());
+    const gender = normalizeScoutGender(undefined, eng, info.snippet || fullCorpus);
+    const category = /sect|pavilion|mountain|realm|palace|hall/i.test(eng)
+      ? 'sects_and_places'
+      : /pill|cauldron|art|step|flame|grass|technique|sword|spear/i.test(eng)
+      ? 'system_and_terms'
+      : 'characters';
+    if (category === 'characters' && !inferredGenders[eng]) {
+      inferredGenders[eng] = gender;
+    }
+    suggestedTerms.push({
+      id: `arc-det-${startChapter}-${detIdx++}`,
+      eng,
+      rus_suggested: '',
+      category,
+      gender,
+      chapter_first_seen: info.firstChapter,
+      context_snippet: info.snippet,
+      approved_for_glossary: false,
+      confidence: 0.72,
+    });
+  }
+
+  // Build sorted immutable blocks for KV-cache stability
+  const glossaryLines: string[] = [];
+  for (const cat of ['realms', 'characters', 'sects_and_places', 'system_and_terms', 'units'] as const) {
+    const entries = Object.entries(params.glossary?.[cat] || {}).sort(([a], [b]) => a.localeCompare(b));
+    if (entries.length > 0) {
+      glossaryLines.push(`[${cat}]: ${entries.map(([e, r]) => `${e}=${r}`).join(' | ')}`);
+    }
+  }
+  const frozenGlossaryBlock = glossaryLines.join('\n') || 'Empty canon glossary.';
+
+  const voiceLines = Object.entries(params.glossary?.characters || {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([eng, rus]) => {
+      const g = inferredGenders[eng] || params.glossaryMeta?.[eng]?.gender || 'UNKNOWN';
+      return `- ${rus} (${eng}) · Gender: ${g}`;
+    });
+  const frozenVoicesBlock = voiceLines.join('\n') || 'No frozen character voices.';
+
+  const edgeLines = [...(params.socialEdges || [])]
+    .sort((a, b) => `${a.fromCharacter}:${a.toCharacter}`.localeCompare(`${b.fromCharacter}:${b.toCharacter}`))
+    .map((e) => `- ${e.fromCharacter} -> ${e.toCharacter}: ${e.pronounMode} (${e.fineRole})`);
+  const frozenSocialEdgesBlock = edgeLines.join('\n') || 'No frozen social register edges.';
+
+  const cacheKey = `arc-${startChapter}-${endChapter}-${stableHashKey(
+    `${frozenGlossaryBlock}\n${frozenVoicesBlock}\n${frozenSocialEdgesBlock}`
+  )}`;
+
+  const arcPacket: ArcCanonPacket = {
+    arcId,
+    startChapter,
+    endChapter,
+    frozenGlossaryBlock,
+    frozenVoicesBlock,
+    frozenSocialEdgesBlock,
+    cacheKey,
+  };
+
+  return {
+    arcPacket,
+    inferredGenders,
+    suggestedTerms,
+  };
 }

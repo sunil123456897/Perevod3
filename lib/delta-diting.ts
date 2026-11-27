@@ -10,6 +10,21 @@ import {
   detectTautologies,
   runQaLinter,
 } from './qa-linter.ts';
+import type {
+  CsiCategory,
+  CsiCulturalNote,
+  StylometricMetrics,
+  DitingQualityReport,
+  CrossChapterSlopIssue,
+} from './pipeline-types.ts';
+
+export type {
+  CsiCategory,
+  CsiCulturalNote,
+  StylometricMetrics,
+  DitingQualityReport,
+  CrossChapterSlopIssue,
+} from './pipeline-types.ts';
 
 // ============================================================================
 // MODULE 2: DelTA 4-Component Document-to-Sentence Context Engine
@@ -42,6 +57,75 @@ export interface DelTAContextPacket {
   longTermMemories: DelTALongTermMatch[]; // \hat{N}^{(i)} — relevant past chapter sentences
 }
 
+function extractCleanNarrativeLines(rawText: string): string[] {
+  const rawLines = rawText.split(/\r?\n/).map((l) => l.trim());
+  const cleaned: string[] = [];
+  let inBox = false;
+
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = rawLines[i];
+    if (!line) continue;
+    if (line === '---') {
+      if (!inBox) {
+        const hasClose = rawLines.slice(i + 1, i + 35).some((candidate) => candidate === '---');
+        if (hasClose) {
+          inBox = true;
+        }
+      } else {
+        inBox = false;
+      }
+      continue;
+    }
+    if (inBox) continue;
+    if (line === '***' || line === '◇◇◇') continue;
+    if ((line.startsWith('[') && line.endsWith(']')) || (line.startsWith('【') && line.endsWith('】'))) {
+      continue;
+    }
+    cleaned.push(line);
+  }
+
+  const substantive = cleaned.filter((l) => l.length > 15);
+  return substantive.length > 0 ? substantive : cleaned;
+}
+
+function sampleBeginMidEndSentences(lines: string[]): string[] {
+  const sentences: string[] = [];
+  for (const line of lines) {
+    const parts = line
+      .split(/(?<=[.!?])\s+|(?<=[。！？])\s*/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (parts.length > 0) {
+      sentences.push(...parts);
+    } else if (line) {
+      sentences.push(line);
+    }
+  }
+  if (sentences.length === 0) return [];
+  if (sentences.length === 1) return [sentences[0]];
+  if (sentences.length === 2) {
+    return sentences[0] === sentences[1] ? [sentences[0]] : [sentences[0], sentences[1]];
+  }
+  const picked = [
+    sentences[0],
+    sentences[Math.floor(sentences.length / 2)],
+    sentences[sentences.length - 1],
+  ];
+  return Array.from(new Set(picked));
+}
+
+function matchesTermWithWordBoundary(text: string, term: string): boolean {
+  const trimmed = term.trim();
+  if (!trimmed) return false;
+  const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const startBound = /^[a-zA-Z0-9_]/.test(trimmed) ? '\\b' : '';
+  const endBound = /[a-zA-Z0-9_]$/.test(trimmed) ? '\\b' : '';
+  if (!startBound && !endBound) {
+    return text.toLowerCase().includes(trimmed.toLowerCase());
+  }
+  return new RegExp(`${startBound}${escaped}${endBound}`, 'i').test(text);
+}
+
 export function generateBilingualChapterSummary(
   chapterNumber: number,
   titleEng: string,
@@ -49,24 +133,27 @@ export function generateBilingualChapterSummary(
   titleRus: string,
   rusText: string
 ): DelTABilingualSummary {
-  const cleanEngLines = engText
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 15 && !l.startsWith('---') && !l.startsWith('['));
+  const cleanEngLines = extractCleanNarrativeLines(engText);
+  const engSamples = sampleBeginMidEndSentences(cleanEngLines);
 
-  const firstEng = cleanEngLines[0]?.split(/(?<=[.!?])\s+/)[0] || titleEng;
-  const lastEng =
-    cleanEngLines[cleanEngLines.length - 1]?.split(/(?<=[.!?])\s+/).slice(-1)[0] || '';
-  const engSummary =
-    firstEng && lastEng && firstEng !== lastEng
-      ? `Ch.${chapterNumber} (${titleEng}): ${firstEng} Outcome: ${lastEng}`
-      : `Ch.${chapterNumber} (${titleEng}): ${firstEng}`;
+  let engSummary: string;
+  if (engSamples.length === 0) {
+    engSummary = `Ch.${chapterNumber} (${titleEng}): ${titleEng}`;
+  } else if (engSamples.length === 1) {
+    engSummary = `Ch.${chapterNumber} (${titleEng}): ${engSamples[0]}`;
+  } else if (engSamples.length === 2) {
+    engSummary = `Ch.${chapterNumber} (${titleEng}): ${engSamples[0]} Outcome: ${engSamples[1]}`;
+  } else {
+    engSummary = `Ch.${chapterNumber} (${titleEng}): ${engSamples[0]} Turning point: ${engSamples[1]} Outcome: ${engSamples[2]}`;
+  }
 
-  const rusSummary = generateChapterMemorySummary(
-    chapterNumber,
-    titleRus || `Глава ${chapterNumber}`,
-    rusText
-  );
+  const resolvedTitleRus = titleRus || `Глава ${chapterNumber}`;
+  const cleanRusLines = extractCleanNarrativeLines(rusText);
+  const rusSamples = sampleBeginMidEndSentences(cleanRusLines);
+  const rusSummary =
+    rusSamples.length > 0
+      ? `В Главе ${chapterNumber} («${resolvedTitleRus}»): ${rusSamples.join(' ')}`
+      : generateChapterMemorySummary(chapterNumber, resolvedTitleRus, rusText);
 
   return {
     eng: engSummary,
@@ -156,13 +243,17 @@ export function buildDelTAContextPacket(
 
   // Long-Term Memory (\hat{N}^{(i)}): retrieve up to 3 past translated paragraphs that share active proper nouns
   const activeEntities = [
+    ...Object.entries(filteredGlossary.realms || {}),
     ...Object.entries(filteredGlossary.characters || {}),
     ...Object.entries(filteredGlossary.sects_and_places || {}),
     ...Object.entries(filteredGlossary.system_and_terms || {}),
+    ...Object.entries(filteredGlossary.units || {}),
   ];
 
+  // Search earlier chapters in reverse chronological order (most recent chapters first)
+  const sortedEarlierChapters = [...earlierChapters].sort((a, b) => b.number - a.number);
   const longTermMemories: DelTALongTermMatch[] = [];
-  for (const pastCh of earlierChapters) {
+  for (const pastCh of sortedEarlierChapters) {
     if (!pastCh.rusText.trim()) continue;
     if (previousChapter && pastCh.number === previousChapter.number) continue;
 
@@ -171,7 +262,7 @@ export function buildDelTAContextPacket(
       if (!pair.engParagraph || !pair.rusParagraph || pair.isSystemDivider) continue;
       for (const [engTerm, rusTerm] of activeEntities) {
         if (
-          pair.engParagraph.toLowerCase().includes(engTerm.toLowerCase()) &&
+          matchesTermWithWordBoundary(pair.engParagraph, engTerm) &&
           longTermMemories.length < 3 &&
           !longTermMemories.some((m) => m.matchedEntity === `${engTerm} → ${rusTerm}`)
         ) {
@@ -201,48 +292,11 @@ export function buildDelTAContextPacket(
 // MODULE 3: LCD-MAS + CHORUS CSI Cultural Footnotes & DITING 6D Judge
 // ============================================================================
 
-export type CsiCategory = 'idiom' | 'honorific' | 'daoist_term' | 'system_formula';
-
-export interface CsiCulturalNote {
-  id: string;
-  sourcePhrase: string;
-  category: CsiCategory;
-  categoryLabel: string;
-  adaptedRus: string;
-  rationale: string;
-}
-
 export interface NegationPolarityViolation {
   paragraphIndex: number; // 0-based
   engNegatedClause: string;
   rusVerbFound: string;
   suggestedFix: string;
-}
-
-export interface StylometricMetrics {
-  wordCount: number;
-  sentenceCount: number;
-  mattr100: number; // Moving-Average Type-Token Ratio (window = 100 words), 0..1
-  burstinessCv: number; // Coefficient of Variation (sigma / mean) of sentence lengths
-  openerEntropy: number; // Normalized Shannon entropy of sentence-initial words, 0..1
-  nominalizationPer100Words: number; // Density of -ние/-тие/-ость suffixes per 100 words
-  nominalizationHotspotParagraphs: number[]; // 0-based indices of paragraphs with heavy bureaucratic nominalization
-  negationPolarityMismatchParagraphs: number[]; // 0-based indices of paragraphs with dropped/inverted negation
-  internalDashPer100Words: number; // Non-dialogue internal dash density per 100 words
-  tautologyPer1000Words: number; // Proximity stem tautologies per 1,000 words
-  wordExpansionRatio: number; // rusWordCount / engWordCount (1.0 if engText omitted)
-}
-
-export interface DitingQualityReport {
-  idiomAccuracy: number; // Точность передачи идиоматики
-  referentialCohesion: number; // Временная и референциальная связность
-  characterVoiceFidelity: number; // Сохранение индивидуальных голосов героев
-  culturalAdaptation: number; // Культурная достоверность (CSI)
-  literaryRhythm: number; // Ритмика и отсутствие канцелярита
-  terminologyPrecision: number; // Соблюдение канона и числительных
-  overallScore: number;
-  mqmGrade: 'Эталон (DITING 95+)' | 'Высокий (85–94)' | 'Требует правки (<85)';
-  stylometry?: StylometricMetrics;
 }
 
 export interface ProseQualityGateThresholds {
@@ -1255,3 +1309,166 @@ export class SlidingWindowTaskQueue {
 }
 
 export const SlidingWindowPriorityQueue = SlidingWindowTaskQueue;
+
+// ============================================================================
+// MODULE 6: Cross-Chapter AI-Slop & Cliché Cooldown Detector (25-chapter arc)
+// ============================================================================
+
+const CROSS_CHAPTER_CLICHE_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
+  { label: 'на мгновение', pattern: /(?:^|[^а-яёА-ЯЁ])на\s+мгновение(?=$|[^а-яёА-ЯЁ])/gi },
+  { label: 'в мгновение ока', pattern: /(?:^|[^а-яёА-ЯЁ])в\s+мгновение\s+ока(?=$|[^а-яёА-ЯЁ])/gi },
+  { label: 'по крайней мере', pattern: /(?:^|[^а-яёА-ЯЁ])по\s+крайней\s+мере(?=$|[^а-яёА-ЯЁ])/gi },
+  { label: 'скрестил(а) руки на груди', pattern: /(?:^|[^а-яёА-ЯЁ])скрестил[аои]?\s+руки\s+на\s+груди(?=$|[^а-яёА-ЯЁ])/gi },
+  { label: 'не мог(ла) не', pattern: /(?:^|[^а-яёА-ЯЁ])не\s+мог(?:л[аои])?\s+не(?=$|[^а-яёА-ЯЁ])/gi },
+  { label: 'глубоко вздохнул(а)', pattern: /(?:^|[^а-яёА-ЯЁ])глубоко\s+вздохнул[аои]?(?=$|[^а-яёА-ЯЁ])/gi },
+  { label: 'уголки губ', pattern: /(?:^|[^а-яёА-ЯЁ])уголк[аи]\s+(?:(?:его|её|ее)\s+)?губ(?=$|[^а-яёА-ЯЁ])/gi },
+  { label: 'холодный блеск в глазах', pattern: /(?:^|[^а-яёА-ЯЁ])холодн(?:ый|ым)\s+блеск(?:ом)?\s+в\s+глазах(?=$|[^а-яёА-ЯЁ])/gi },
+];
+
+const SLOP_FUNCTION_WORDS = new Set([
+  'и', 'в', 'во', 'на', 'с', 'со', 'к', 'ко', 'по', 'из', 'у', 'о', 'об', 'от', 'до', 'за', 'при',
+  'не', 'ни', 'бы', 'же', 'ли', 'что', 'чтобы', 'как', 'когда', 'если', 'но', 'а', 'или', 'то', 'это',
+  'он', 'она', 'оно', 'они', 'его', 'её', 'ее', 'их', 'я', 'мы', 'вы', 'ты', 'себя', 'свой', 'так',
+  'уже', 'ещё', 'еще', 'всё', 'все', 'был', 'была', 'было', 'были', 'быть',
+]);
+
+function extractNormalizedRusWords(text: string): string[] {
+  return (text.toLowerCase().replace(/ё/g, 'е').match(/[а-я]+/g) || []);
+}
+
+function collectGlossaryLowerPhrases(glossary?: CanonicalGlossary): string[] {
+  if (!glossary) return [];
+  const buckets = [
+    glossary.realms || {},
+    glossary.characters || {},
+    glossary.sects_and_places || {},
+    glossary.system_and_terms || {},
+    glossary.units || {},
+  ];
+  const phrases: string[] = [];
+  for (const bucket of buckets) {
+    for (const rus of Object.values(bucket)) {
+      const normalized = extractNormalizedRusWords(String(rus)).join(' ');
+      if (normalized) phrases.push(normalized);
+    }
+  }
+  return phrases;
+}
+
+/**
+ * Tracks recurring AI-slop idioms and repeated non-glossary 4-grams across a sliding
+ * window of up to 25 previous chapters to prevent cross-chapter phrase fatigue.
+ */
+export function detectCrossChapterSlopCooldown(params: {
+  currentChapterNumber?: number;
+  rusText: string;
+  previousChapters: Array<{ number: number; rusText?: string }>;
+  glossary?: CanonicalGlossary;
+  windowSize?: number;
+}): CrossChapterSlopIssue[] {
+  const { currentChapterNumber, rusText, previousChapters, glossary } = params;
+  const windowSize = Math.max(1, params.windowSize ?? 25);
+  if (!rusText.trim() || !previousChapters || previousChapters.length === 0) {
+    return [];
+  }
+
+  const recentChapters = [...previousChapters]
+    .filter((ch) => (ch.rusText || '').trim().length > 0)
+    .filter((ch) => (currentChapterNumber !== undefined ? ch.number < currentChapterNumber : true))
+    .sort((a, b) => b.number - a.number)
+    .slice(0, windowSize);
+
+  if (recentChapters.length === 0) return [];
+
+  const clichéHistory = new Map<string, { chapters: Set<number>; totalCount: number }>();
+  const fourGramHistory = new Map<string, { chapters: Set<number>; totalCount: number }>();
+  const glossaryPhrases = collectGlossaryLowerPhrases(glossary);
+
+  for (const ch of recentChapters) {
+    const chText = ch.rusText || '';
+    for (const cliche of CROSS_CHAPTER_CLICHE_PATTERNS) {
+      cliche.pattern.lastIndex = 0;
+      const matches = chText.match(cliche.pattern);
+      if (matches && matches.length > 0) {
+        const entry = clichéHistory.get(cliche.label) || { chapters: new Set<number>(), totalCount: 0 };
+        entry.chapters.add(ch.number);
+        entry.totalCount += matches.length;
+        clichéHistory.set(cliche.label, entry);
+      }
+    }
+
+    const words = extractNormalizedRusWords(chText);
+    const seenInChapter = new Set<string>();
+    for (let i = 0; i <= words.length - 4; i++) {
+      const slice = words.slice(i, i + 4);
+      const contentCount = slice.filter((w) => w.length >= 4 && !SLOP_FUNCTION_WORDS.has(w)).length;
+      if (contentCount < 2) continue;
+      const gram = slice.join(' ');
+      if (glossaryPhrases.some((g) => g.includes(gram) || gram.includes(g))) continue;
+
+      const entry = fourGramHistory.get(gram) || { chapters: new Set<number>(), totalCount: 0 };
+      entry.totalCount += 1;
+      if (!seenInChapter.has(gram)) {
+        entry.chapters.add(ch.number);
+        seenInChapter.add(gram);
+      }
+      fourGramHistory.set(gram, entry);
+    }
+  }
+
+  const paragraphs = splitChapterParagraphs(rusText);
+  const issues: CrossChapterSlopIssue[] = [];
+  const emitted = new Set<string>();
+
+  for (let pIdx = 0; pIdx < paragraphs.length; pIdx++) {
+    const para = paragraphs[pIdx];
+    if (!para || para === '---' || para === '***' || para === '◇◇◇') continue;
+
+    // 1. Check the 8 fixed cross-chapter AI-slop clichés (flagged when seen in >= 2 prior chapters)
+    for (const cliche of CROSS_CHAPTER_CLICHE_PATTERNS) {
+      cliche.pattern.lastIndex = 0;
+      const currentMatches = para.match(cliche.pattern);
+      if (!currentMatches || currentMatches.length === 0) continue;
+
+      const hist = clichéHistory.get(cliche.label);
+      if (hist && hist.chapters.size >= 2) {
+        const key = `${pIdx}::${cliche.label}`;
+        if (!emitted.has(key)) {
+          emitted.add(key);
+          const chapters = Array.from(hist.chapters).sort((a, b) => a - b);
+          issues.push({
+            paragraphIndex: pIdx,
+            phrase: cliche.label,
+            occurrencesInWindow: hist.totalCount + currentMatches.length,
+            chapterNumbers: chapters,
+          });
+        }
+      }
+    }
+
+    // 2. Check frequent non-glossary 4-grams (flagged when seen in >= 3 prior chapters)
+    const paraWords = extractNormalizedRusWords(para);
+    for (let i = 0; i <= paraWords.length - 4; i++) {
+      const slice = paraWords.slice(i, i + 4);
+      const contentCount = slice.filter((w) => w.length >= 4 && !SLOP_FUNCTION_WORDS.has(w)).length;
+      if (contentCount < 2) continue;
+      const gram = slice.join(' ');
+      const hist = fourGramHistory.get(gram);
+      if (hist && hist.chapters.size >= 3) {
+        const key = `${pIdx}::${gram}`;
+        if (!emitted.has(key)) {
+          emitted.add(key);
+          const chapters = Array.from(hist.chapters).sort((a, b) => a - b);
+          issues.push({
+            paragraphIndex: pIdx,
+            phrase: gram,
+            occurrencesInWindow: hist.totalCount + 1,
+            chapterNumbers: chapters,
+          });
+        }
+      }
+    }
+  }
+
+  return issues;
+}

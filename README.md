@@ -7,28 +7,23 @@
 ## Ключевая архитектура
 
 1. **4-фазный конвейер со Source Firewall (MELT + Feature-Guided Rewriting)**:
-   - **Pass 0 (Pre-Parsing & Frame Normalizer)**: AST-разбор японской фуриганы и гикуна (`RubyGikunParser` на 6 семантических типов: `reading_aid`, `bouten`, `nomenclature`, `litrpg_term`, `deictic`, `subtext`), склейка мобильных однострочных предложений корейских новелл (`normalizeKoreanOneLineParagraphs`), семантический чанкинг с замками `Dialogue Lock` и `Frame Lock`.
-   - **Pass 1 (Draft Translation)**: Черновой перевод с инжекцией $k=3$ динамических триплетов Few-Shot по 5 темпоритмам сцен (`combat_action`, `cultivation_epiphany`, `comedy_banter`, `solemn_pathos`, `romance_psychology`), 4-слойным KV-префиксом и Prompt Lookup Decoding (`draft_pK`).
-   - **Pass 2 (Surgical Critic & Bilingual LiTransProQA)**: Билингвальный аудит верности оригиналу ($x_s$) с 10 вопросами `LiTransProQA`, расчётом индекса `otqs` и лимитом Куниловской ($\le 3$ точечных директив на абзац для предотвращения перегрузки контекста).
+   - **Pass 0 (Pre-Parsing & Frame Normalizer)**: AST-разбор японской фуриганы и гикуна (`RubyGikunParser`), склейка мобильных однострочных предложений корейских новелл (`normalizeKoreanOneLineParagraphs`), семантический чанкинг с замками `Dialogue Lock` и `Frame Lock`.
+   - **Pass 1 (Draft Translation)**: Черновой перевод с инжекцией $k=3$ динамических триплетов Few-Shot по 5 темпоритмам сцен, 4-слойным KV-префиксом и продолжением при обрыве потока.
+   - **Pass 2 (Surgical Critic & Bilingual LiTransProQA)**: Билингвальный аудит верности оригиналу ($x_s$) и пре-аудит `gemini-decision-1` с расчётом `otqs` и лимитом Куниловской ($\le 3$ директивы на абзац).
    - **Mechanical Gate**: Add-Only нормализация якорей `[#p0] [a7f|#p0]`, блокировка стирания канонических терминов в кавычках и косвенных падежах, подстрочное затенение терминов.
-   - **Pass 3 (Blind Literary Stylist)**: Декондиционированная «слепая» художественная адаптация **без доступа к тексту оригинала ($x_s$)**. Устраняет синтаксический гипноз оригинала (*shining-through*) и кальки структуры предложений по 6 законам Норы Галь.
-   - **Step 4 (Paragraph Rollback Gate)**: Автоматическая поабзацная верификация 5 твёрдых поверхностных инвариантов ($G_{surf}$: 100% сохранение чисел, канонических терминов глоссария, баланса скобок/кавычек, контроль инфляции тире $\Delta\text{Dash} < 3$ и длины $\pm 45\%$). При любом нарушении в абзаце `#pK` происходит изолированный откат только этого абзаца к $y'[\text{\#pK}]$.
+   - **Pass 3 (Blind Literary Stylist)**: Декондиционированная «слепая» художественная адаптация **без доступа к тексту оригинала ($x_s$)** по 6 законам Норы Галь с A/B-реферированием и поабзацным откатом по 5 инвариантам ($G_{surf}$).
 
-2. **Детерминированный QA-линтер русского языка (20 правил)**:
-   - Контроль рода персонажей с учётом грамматики глаголов.
-   - Устранение антропонимических дериватов, соматизмов («зрачки-иголки», «кишки позеленели», «зелёное лицо»), тавтологий и плеоназмов.
-   - Контроль номинализаций («после завершения поглощения» $\to$ «усвоив»), неодушевлённых подлежащих и инфляции тире/запятых.
-   - Заморозка слогов CJK-имён на гласные (`Хань Ли` — несклоняемый) и склонение замыкающих слогов на согласные (`Чжао Фэн` $\to$ `Чжао Фэна`).
-   - Автоматический ремонт («Zero-Leakage Latin Gatekeeper», авто-синонимизатор тавтологий, слияние полуглав).
+2. **Детерминированный QA-линтер (20 правил) и диагностика деградаций**:
+   - Универсальный форензик-аудит любой новеллы (`scripts/forensic-novel-audit.ts`) с динамическим извлечением мужских/женских/несклоняемых имён из `novel.glossary` и `glossaryMeta`.
+   - При частичном fallback Pass 2/3 или `gemini-decision-1` предупреждения фиксируются в `degradedWarnings` главы и журнале конвейера.
 
-3. **Интеллектуальная память и Lorebook**:
-   - `CharacterVoiceCardV3`: 8-атрибутный речевой вектор S-VoCAL (числовой регистр `[-1..+1]`, staccato vs periodic, инверсии, частицы, контрастные сэмплы).
-   - Автомат состояний Lorebook (`sticky`, `cooldown`, `NOT_ANY`) и расчёт индекса чеховских ружей ($Q_n$).
-   - AI Hunter: детекция вырождения и TF-IDF дубликатов с защитой системных окон ЛитРПГ `[...]`.
+3. **Хранилище, конкурентность и безопасность**:
+   - Серверная БД `SQLite WAL` (`data/studio.db` через встроенный `node:sqlite`) с поглавным Optimistic Concurrency Control (`revision`), отложенным сериализованным зеркалом `data/novels_db.json` и межнодовыми/CLI lock-записями `owner_pid`.
+   - Инкрементальное обновление глав в UI по SSE (`/api/jobs/[id]/events` + `GET /api/projects?novelId=&chapterId=`).
+   - Опциональная защита токеном `STUDIO_API_TOKEN` через экран входа `StudioAuthGate` (`HttpOnly` HMAC cookie `studio_session`).
 
 4. **Инфраструктура и транспорт**:
-   - Локальный движок / Google Colab L4 (24GB VRAM) с Ollama.
-   - Мультимодельная маршрутизация (`gemini-3.8-flash` для быстрых драфтов и `gemini-4-argon-medium` для глубокой критики и стилистики).
+   - Мультимодельная маршрутизация: `Google AI Studio API` (пул `GEMINI_API_KEY` / `GOOGLE_API_KEYS` с независимым кулдауном по `(project, model)`), `Google Colab L4` (Ollama / vLLM) и локальный `Antigravity CLI (agy)`.
    - Экспорт для платформы Rulate (строгий Unix LF, 2-параметрический заголовок).
 
 ---
@@ -36,14 +31,14 @@
 ## Запуск и разработка
 
 ### Требования
-- Node.js 20+
-- pnpm или npm
+- **Node.js 22.12+** (используется встроенный `node:sqlite` и нативный запуск `.ts` через type stripping)
+- **pnpm 10+** (для детерминированной сборки и `Dockerfile`) или **npm**
 
 ### Установка зависимостей
 ```bash
-npm install
-# или
 pnpm install
+# или
+npm install
 ```
 
 ### Настройка окружения
@@ -51,31 +46,31 @@ pnpm install
 ```bash
 cp .env.example .env.local
 ```
-Укажите ваш API-ключ Gemini:
+Укажите API-ключ(и) Gemini и при необходимости токен защиты UI:
 ```env
 GEMINI_API_KEY=your_gemini_api_key_here
+# Опционально: пул дополнительных ключей и защита веб-интерфейса
+GOOGLE_API_KEYS=""
+STUDIO_API_TOKEN=""
 ```
 
-### Запуск тестов и линтера
+### Запуск тестов, линтера и форензик-аудита
 ```bash
-# Запуск полного набора из 55 unit и integration тестов
-node --test lib/qa-linter.test.ts
+# Полный набор unit и integration тестов (lib/qa-linter.test.ts + lib/audit-fixes.test.ts)
+npm test
 
-# Проверка типов TypeScript
-npx tsc --noEmit
+# Проверка типов TypeScript и ESLint
+npx tsc --noEmit && npm run lint
 
-# Проверка стилей ESLint
-npm run lint
+# Форензик-аудит новеллы и PROSE_GATE
+node scripts/forensic-novel-audit.ts --novel my-step-daughters-are-the-villainesses --range 1-209 --gate
 ```
 
-### Запуск локального сервера разработки
+### Запуск локального сервера разработки и Production
 ```bash
 npm run dev
-```
-Откройте [http://localhost:3000](http://localhost:3000) в браузере.
-
-### Production-сборка
-```bash
+# или production:
 npm run build
 npm run start
 ```
+Откройте [http://localhost:3000](http://localhost:3000) в браузере.

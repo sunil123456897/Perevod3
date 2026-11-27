@@ -1,26 +1,26 @@
 # Server API Endpoints (`app/api`)
 
 ## Overview
-Серверный уровень Next.js App Router для оркестрации инференса LLM, маршрутизации промптов и серверного управления проектами.
+Серверный уровень Next.js App Router для аутентификации, оркестрации инференса LLM, фоновых SSE-задач и персистентного SQLite WAL + JSON хранилища проектов.
 
 ## Interface
-- [`POST /api/pipeline`](file:///c:/Users/vanya/Desktop/автономная-студия-перевода-веб-новелл/app/api/pipeline/route.ts):
-  - `action: 'translate'`: Выполнение полного 4-проходного цикла (Pass 0 AST/нормализация -> Pass 1 Draft -> Pass 2 Bilingual Critic -> Mechanical Gate -> Pass 3 Blind Stylist -> Step 4 Rollback Gate).
-  - `action: 'scout'`: Автоматический скаутинг терминов и извлечение сущностей без перевода.
-  - `action: 'verify'`: Детерминированная верификация текста главы по 20 правилам QA и поабзацный авто-ремонт.
-  - `action: 'ping_colab'`: Проверка доступности туннеля Google Colab L4 Ollama и списка моделей в VRAM.
-- [`GET / POST / PUT / DELETE /api/projects`](file:///c:/Users/vanya/Desktop/автономная-студия-перевода-веб-новелл/app/api/projects/route.ts):
-  - Управление проектами новелл, резервными копиями и бандлами.
+- [`GET / POST / DELETE /api/auth`](./auth/route.ts):
+  - Проверка и управление сессией `STUDIO_API_TOKEN`: `GET` возвращает `{ ok, authRequired, authenticated }`; `POST { token }` устанавливает `HttpOnly; SameSite=Strict` HMAC-SHA256 cookie `studio_session`; `DELETE` очищает сессию.
+- [`GET / POST /api/pipeline`](./pipeline/route.ts):
+  - `GET`: статус серверного пула ключей (`hasServerApiKey`, `configuredKeyCount`) и Colab URL.
+  - `POST`: `action: 'scout' | 'translate_and_edit' | 'self_repair' | 'finalize' | 'ping_colab'` (SSRF-валидация URL и проброс `degradedWarnings` при частичном fallback).
+- [`GET / POST / PATCH /api/projects`](./projects/route.ts):
+  - `GET`: полный слепок проектов или инкрементальная выдача одной главы через `?novelId=&chapterId=` (`getChapterById`).
+  - `POST`: атомарная запись слепка с проверкой `baseUpdatedAt` (`409` при внешнем обновлении).
+  - `PATCH`: поглавное OCC-обновление (`action: 'patch_chapter'`, проверка `expectedRevision`, отложенная синхронизация зеркала `data/novels_db.json`).
+- [`GET / POST / DELETE /api/jobs`](./jobs/route.ts) и [`GET /api/jobs/[id]/events`](./jobs/%5Bid%5D/events/route.ts):
+  - Фоновый брокер конвейера с межнодовым/CLI lock через `owner_pid` (`409` при живом конкурирующем процессе) и SSE-потоком событий (`snapshot`, `phase`, `chapter_done`, `chapter_quarantined`, `completed`, `failed`, `cancelled`) с `chapterId`.
 
 ## Invariants
-- **Source Firewall Integrity**: В теле запроса к `Pass 3 (Blind Literary Stylist)` поле `sourceText` строго заменяется на `null` / пустую строку.
-- **Транспортная устойчивость**: При сбое внешнего LLM API или сетевом таймауте возвращается структурированная ошибка с кодом `500` или локальный детерминированный откат к черновику Pass 1.
-- **Безопасность окружения**: Ключ `GEMINI_API_KEY` считывается строго из `process.env` на стороне сервера и никогда не возвращается в JSON-ответах клиенту.
-
-## Side Effects
-- Исходящие HTTPS-запросы к Google Gemini API (`https://generativelanguage.googleapis.com`).
-- Исходящие HTTP-запросы к туннелю Cloudflare / Colab L4 Ollama (`api/generate`, `api/tags`).
+- **Периметр безопасности (`api-security.ts`)**: Все роуты проверяют `Host` allowlist, защиту мутаций (`Origin` / `Sec-Fetch-Site`), а при заданном `STUDIO_API_TOKEN` требуют `Authorization: Bearer ...`, `X-Studio-Token` или валидный cookie `studio_session`.
+- **Source Firewall Integrity**: В промпт `Pass 3 (Blind Literary Stylist)` оригинал $x_s$ не передаётся ни при каких условиях.
+- **Fail-Closed и карантин**: При полном сбое LLM на Pass 1 глава переводится в `quarantined` без порчи прежнего `rusText`; при частичных сбоях Pass 2/3 или Decision 1 возвращаются `degradedWarnings`.
+- **Безопасность секретов**: Ключи `GEMINI_API_KEY` / `GOOGLE_API_KEYS` и `STUDIO_API_TOKEN` считываются только на сервере из `process.env` и никогда не утекают клиенту.
 
 ## Verification
-- Run: `npm run build`
-- Run: `node --test lib/qa-linter.test.ts`
+- Run: `npm test && npx tsc --noEmit && npm run build`

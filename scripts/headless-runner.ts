@@ -10,540 +10,108 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import {
   runPipelineBatchOnNovel,
-  type PipelineTransportAdapter,
-  type PipelineTransportScoutRequest,
-  type PipelineTransportScoutResponse,
-  type PipelineTransportTranslateRequest,
-  type PipelineTransportTranslateResponse,
-  type PipelineTransportVerifyRequest,
+  ServerPipelineExecutionAdapter,
+  type ServerPipelineExecutionOptions,
 } from '../lib/pipeline-run-engine.ts';
-import {
-  createPipelineLlmPort,
-  buildScoutPrompts,
-  buildTranslatePass1Prompts,
-  buildSurgicalCriticPass2Prompts,
-  buildBlindStylistPass3Prompts,
-  buildSelfRepairPrompts,
-  annotateSceneDialogueAndZeroPronouns,
-  classifyScenePacingMode,
-  selectContrastiveFewShotTriplets,
-  capStylisticDirectivesPerParagraph,
-  deterministicLocalTranslate,
-  type StylisticSpanDirective,
-  type LiTransProQaRubricScores,
-} from '../lib/llm-inference-port.ts';
-import {
-  runAdditionBySubtractionScout,
-  filterScoutedTermsWithAgentS,
-  parseRubyAndGikunMarkup,
-  normalizeKoreanOneLineParagraphs,
-  applySurgicalPatches,
-  extractResilientJsonFromLlm,
-  splitChapterParagraphs,
-  DEFAULT_LLM_PROVIDER_CONFIG,
-  buildCharacterVoicePromptBlock,
-  GENRE_PRESET_LABELS,
-  PROSE_TONE_LABELS,
-  type LlmProviderConfig,
-  type SurgicalPatchItem,
-  type GenrePreset,
-  type ProseTone,
-} from '../lib/qa-linter.ts';
-import {
-  verifyAndRollbackStylistPass,
-  verifyAndRepairChapterAsync,
-} from '../lib/chapter-verifier.ts';
+import { DEFAULT_LLM_PROVIDER_CONFIG } from '../lib/qa-linter.ts';
+import type { LlmProviderConfig, PipelineJobRecord } from '../lib/pipeline-types.ts';
 import {
   parseDiskDatabasePayload,
   serializeDiskDatabasePayload,
 } from '../lib/storage-idb.ts';
+import {
+  closeStudioSqliteDb,
+  DiskDatabaseConflictError,
+  getStudioSqliteDb,
+  nextMonotonicIsoTimestamp,
+} from '../lib/sqlite-db-server.ts';
 import { INITIAL_NOVELS, type NovelProject } from '../lib/seed-data.ts';
 
 const DB_PATH = path.resolve(process.cwd(), 'data', 'novels_db.json');
+let runnerSaveSeq = 0;
 
 // Parse CLI Flags
 const args = process.argv.slice(2);
 const flags: Record<string, string> = {};
 for (const arg of args) {
   if (arg.startsWith('--')) {
-    const [k, v] = arg.slice(2).split('=');
-    flags[k] = v || 'true';
+    const eqIdx = arg.indexOf('=');
+    if (eqIdx > 2) {
+      flags[arg.slice(2, eqIdx)] = arg.slice(eqIdx + 1) || 'true';
+    } else {
+      flags[arg.slice(2)] = 'true';
+    }
   }
 }
 
 export function loadProjectsFromDisk(customPath: string = DB_PATH): NovelProject[] {
+  const resolved = path.resolve(customPath);
+  if (resolved === DB_PATH) {
+    try {
+      const dbResult = getStudioSqliteDb().readAllNovels();
+      if (Array.isArray(dbResult.novels) && dbResult.novels.length > 0) {
+        return dbResult.novels;
+      }
+    } catch (err) {
+      console.warn('[Runner] Warning reading SQLite database:', err);
+    }
+  }
+
   try {
-    if (fs.existsSync(customPath)) {
-      const raw = fs.readFileSync(customPath, 'utf-8');
+    if (fs.existsSync(resolved)) {
+      const raw = fs.readFileSync(resolved, 'utf-8');
       const parsed = parseDiskDatabasePayload(raw);
       if (Array.isArray(parsed.novels) && parsed.novels.length > 0) {
         return parsed.novels;
       }
     }
   } catch (err) {
-    console.warn(`[Runner] Warning reading ${customPath}:`, err);
+    console.warn(`[Runner] Warning reading ${resolved}:`, err);
   }
   return INITIAL_NOVELS;
 }
 
 export function saveProjectsToDisk(novels: NovelProject[], customPath: string = DB_PATH) {
+  const resolved = path.resolve(customPath);
+  if (resolved === DB_PATH) {
+    try {
+      getStudioSqliteDb().writeAllNovels(novels, { syncJsonMirror: true });
+      return;
+    } catch (err) {
+      console.error('[Runner] Error persisting to SQLite database:', err);
+      return;
+    }
+  }
+
   try {
-    const dir = path.dirname(customPath);
+    const dir = path.dirname(resolved);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    const tmp = `${customPath}.tmp.${Date.now()}`;
+    const tmp = `${resolved}.tmp.${process.pid}.${Date.now()}.${++runnerSaveSeq}`;
     const payload = serializeDiskDatabasePayload(novels);
     fs.writeFileSync(tmp, payload, 'utf-8');
-    fs.renameSync(tmp, customPath);
+    fs.renameSync(tmp, resolved);
   } catch (err) {
-    console.error(`[Runner] Error persisting ${customPath}:`, err);
+    console.error(`[Runner] Error persisting ${resolved}:`, err);
   }
 }
 
 /**
- * Direct In-Process Transport Adapter using createPipelineLlmPort.
- * Executes the full 4-pass pipeline:
- * (Pass 0.1 AST Ruby/Korean -> Pass 1 Draft -> Pass 2 Critic & Patches -> Pass 3 Blind Stylist -> Step 4 Rollback & Finalize)
- * without needing an external HTTP server.
+ * Direct In-Process Transport Adapter delegating to the canonical `ServerPipelineExecutionAdapter`.
+ * Ensures 100% parity between Headless CLI and `/api/pipeline` (including chapter-scoped glossary slicing
+ * and Pass 1 resilience fallback).
  */
-export class DirectEngineTransportAdapter implements PipelineTransportAdapter {
-  private llmConfig: LlmProviderConfig;
-
-  constructor(llmConfig: LlmProviderConfig) {
-    this.llmConfig = llmConfig;
-  }
-
-  async scout(req: PipelineTransportScoutRequest): Promise<PipelineTransportScoutResponse> {
-    const config = req.llmConfig || this.llmConfig;
-    const genrePreset = (req.genrePreset || 'xianxia') as GenrePreset;
-    const genreInfo = GENRE_PRESET_LABELS[genrePreset] || GENRE_PRESET_LABELS['xianxia'];
-    const localAbs = runAdditionBySubtractionScout(
-      req.engText,
-      req.chapterNumber,
-      req.glossary,
-      req.scoutedTerms || []
-    );
-
-    const scoutPrompts = buildScoutPrompts({
-      chapterNumber: req.chapterNumber,
-      titleEng: `Chapter ${req.chapterNumber}`,
-      engText: req.engText,
-      glossary: req.glossary,
-      scoutedTerms: req.scoutedTerms || [],
-      genrePromptHint: genreInfo.promptHint,
-      genreTitle: genreInfo.title,
-    });
-
-    let discoveredList = localAbs.discoveredTerms;
-    try {
-      const llmPort = createPipelineLlmPort(config, req.glossary, 'classic');
-      const response = await llmPort.complete({
-        task: 'scout',
-        systemInstruction: scoutPrompts.systemPrompt,
-        userPrompt: scoutPrompts.userPrompt,
-        expectJson: true,
-        temperature: 0.2,
-        numCtx: config.numCtx || 16384,
-        geminiModel: config.scoutModelId || 'gemini-3.1-flash-lite',
-        geminiResponseSchema: scoutPrompts.geminiSchema,
-      });
-
-      const parsed = extractResilientJsonFromLlm<unknown>(
-        response.text,
-        localAbs.discoveredTerms
-      );
-      const candidateList = Array.isArray(parsed)
-        ? parsed
-        : Array.isArray((parsed as { terms?: unknown[] })?.terms)
-          ? (parsed as { terms: unknown[] }).terms
-          : localAbs.discoveredTerms;
-
-      if (Array.isArray(candidateList) && candidateList.length > 0) {
-        const filteredCandidates = filterScoutedTermsWithAgentS(
-          candidateList as typeof localAbs.discoveredTerms,
-          req.glossary,
-          req.scoutedTerms || []
-        );
-        discoveredList =
-          filteredCandidates.length > 0 ? filteredCandidates : localAbs.discoveredTerms;
-      }
-    } catch {
-      // Fallback to deterministic Addition-by-Subtraction scout
-    }
-
-    return {
-      discoveredTerms: discoveredList.map((dt) => ({
-        eng: dt.eng,
-        rus_suggested: dt.rus_suggested,
-        category: dt.category,
-        gender: dt.gender || 'M',
-        context_snippet: dt.context_snippet,
-        confidence: dt.confidence || 0.95,
-      })),
-      addedRecallCount: localAbs.addedRecallCount,
-      subtractedNoiseCount: localAbs.subtractedNoiseCount,
-    };
-  }
-
-  async translateAndEdit(
-    req: PipelineTransportTranslateRequest
-  ): Promise<PipelineTransportTranslateResponse> {
-    const config = req.llmConfig || this.llmConfig;
-    const llmPort = createPipelineLlmPort(config, req.glossary, req.proseTone);
-
-    // Pass 0: AST Japanese Furigana/Gikun & Korean Normalization
-    const rubyParsed = parseRubyAndGikunMarkup(req.engText);
-    const normalizedSource = normalizeKoreanOneLineParagraphs(rubyParsed.parsedText).normalizedText;
-    const pacingMode = classifyScenePacingMode(normalizedSource);
-    const contrastiveTriplets = selectContrastiveFewShotTriplets(pacingMode, 3);
-    const characterVoicesBlock = buildCharacterVoicePromptBlock(
-      req.glossary,
-      req.glossaryMeta || {}
-    );
-
-    const genrePreset = (req.genrePreset || 'xianxia') as GenrePreset;
-    const proseTone = (req.proseTone || 'classic') as ProseTone;
-    const genreInfo = GENRE_PRESET_LABELS[genrePreset] || GENRE_PRESET_LABELS['xianxia'];
-    const toneInfo = PROSE_TONE_LABELS[proseTone] || PROSE_TONE_LABELS['classic'];
-
-    const matchedCount =
-      Object.keys(req.glossary.realms || {}).length +
-      Object.keys(req.glossary.characters || {}).length +
-      Object.keys(req.glossary.sects_and_places || {}).length +
-      Object.keys(req.glossary.system_and_terms || {}).length +
-      Object.keys(req.glossary.units || {}).length;
-
-    const genderRulesList: string[] = [];
-    Object.entries(req.glossary.characters || {}).forEach(([eng, rus]) => {
-      const meta = req.glossaryMeta?.[eng];
-      if (meta) {
-        genderRulesList.push(
-          `${eng} → ${rus} (Род: ${meta.gender || 'M'}${meta.declensionNote ? `, Склонение: ${meta.declensionNote}` : ''}${meta.voiceNote ? `, Речь и регистр: ${meta.voiceNote}` : ''})`
-        );
-      }
-    });
-
-    const effectiveSceneDialogueBlock =
-      req.sceneDialogueBlock ??
-      (() => {
-        const analysis = annotateSceneDialogueAndZeroPronouns(
-          normalizedSource,
-          req.glossary,
-          req.glossaryMeta || {},
-          []
-        );
-        return analysis.annotations.length > 0 ? analysis.promptSummaryBlock : undefined;
-      })();
-
-    // Pass 1: Semantic & Canonical Translation
-    const pass1Prompts = buildTranslatePass1Prompts({
-      chapterNumber: req.chapterNumber,
-      titleEng: req.titleEng,
-      engText: normalizedSource,
-      genreTitle: genreInfo.title,
-      genrePromptHint: genreInfo.promptHint,
-      toneTitle: toneInfo.title,
-      toneInstruction: toneInfo.instruction,
-      styleGuideMd: req.styleGuideMd || '',
-      filteredGlossary: req.glossary,
-      matchedCount,
-      genderRulesList,
-      heroLedger: req.heroLedger,
-      previousChapterSummary: req.previousChapterSummary,
-      previousChapterSummaryEng: req.previousChapterSummaryEng,
-      deltaShortTermWindow: req.deltaShortTermWindow,
-      deltaLongTermMemories: req.deltaLongTermMemories,
-      socialEdgesBlock: req.socialEdgesBlock,
-      lorebookBlock: req.lorebookBlock,
-      forwardQuestionsBlock: req.forwardQuestionsBlock,
-      sceneDialogueBlock: effectiveSceneDialogueBlock,
-      useHashAnchors: req.useHashAnchors ?? true,
-    });
-
-    const pass1Response = await llmPort.complete({
-      task: 'translate_pass1',
-      systemInstruction: pass1Prompts.systemPrompt,
-      userPrompt: pass1Prompts.userPrompt,
-      expectJson: true,
-      temperature: 0.35,
-      geminiModel: config.modelId || 'gemini-3.8-flash-high',
-    });
-
-    const parsed = extractResilientJsonFromLlm<{
-      titleRus?: string;
-      rusText?: string;
-      summary?: string;
-      summaryEng?: string;
-      csiNotes?: Array<{
-        sourcePhrase: string;
-        categoryLabel?: string;
-        adaptedRus: string;
-        rationale: string;
-      }>;
-    }>(pass1Response.text, {});
-
-    let candidateRusText =
-      parsed.rusText ||
-      (!pass1Response.text.trim().startsWith('{') && /[а-яА-ЯёЁ]{10,}/.test(pass1Response.text)
-        ? pass1Response.text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim()
-        : '');
-
-    if (!candidateRusText) {
-      const fallback = deterministicLocalTranslate(
-        normalizedSource,
-        req.titleEng,
-        req.chapterNumber,
-        req.glossary,
-        proseTone
-      );
-      candidateRusText = fallback.rusText;
-      parsed.titleRus = parsed.titleRus || fallback.titleRus;
-    }
-
-    // Pass 2: Bilingual Surgical Accuracy & Span Critic
-    const patchesList: SurgicalPatchItem[] = [];
-    let otqsScore: number | undefined;
-    const rawDirectives: StylisticSpanDirective[] = [];
-
-    if (req.twoPassCritic !== false && candidateRusText) {
-      try {
-        const criticPrompts = buildSurgicalCriticPass2Prompts({
-          engText: normalizedSource,
-          draftRusText: candidateRusText,
-          filteredGlossary: req.glossary,
-          genderRulesList,
-        });
-
-        const criticResponse = await llmPort.complete({
-          task: 'surgical_critic_pass2',
-          systemInstruction: criticPrompts.systemPrompt,
-          userPrompt: criticPrompts.userPrompt,
-          expectJson: true,
-          temperature: 0.2,
-          geminiModel: config.criticModelId || 'gemini-4-argon-medium',
-        });
-
-        const parsedCritic = extractResilientJsonFromLlm<{
-          patches?: SurgicalPatchItem[];
-          edits?: SurgicalPatchItem[];
-          rubricScores?: LiTransProQaRubricScores;
-          stylisticSpanDirectives?: StylisticSpanDirective[];
-        }>(criticResponse.text, {});
-
-        const extractedPatches = Array.isArray(parsedCritic.patches)
-          ? parsedCritic.patches
-          : Array.isArray(parsedCritic.edits)
-            ? parsedCritic.edits
-            : Array.isArray(parsedCritic)
-              ? (parsedCritic as unknown as SurgicalPatchItem[])
-              : [];
-
-        patchesList.push(...extractedPatches);
-
-        if (parsedCritic.rubricScores?.otqs !== undefined) {
-          otqsScore = parsedCritic.rubricScores.otqs;
-        }
-
-        if (Array.isArray(parsedCritic.stylisticSpanDirectives)) {
-          rawDirectives.push(...parsedCritic.stylisticSpanDirectives);
-        }
-      } catch (err) {
-        console.warn('[Runner] Pass 2 Critic error:', err);
-      }
-    }
-
-    // Apply factual patches to get y'
-    let verifiedRusIntermediate = candidateRusText;
-    if (patchesList.length > 0) {
-      const patchRes = applySurgicalPatches(candidateRusText, patchesList, req.glossary);
-      if (patchRes.appliedCount > 0) {
-        verifiedRusIntermediate = patchRes.patchedText;
-      }
-    }
-
-    // Pass 3: Blind Literary Stylist
-    const cappedDirectives = capStylisticDirectivesPerParagraph(rawDirectives, 3);
-    let stylistAcceptedCount = 0;
-    let stylistRolledBackCount = 0;
-
-    if (
-      req.twoPassCritic !== false &&
-      (cappedDirectives.length > 0 || (otqsScore !== undefined && otqsScore < 8.5))
-    ) {
-      const paragraphs = splitChapterParagraphs(verifiedRusIntermediate);
-      const flawedForStylist = paragraphs
-        .map((p, idx) => {
-          const dirs = cappedDirectives.filter((d) => d.paragraphIndex === idx);
-          return {
-            index: idx,
-            verifiedRusText: p,
-            directives: dirs,
-          };
-        })
-        .filter(
-          (item) => item.directives.length > 0 || (otqsScore !== undefined && otqsScore < 8.5)
-        );
-
-      if (flawedForStylist.length > 0) {
-        try {
-          const stylistPrompts = buildBlindStylistPass3Prompts({
-            flawedParagraphs: flawedForStylist,
-            genreTitle: genreInfo.title,
-            toneTitle: toneInfo.title,
-            toneInstruction: toneInfo.instruction,
-            characterVoicesBlock,
-            pacingMode,
-            contrastiveTriplets,
-          });
-
-          const stylistResponse = await llmPort.complete({
-            task: 'blind_stylist_pass3',
-            systemInstruction: stylistPrompts.systemPrompt,
-            userPrompt: stylistPrompts.userPrompt,
-            expectJson: true,
-            temperature: 0.35,
-            geminiModel: config.criticModelId || 'gemini-4-argon-medium',
-          });
-
-          const parsedStylist = extractResilientJsonFromLlm<{
-            styledParagraphs?: Array<{ index: number; styledRusText: string }>;
-          }>(stylistResponse.text, {});
-
-          const rawStyled = Array.isArray(parsedStylist.styledParagraphs)
-            ? parsedStylist.styledParagraphs
-            : [];
-
-          if (rawStyled.length > 0) {
-            const rollbackRes = verifyAndRollbackStylistPass({
-              verifiedRusText: verifiedRusIntermediate,
-              styledParagraphs: rawStyled,
-              glossary: req.glossary,
-            });
-            verifiedRusIntermediate = rollbackRes.finalRusText;
-            stylistAcceptedCount = rollbackRes.acceptedParagraphIndices.length;
-            stylistRolledBackCount = rollbackRes.rolledBackParagraphs.length;
-          }
-        } catch (err) {
-          console.warn('[Runner] Pass 3 Stylist error:', err);
-        }
-      }
-    }
-
-    // Step 4: Finalize and verify chapter via 3-Stage Self-Repair & Prose Quality Gate
-    const verifiedOutput = await verifyAndRepairChapterAsync(
-      {
-        chapterNumber: req.chapterNumber,
-        titleEng: req.titleEng,
-        titleRus: parsed.titleRus,
-        engText: normalizedSource,
-        candidateRusText: verifiedRusIntermediate,
-        glossary: req.glossary,
-        glossaryMeta: req.glossaryMeta,
-        enabledRuleIds: req.enabledRuleIds,
-        surgicalPatches: [],
-        aiCsiNotes: parsed.csiNotes,
-        existingSummaryRus: parsed.summary,
-        existingSummaryEng: parsed.summaryEng,
-      },
-      {
-        enableNeuralAudit: true,
-        llmParagraphRepairFn: async ({ promptBlock }) => {
-          const repairPrompts = buildSelfRepairPrompts({
-            engText: normalizedSource,
-            rusText: verifiedRusIntermediate,
-            glossary: req.glossary,
-            linterIssues: [],
-            genreTitle: genreInfo.title,
-            toneTitle: toneInfo.title,
-            flawedPromptBlock: promptBlock,
-          });
-          const resp = await llmPort.complete({
-            task: 'self_repair',
-            systemInstruction: repairPrompts.systemPrompt,
-            userPrompt: repairPrompts.userPrompt,
-            expectJson: false,
-            temperature: 0.2,
-            numCtx: config.numCtx ?? 16384,
-            geminiModel: config.modelId || 'gemini-3.8-flash',
-          });
-          return resp.text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-        },
-      }
-    );
-
-    return {
-      rusText: verifiedOutput.rusText,
-      titleRus: verifiedOutput.titleRus || `Глава ${req.chapterNumber}`,
-      summary: verifiedOutput.summary,
-      summaryEng: verifiedOutput.summaryEng,
-      csiNotes: verifiedOutput.csiNotes,
-      ditingReport: verifiedOutput.ditingReport,
-      proseGateReport: verifiedOutput.proseGateReport,
-      neuralAudit: verifiedOutput.neuralAudit,
-      alreadyVerified: true,
-      verified: verifiedOutput.verified,
-      appliedFixes: verifiedOutput.appliedFixes,
-      lintReport: verifiedOutput.lintReport,
-      wordCountEng: verifiedOutput.wordCountEng,
-      wordCountRus: verifiedOutput.wordCountRus,
-      scenePacingMode: pacingMode,
-      otqsScore,
-      stylistAcceptedCount,
-      stylistRolledBackCount,
-      rubyGikunCount: rubyParsed.foundCount,
-    };
-  }
-
-  async verifyAndRepair(req: PipelineTransportVerifyRequest) {
-    const config = req.llmConfig || this.llmConfig;
-    const llmPort = createPipelineLlmPort(config, req.glossary, req.proseTone);
-    const genrePreset = (req.genrePreset || 'xianxia') as GenrePreset;
-    const proseTone = (req.proseTone || 'classic') as ProseTone;
-    const genreInfo = GENRE_PRESET_LABELS[genrePreset] || GENRE_PRESET_LABELS['xianxia'];
-    const toneInfo = PROSE_TONE_LABELS[proseTone] || PROSE_TONE_LABELS['classic'];
-
-    return verifyAndRepairChapterAsync(
-      {
-        chapterNumber: req.chapterNumber,
-        titleEng: req.titleEng,
-        titleRus: req.titleRus,
-        engText: req.engText,
-        candidateRusText: req.rusText,
-        glossary: req.glossary,
-        glossaryMeta: req.glossaryMeta,
-        enabledRuleIds: req.enabledRuleIds,
-        existingSummaryRus: req.existingSummaryRus,
-        existingSummaryEng: req.existingSummaryEng,
-        aiCsiNotes: req.aiCsiNotes,
-      },
-      {
-        enableNeuralAudit: true,
-        llmParagraphRepairFn: async ({ promptBlock }) => {
-          const repairPrompts = buildSelfRepairPrompts({
-            engText: req.engText,
-            rusText: req.rusText,
-            glossary: req.glossary,
-            linterIssues: [],
-            genreTitle: genreInfo.title,
-            toneTitle: toneInfo.title,
-            flawedPromptBlock: promptBlock,
-          });
-          const resp = await llmPort.complete({
-            task: 'self_repair',
-            systemInstruction: repairPrompts.systemPrompt,
-            userPrompt: repairPrompts.userPrompt,
-            expectJson: false,
-            temperature: 0.2,
-            numCtx: config.numCtx ?? 16384,
-            geminiModel: config.modelId || 'gemini-3.8-flash',
-          });
-          return resp.text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-        },
-      }
-    );
+export class DirectEngineTransportAdapter extends ServerPipelineExecutionAdapter {
+  constructor(
+    llmConfig: LlmProviderConfig = DEFAULT_LLM_PROVIDER_CONFIG,
+    options?: ServerPipelineExecutionOptions
+  ) {
+    super(llmConfig, options);
   }
 }
 
@@ -561,15 +129,29 @@ async function main() {
     process.exit(1);
   }
 
-  const fromCh = flags['from'] ? Number(flags['from']) : 1;
-  const toCh = flags['to'] ? Number(flags['to']) : fromCh + 2;
-  const provider = (flags['provider'] || 'antigravity_cli') as LlmProviderConfig['provider'];
+  const rangeMatch = (flags['range'] || '').match(/^(\d+)\s*-\s*(\d+)$/);
+  const fromCh = flags['from'] ? Number(flags['from']) : rangeMatch ? Number(rangeMatch[1]) : 1;
+  const toCh = flags['to'] ? Number(flags['to']) : rangeMatch ? Number(rangeMatch[2]) : fromCh + 2;
+  const provider = (flags['provider'] || DEFAULT_LLM_PROVIDER_CONFIG.provider) as LlmProviderConfig['provider'];
+  if (
+    provider === 'antigravity_cli' &&
+    (process.env.ENABLE_CLIENT_AGY_CLI !== '1' || process.env.DISABLE_CLIENT_AGY_CLI === '1')
+  ) {
+    console.error(
+      '[Runner] Провайдер antigravity_cli (agy) временно отключён до обновления ToS. Используйте --provider=gemini_api (или задайте ENABLE_CLIENT_AGY_CLI=1 для принудительного запуска).'
+    );
+    process.exit(1);
+  }
   const colabUrl = flags['colab'] || '';
 
   const llmConfig: LlmProviderConfig = {
     ...DEFAULT_LLM_PROVIDER_CONFIG,
     provider,
     colabEndpointUrl: colabUrl || DEFAULT_LLM_PROVIDER_CONFIG.colabEndpointUrl,
+    ...(flags['model'] ? { modelId: flags['model'] } : {}),
+    ...(flags['critic'] ? { criticModelId: flags['critic'] } : {}),
+    ...(flags['stylist'] ? { stylistModelId: flags['stylist'] } : {}),
+    ...(flags['scout'] ? { scoutModelId: flags['scout'] } : {}),
   };
 
   const targetChapters = targetNovel.chapters.filter(
@@ -588,54 +170,161 @@ async function main() {
   }
 
   const transport = new DirectEngineTransportAdapter(llmConfig);
+  const sqliteDb = getStudioSqliteDb();
 
-  const result = await runPipelineBatchOnNovel({
-    novel: targetNovel,
-    targetChapterIds: targetChapters.map((c) => c.id),
-    mode: 'full_5_phase',
-    autoCanonEnabled: true,
-    twoPassCriticEnabled: true,
-    llmConfig,
-    transport,
-    onProgress: (event) => {
-      const now = new Date().toTimeString().slice(0, 8);
-      if (event.type === 'start') {
-        console.log(`[${now}] СТАРТ: Пакет из ${event.totalChapters} глав...`);
-      } else if (event.type === 'chapter_start') {
-        console.log(`[${now}] -> Начат перевод главы (ID: ${event.chapterId})...`);
-      } else if (event.type === 'phase_step') {
-        console.log(`[${now}]    Фаза ${event.step}/5: ${event.label}`);
-      } else if (event.type === 'log') {
-        console.log(`[${now}]    [${event.tag}] ${event.message}`);
-      } else if (event.type === 'chapter_complete') {
-        console.log(`[${now}] OK Глава ${event.chapter.number} завершена (${event.chapter.wordCountRus} сл.)`);
-        // Save incremental progress immediately
-        const currentNovels = loadProjectsFromDisk();
-        const updated = currentNovels.map((n) =>
-          n.id === targetNovel.id
-            ? {
-                ...n,
-                chapters: n.chapters.map((ch) =>
-                  ch.id === event.chapterId ? event.chapter : ch
-                ),
-              }
-            : n
-        );
-        saveProjectsToDisk(updated);
-        console.log(`[${now}]    💾 Сохранено на диск в data/novels_db.json`);
-      } else if (event.type === 'batch_complete') {
-        console.log(`[${now}] Завершено! Все главы успешно обработаны.`);
-      }
-    },
+  const existingActiveJob = sqliteDb.findActiveJobForNovel(targetNovel.id, {
+    reconcileSamePidOrphans: true,
   });
-
-  if (result?.updatedNovel) {
-    const allNovels = loadProjectsFromDisk();
-    const finalNovels = allNovels.map((n) =>
-      n.id === result.updatedNovel.id ? result.updatedNovel : n
+  if (existingActiveJob && flags['force'] !== 'true') {
+    console.error(
+      `[Runner] Ошибка: для новеллы "${targetNovel.id}" уже выполняется активная задача ${existingActiveJob.id} (PID ${existingActiveJob.ownerPid ?? 'unknown'}). Используйте --force=true только при ручном восстановлении.`
     );
-    saveProjectsToDisk(finalNovels);
-    console.log('[Runner] Финальный бандл проекта синхронизирован.');
+    closeStudioSqliteDb();
+    process.exit(1);
+  }
+
+  const jobCreatedAt = nextMonotonicIsoTimestamp();
+  const cliJob: PipelineJobRecord = {
+    id: randomUUID(),
+    novelId: targetNovel.id,
+    mode: 'full_5_phase',
+    status: 'running',
+    startChapter: targetChapters[0].number,
+    endChapter: targetChapters[targetChapters.length - 1].number,
+    progressPct: 0,
+    currentChapter: targetChapters[0].number,
+    completedChapters: 0,
+    totalChapters: targetChapters.length,
+    quarantinedChapters: 0,
+    ownerPid: process.pid,
+    statsJson: null,
+    errorText: null,
+    createdAt: jobCreatedAt,
+    updatedAt: jobCreatedAt,
+  };
+  sqliteDb.upsertPipelineJob(cliJob);
+
+  const abortController = new AbortController();
+  const handleSig = () => abortController.abort();
+  process.once('SIGINT', handleSig);
+  process.once('SIGTERM', handleSig);
+
+  const targetChapterIds = targetChapters.map((c) => c.id);
+  const targetChapterIdSet = new Set(targetChapterIds);
+  const initialChapterRevisions = new Map(
+    targetNovel.chapters.map((c) => [c.id, Number(c.revision || 1)])
+  );
+  const committedChapterRevisions = new Map<string, number>();
+  const conflictedChapterIds = new Set<string>();
+  let processedCliCount = 0;
+
+  try {
+    const result = await runPipelineBatchOnNovel({
+      novel: targetNovel,
+      targetChapterIds,
+      mode: 'full_5_phase',
+      autoCanonEnabled: true,
+      twoPassCriticEnabled: true,
+      llmConfig,
+      transport,
+      signal: abortController.signal,
+      shouldAbort: () => abortController.signal.aborted,
+      onProgress: (event) => {
+        const now = new Date().toTimeString().slice(0, 8);
+        if (event.type === 'start') {
+          console.log(`[${now}] СТАРТ: Пакет из ${event.totalChapters} глав...`);
+        } else if (event.type === 'chapter_start') {
+          cliJob.currentChapter = event.chapterNumber;
+          cliJob.updatedAt = nextMonotonicIsoTimestamp(cliJob.updatedAt);
+          sqliteDb.upsertPipelineJob(cliJob);
+          console.log(`[${now}] -> Начат перевод главы (ID: ${event.chapterId})...`);
+        } else if (event.type === 'phase_step') {
+          console.log(`[${now}]    Фаза ${event.step}/5: ${event.label}`);
+        } else if (event.type === 'log') {
+          console.log(`[${now}]    [${event.tag}] ${event.message}`);
+        } else if (event.type === 'chapter_complete') {
+          const isQuarantined = event.chapter.status === 'quarantined';
+          console.log(
+            `[${now}] ${isQuarantined ? 'QUARANTINE' : 'OK'} Глава ${event.chapter.number} завершена (${event.chapter.wordCountRus} сл.)${isQuarantined ? ` — ${event.chapter.quarantineReason || 'outage'}` : ''}`
+          );
+          try {
+            const patchRes = sqliteDb.patchChapterAtomic(
+              targetNovel.id,
+              event.chapterId,
+              () => event.chapter,
+              {
+                expectedRevision: initialChapterRevisions.get(event.chapterId),
+                syncJsonMirror: 'debounced',
+              }
+            );
+            committedChapterRevisions.set(event.chapterId, patchRes.revision);
+            console.log(`[${now}]    💾 Глава атомарно сохранена в SQLite (mirror debounced)`);
+          } catch (patchErr) {
+            if (patchErr instanceof DiskDatabaseConflictError) {
+              conflictedChapterIds.add(event.chapterId);
+              console.warn(
+                `[${now}]    ⚠️ Глава ${event.chapter.number} изменена внешним процессом (OCC), пользовательская правка сохранена.`
+              );
+            } else {
+              throw patchErr;
+            }
+          }
+          processedCliCount += 1;
+          if (isQuarantined) {
+            cliJob.quarantinedChapters += 1;
+          } else {
+            cliJob.completedChapters += 1;
+          }
+          cliJob.progressPct = Math.min(
+            99,
+            Math.round((processedCliCount / Math.max(1, cliJob.totalChapters)) * 100)
+          );
+          cliJob.currentChapter = event.chapter.number;
+          cliJob.updatedAt = nextMonotonicIsoTimestamp(cliJob.updatedAt);
+          sqliteDb.upsertPipelineJob(cliJob);
+        } else if (event.type === 'batch_complete') {
+          console.log(`[${now}] Завершено! Все главы успешно обработаны.`);
+        } else if (event.type === 'aborted') {
+          console.log(`[${now}] Прервано по сигналу остановки.`);
+        }
+      },
+    });
+
+    if (result?.updatedNovel) {
+      sqliteDb.commitBatchNovelResult({
+        novelId: targetNovel.id,
+        updatedNovel: result.updatedNovel,
+        targetChapterIds: targetChapterIdSet,
+        initialChapterRevisions,
+        committedChapterRevisions,
+        conflictedChapterIds,
+        syncJsonMirror: true,
+      });
+      console.log('[Runner] Метаданные проекта и глоссарий синхронизированы в SQLite.');
+    }
+
+    cliJob.status = abortController.signal.aborted ? 'cancelled' : 'completed';
+    if (!abortController.signal.aborted) {
+      cliJob.progressPct = 100;
+    }
+    cliJob.currentChapter = null;
+    cliJob.updatedAt = nextMonotonicIsoTimestamp(cliJob.updatedAt);
+    sqliteDb.upsertPipelineJob(cliJob);
+  } catch (err: unknown) {
+    cliJob.status = abortController.signal.aborted ? 'cancelled' : 'failed';
+    cliJob.currentChapter = null;
+    cliJob.errorText = err instanceof Error ? err.message : String(err);
+    cliJob.updatedAt = nextMonotonicIsoTimestamp(cliJob.updatedAt);
+    try {
+      sqliteDb.upsertPipelineJob(cliJob);
+    } catch {
+      // Best-effort job state update on fatal error
+    }
+    throw err;
+  } finally {
+    process.removeListener('SIGINT', handleSig);
+    process.removeListener('SIGTERM', handleSig);
+    closeStudioSqliteDb();
   }
 
   console.log('='.repeat(65));
@@ -650,6 +339,38 @@ const isDirectCliExecution =
   path.resolve(process.argv[1]).endsWith('headless-runner.ts');
 
 if (isDirectCliExecution) {
+  const envLocalPath = path.resolve(process.cwd(), '.env.local');
+  if (fs.existsSync(envLocalPath)) {
+    const envContent = fs.readFileSync(envLocalPath, 'utf-8');
+    for (const line of envContent.split(/\r?\n/)) {
+      const m = line.match(/^([A-Z0-9_]+)=(.+)$/);
+      if (m && !process.env[m[1]]) {
+        process.env[m[1]] = m[2].trim().replace(/^['"]|['"]$/g, '');
+      }
+    }
+  }
+  const hasProxyEnv = Boolean(
+    process.env.HTTPS_PROXY ||
+      process.env.https_proxy ||
+      process.env.HTTP_PROXY ||
+      process.env.http_proxy
+  );
+  if (
+    hasProxyEnv &&
+    process.env.NODE_USE_ENV_PROXY === undefined &&
+    !process.execArgv.includes('--use-env-proxy') &&
+    process.allowedNodeEnvironmentFlags?.has('--use-env-proxy')
+  ) {
+    const reexec = spawnSync(
+      process.execPath,
+      ['--use-env-proxy', ...process.execArgv, ...process.argv.slice(1)],
+      {
+        stdio: 'inherit',
+        env: { ...process.env, NODE_USE_ENV_PROXY: '1' },
+      }
+    );
+    process.exit(reexec.status ?? (reexec.error ? 1 : 0));
+  }
   main().catch((err) => {
     console.error('[Runner] Неперехваченная фатальная ошибка:', err);
     process.exit(1);

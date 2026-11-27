@@ -29,6 +29,14 @@ export interface RubyGikunParseResult {
  * Classifies Japanese ruby annotations into 6 linguistic types before Pass 1 translation
  * to eliminate bracketed artifacts in dialogue and enable natural Russian stylistic fusion.
  */
+function escapeXmlAttr(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 export function parseRubyAndGikunMarkup(sourceText: string): RubyGikunParseResult {
   if (!sourceText || typeof sourceText !== 'string') {
     return { parsedText: '', foundCount: 0, items: [] };
@@ -39,7 +47,7 @@ export function parseRubyAndGikunMarkup(sourceText: string): RubyGikunParseResul
 
   // 1. Bouten standalone notation: 《《text》》
   working = working.replace(/《《([^》\n]+)》》/g, (_, emphText) => {
-    const renderedTag = `<emph text="${emphText}"/>`;
+    const renderedTag = `<emph text="${escapeXmlAttr(emphText)}"/>`;
     items.push({
       base: emphText,
       ruby: 'bouten',
@@ -59,9 +67,9 @@ export function parseRubyAndGikunMarkup(sourceText: string): RubyGikunParseResul
     }
   );
 
-  // 3. Syosetu / Kakuyomu ruby: ｜Base《Ruby》 or Base《Ruby》
+  // 3. Syosetu / Kakuyomu ruby: ｜Base《Ruby》 or Base《Ruby》 (kanji or katakana>=2 or latin/digits)
   working = working.replace(
-    /(?:｜([^\s《\n]+)|([一-龯々〆ヵヶa-zA-Z0-9]+))《([^》\n]+)》/g,
+    /(?:[｜|]([^\s《》\n]+)|([一-龯々〆ヶヵ]+|[ァ-ヶー]{2,}|[a-zA-Z0-9]+))《([^《》\n]+)》/g,
     (_, base1, base2, ruby) => {
       const base = (base1 || base2 || '').trim();
       const parsed = classifyRubyItem(base, (ruby || '').trim());
@@ -70,11 +78,12 @@ export function parseRubyAndGikunMarkup(sourceText: string): RubyGikunParseResul
     }
   );
 
-  // 4. Kanji + Parentheses notation: 漢字(ふりがな/カタカナ)
+  // 4. Kanji + Parentheses notation (halfwidth & fullwidth): 漢字(ふりがな) or 漢字（ふりがな）
   working = working.replace(
-    /([一-龯々〆ヵヶ]{1,8})\(([ぁ-んァ-ヶーa-zA-Z0-9・•●]+)\)/g,
-    (_, base, ruby) => {
-      const parsed = classifyRubyItem(base.trim(), ruby.trim());
+    /([一-龯々〆ヶヵ]+)(?:\(([ぁ-ゖァ-ヶーa-zA-Z0-9・•●]+)\)|（([ぁ-ゖァ-ヶーa-zA-Z0-9・•●]+)）)/g,
+    (_, base, rubyHalf, rubyFull) => {
+      const ruby = (rubyHalf ?? rubyFull ?? '').trim();
+      const parsed = classifyRubyItem(base.trim(), ruby);
       items.push(parsed);
       return parsed.renderedTag;
     }
@@ -88,30 +97,33 @@ export function parseRubyAndGikunMarkup(sourceText: string): RubyGikunParseResul
 }
 
 function classifyRubyItem(base: string, ruby: string): RubyGikunParseItem {
+  const safeBase = escapeXmlAttr(base);
+  const safeRuby = escapeXmlAttr(ruby);
+
   // A. Bouten: ruby is a bullet/dot (・, •, ●)
   if (/^[・•●]+$/.test(ruby)) {
-    const renderedTag = `<emph text="${base}"/>`;
+    const renderedTag = `<emph text="${safeBase}"/>`;
     return { base, ruby, category: 'bouten', renderedTag };
   }
 
   // B. Deictic / Alias Gikun: pronoun in ruby refering to noun in base
   const deicticPattern = /^(?:ここ|ぼくたち|僕たち|わたし|私|あいつ|そこ|あれ|オレたち|俺たち|あんた|お前|きみ|君)$/;
   if (deicticPattern.test(ruby)) {
-    const renderedTag = `<gikun type="deictic" spoken="${ruby}" referent="${base}"/>`;
+    const renderedTag = `<gikun type="deictic" spoken="${safeRuby}" referent="${safeBase}"/>`;
     return { base, ruby, category: 'deictic', renderedTag };
   }
 
   // C. LitRPG Game Gikun: terms like クラス, スキル, ステータス, レベル, 職業, 技能
   const litrpgPattern = /クラス|スキル|ステータス|レベル|職業|技能|魔法|属性|ダンジョン/;
   if (litrpgPattern.test(ruby) || litrpgPattern.test(base)) {
-    const renderedTag = `<gikun type="litrpg_term" spoken="${ruby}" meaning="${base}"/>`;
+    const renderedTag = `<gikun type="litrpg_term" spoken="${safeRuby}" meaning="${safeBase}"/>`;
     return { base, ruby, category: 'litrpg_term', renderedTag };
   }
 
   // C2. Subtext Slang Gikun: terms like 本気《マジ》, 強敵《とも》, リアル, ガチ, ウソ
   const subtextSlangPattern = /^(?:マジ|ガチ|リアル|ウソ|とも|やつ|ヤツ|オトコ|オンナ)$/;
   if (subtextSlangPattern.test(ruby)) {
-    const renderedTag = `<gikun type="subtext" spoken="${ruby}" hidden="${base}"/>`;
+    const renderedTag = `<gikun type="subtext" spoken="${safeRuby}" hidden="${safeBase}"/>`;
     return { base, ruby, category: 'subtext', renderedTag };
   }
 
@@ -119,7 +131,7 @@ function classifyRubyItem(base: string, ruby: string): RubyGikunParseItem {
   const hasKanji = /[一-龯々〆ヵヶ]/.test(base);
   const isKatakana = /^[ァ-ヶー・\s]+$/.test(ruby);
   if (hasKanji && isKatakana) {
-    const renderedTag = `<gikun type="nomenclature" spoken="${ruby}" meaning="${base}"/>`;
+    const renderedTag = `<gikun type="nomenclature" spoken="${safeRuby}" meaning="${safeBase}"/>`;
     return { base, ruby, category: 'nomenclature', renderedTag };
   }
 
@@ -130,7 +142,7 @@ function classifyRubyItem(base: string, ruby: string): RubyGikunParseItem {
   }
 
   // F. Synonymous / Subtext Gikun: oxymoronic or contextual subtext
-  const renderedTag = `<gikun type="subtext" spoken="${ruby}" hidden="${base}"/>`;
+  const renderedTag = `<gikun type="subtext" spoken="${safeRuby}" hidden="${safeBase}"/>`;
   return { base, ruby, category: 'subtext', renderedTag };
 }
 
@@ -156,6 +168,9 @@ export function normalizeKoreanOneLineParagraphs(rawText: string): KoreanParagra
 
   let pendingNarrative: string[] = [];
   let pendingStartIndex = -1;
+  let inSystemBox = false;
+  let systemBoxLines: string[] = [];
+  let systemBoxStartIndex = -1;
 
   const flushNarrative = () => {
     if (pendingNarrative.length > 0) {
@@ -166,10 +181,59 @@ export function normalizeKoreanOneLineParagraphs(rawText: string): KoreanParagra
     }
   };
 
+  const hasMatchingSystemBoxClose = (openIdx: number): boolean => {
+    const maxLookahead = Math.min(lines.length - 1, openIdx + 35);
+    let nonEmptyCount = 0;
+    let hasBoxCue = false;
+    let hasLongDialogue = false;
+    for (let j = openIdx + 1; j <= maxLookahead; j++) {
+      const candidate = lines[j].trim();
+      if (candidate === '---') {
+        return hasBoxCue || (nonEmptyCount > 0 && nonEmptyCount <= 20 && !hasLongDialogue);
+      }
+      if (!candidate) continue;
+      nonEmptyCount++;
+      if (
+        (candidate.startsWith('[') && candidate.endsWith(']')) ||
+        (candidate.startsWith('【') && candidate.endsWith('】')) ||
+        /^[^:：\n]{1,40}[:：]\s*\S+/.test(candidate)
+      ) {
+        hasBoxCue = true;
+      }
+      if (/^[—\-"“'«‘「『]/.test(candidate) || candidate.length > 160) {
+        hasLongDialogue = true;
+      }
+    }
+    return false;
+  };
+
   for (let idx = 0; idx < lines.length; idx++) {
     const line = lines[idx].trim();
+
+    if (inSystemBox) {
+      if (line === '---') {
+        systemBoxLines.push('---');
+        normalizedParagraphs.push(systemBoxLines.join('\n'));
+        paragraphIndexMap.push(systemBoxStartIndex >= 0 ? systemBoxStartIndex : idx);
+        inSystemBox = false;
+        systemBoxLines = [];
+        systemBoxStartIndex = -1;
+      } else if (line) {
+        systemBoxLines.push(line);
+      }
+      continue;
+    }
+
     if (!line) {
       flushNarrative();
+      continue;
+    }
+
+    if (line === '---' && hasMatchingSystemBoxClose(idx)) {
+      flushNarrative();
+      inSystemBox = true;
+      systemBoxLines = ['---'];
+      systemBoxStartIndex = idx;
       continue;
     }
 
@@ -198,6 +262,10 @@ export function normalizeKoreanOneLineParagraphs(rawText: string): KoreanParagra
   }
 
   flushNarrative();
+  if (inSystemBox && systemBoxLines.length > 0) {
+    normalizedParagraphs.push(systemBoxLines.join('\n'));
+    paragraphIndexMap.push(systemBoxStartIndex >= 0 ? systemBoxStartIndex : 0);
+  }
 
   return {
     normalizedText: normalizedParagraphs.join('\n\n'),
@@ -238,16 +306,60 @@ export function chunkChapterWithSceneAndDialogueLocks(
   const contextCount = options?.precedingContextParagraphs || 3;
   const lookaheadCount = options?.lookaheadSentences || 2;
 
-  const paragraphs = chapterText
+  // Estimate tokens handling both whitespace-delimited words and space-less CJK (~1.5 chars/token)
+  const estimateTokens = (text: string) => {
+    const cjkChars = (text.match(/[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]/g) || []).length;
+    const nonCjkText = text.replace(/[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]/g, ' ');
+    const nonCjkWords = (nonCjkText.match(/\S+/g) || []).length;
+    return Math.ceil(nonCjkWords * 1.3 + cjkChars / 1.5);
+  };
+
+  const rawBlocks = chapterText
     .replace(/\r\n/g, '\n')
     .split(/\n\n+/)
     .map((p) => p.trim())
     .filter(Boolean);
 
-  if (paragraphs.length === 0) return [];
+  if (rawBlocks.length === 0) return [];
 
-  // Approximate tokens by word count
-  const estimateTokens = (text: string) => Math.ceil((text.match(/\S+/g) || []).length * 1.3);
+  const paragraphs: string[] = [];
+  for (const block of rawBlocks) {
+    const isSystemBox = block.startsWith('---') && block.endsWith('---') && block.includes('\n');
+    if (isSystemBox || estimateTokens(block) <= maxTokens) {
+      paragraphs.push(block);
+      continue;
+    }
+
+    const blockLines = block.includes('\n')
+      ? block.split('\n').map((l) => l.trim()).filter(Boolean)
+      : [block];
+
+    for (const line of blockLines) {
+      if (estimateTokens(line) <= maxTokens) {
+        paragraphs.push(line);
+      } else {
+        const sentences = line
+          .split(/(?<=[。！？])\s*|(?<=[.!?])\s+/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        let acc = '';
+        const softCap = Math.max(200, Math.floor(maxTokens * 0.7));
+        for (const s of sentences) {
+          const joiner = acc && /[。！？]$/.test(acc) ? '' : ' ';
+          const candidate = acc ? `${acc}${joiner}${s}` : s;
+          if (acc && estimateTokens(candidate) > softCap) {
+            paragraphs.push(acc);
+            acc = s;
+          } else {
+            acc = candidate;
+          }
+        }
+        if (acc) paragraphs.push(acc);
+      }
+    }
+  }
+
+  if (paragraphs.length === 0) return [];
 
   const chunks: Array<{
     paragraphs: string[];
@@ -269,7 +381,8 @@ export function chunkChapterWithSceneAndDialogueLocks(
     const isDivider = p === '---' || p === '***' || p === '◇◇◇';
     const isSystemFrame =
       (p.startsWith('[') && p.endsWith(']')) ||
-      (p.startsWith('【') && p.endsWith('】'));
+      (p.startsWith('【') && p.endsWith('】')) ||
+      (p.startsWith('---') && p.endsWith('---') && p.includes('\n'));
 
     currentChunk.push(p);
     currentTokens += pTokens;
@@ -315,7 +428,7 @@ export function chunkChapterWithSceneAndDialogueLocks(
     if (cIdx < chunks.length - 1) {
       const nextChunkFirstParas = chunks[cIdx + 1].paragraphs.slice(0, 2).join(' ');
       const sentences = nextChunkFirstParas
-        .split(/(?<=[.!?。！？])\s+/)
+        .split(/(?<=[。！？])\s*|(?<=[.!?])\s+/)
         .map((s) => s.trim())
         .filter(Boolean);
       lookahead = sentences.slice(0, lookaheadCount).join(' ');

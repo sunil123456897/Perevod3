@@ -1,5 +1,4 @@
-import type { HeroStateLedger } from './qa-linter.ts';
-import type { CsiCulturalNote } from './delta-diting.ts';
+import type { HeroStateLedger, CsiCulturalNote } from './pipeline-types.ts';
 
 // ============================================================================
 // MODULE 5: Pure TypeScript EPUB 3 Book Compiler, Unpacker, Sanitizer & ZIP
@@ -82,8 +81,8 @@ function renderChapterBodyToXhtml(
     standaloneBracketLines = [];
   };
 
-  for (const rawLine of lines) {
-    const trimmed = rawLine.trim();
+  for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+    const trimmed = lines[lineIdx].trim();
     if (!trimmed) continue;
 
     if (trimmed === '---') {
@@ -99,7 +98,22 @@ function renderChapterBodyToXhtml(
         }
         inSystemBox = false;
       } else {
-        inSystemBox = true;
+        let hasClosingDivider = false;
+        let hasNonEmptyInside = false;
+        for (let ahead = lineIdx + 1; ahead < lines.length; ahead++) {
+          const nextTrimmed = lines[ahead].trim();
+          if (!nextTrimmed) continue;
+          if (nextTrimmed === '---') {
+            hasClosingDivider = hasNonEmptyInside;
+            break;
+          }
+          hasNonEmptyInside = true;
+        }
+        if (hasClosingDivider) {
+          inSystemBox = true;
+        } else {
+          htmlBlocks.push('<hr class="scene-divider" />');
+        }
       }
       continue;
     }
@@ -567,7 +581,81 @@ export function sanitizeRawChapterText(rawText: string): SanitizeChapterResult {
     keptLines.push(trimmed);
   }
 
-  const cleanedText = keptLines
+  // Collapse redundant empty `---` pairs left behind after junk stripping (e.g. `---\n[junk]\n---`)
+  const collapsedLines: string[] = [];
+  for (let i = 0; i < keptLines.length; i++) {
+    if (keptLines[i] === '---') {
+      let j = i + 1;
+      while (j < keptLines.length && keptLines[j] === '') {
+        j++;
+      }
+      if (j < keptLines.length && keptLines[j] === '---') {
+        i = j;
+        continue;
+      }
+    }
+    collapsedLines.push(keptLines[i]);
+  }
+
+  // Balance unpaired `---` dividers when they bound a contiguous `[...]` system box
+  const balancedLines: string[] = [...collapsedLines];
+  const dividerCount = balancedLines.filter((l) => l === '---').length;
+  if (dividerCount % 2 === 1) {
+    const isBracketLine = (line: string): boolean => line.startsWith('[') && line.endsWith(']');
+    for (let idx = 0; idx < balancedLines.length; idx++) {
+      if (balancedLines[idx] !== '---') continue;
+
+      // Case 1: Unclosed `---` right before a `[...]` block -> insert closing `---` after block
+      let after = idx + 1;
+      while (after < balancedLines.length && balancedLines[after] === '') after++;
+      if (after < balancedLines.length && isBracketLine(balancedLines[after])) {
+        let blockEnd = after;
+        while (
+          blockEnd + 1 < balancedLines.length &&
+          (balancedLines[blockEnd + 1] === '' || isBracketLine(balancedLines[blockEnd + 1]))
+        ) {
+          if (balancedLines[blockEnd + 1] === '---') break;
+          blockEnd++;
+        }
+        while (blockEnd > after && balancedLines[blockEnd] === '') blockEnd--;
+        const nextNonEmptyAfterBlock = (() => {
+          let k = blockEnd + 1;
+          while (k < balancedLines.length && balancedLines[k] === '') k++;
+          return k < balancedLines.length ? balancedLines[k] : '';
+        })();
+        if (nextNonEmptyAfterBlock !== '---') {
+          balancedLines.splice(blockEnd + 1, 0, '---');
+          break;
+        }
+      }
+
+      // Case 2: Unopened `---` right after a `[...]` block -> insert opening `---` before block
+      let before = idx - 1;
+      while (before >= 0 && balancedLines[before] === '') before--;
+      if (before >= 0 && isBracketLine(balancedLines[before])) {
+        let blockStart = before;
+        while (
+          blockStart - 1 >= 0 &&
+          (balancedLines[blockStart - 1] === '' || isBracketLine(balancedLines[blockStart - 1]))
+        ) {
+          if (balancedLines[blockStart - 1] === '---') break;
+          blockStart--;
+        }
+        while (blockStart < before && balancedLines[blockStart] === '') blockStart++;
+        const prevNonEmptyBeforeBlock = (() => {
+          let k = blockStart - 1;
+          while (k >= 0 && balancedLines[k] === '') k--;
+          return k >= 0 ? balancedLines[k] : '';
+        })();
+        if (prevNonEmptyBeforeBlock !== '---') {
+          balancedLines.splice(blockStart, 0, '---');
+          break;
+        }
+      }
+    }
+  }
+
+  const cleanedText = balancedLines
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
@@ -765,8 +853,30 @@ function parseEpubDecodedFileMap(fileMap: Map<string, string>): EpubImportResult
       continue;
     }
 
-    const fullPath = fileMap.has(opfDir + cleanHref) ? opfDir + cleanHref : cleanHref;
-    const rawHtml = fileMap.get(fullPath);
+    let resolvedRelativePath = cleanHref;
+    try {
+      resolvedRelativePath = decodeURIComponent(
+        new URL(cleanHref, 'https://epub.local/' + opfDir).pathname.slice(1)
+      );
+    } catch {
+      try {
+        resolvedRelativePath = decodeURIComponent(cleanHref);
+      } catch {
+        resolvedRelativePath = cleanHref;
+      }
+    }
+
+    const candidates = [resolvedRelativePath, opfDir + cleanHref, cleanHref];
+    let fullPath = resolvedRelativePath;
+    let rawHtml: string | undefined;
+    for (const candidate of candidates) {
+      const hit = fileMap.get(candidate);
+      if (hit !== undefined) {
+        fullPath = candidate;
+        rawHtml = hit;
+        break;
+      }
+    }
     if (!rawHtml) continue;
 
     // Extract heading from <h1>, <h2>, or <title>

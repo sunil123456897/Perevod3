@@ -1,25 +1,34 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+  useEffect,
+} from 'react';
 import { CheckCircle2, AlertTriangle, Info, XCircle, X } from 'lucide-react';
 
-export type ToastType = 'success' | 'error' | 'warn' | 'info';
+export type ToastType = 'success' | 'error' | 'warn' | 'warning' | 'info';
 
 export interface ToastItem {
   id: string;
-  type: ToastType;
+  type: 'success' | 'error' | 'warn' | 'info';
   title?: string;
   message: string;
   durationMs?: number;
 }
 
 interface ToastContextValue {
-  toasts: ToastItem[];
   addToast: (type: ToastType, message: string, title?: string, durationMs?: number) => void;
+  dismissToast: (id: string) => void;
   removeToast: (id: string) => void;
   success: (message: string, title?: string) => void;
   error: (message: string, title?: string) => void;
   warn: (message: string, title?: string) => void;
+  warning: (message: string, title?: string) => void;
   info: (message: string, title?: string) => void;
 }
 
@@ -27,25 +36,45 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
-  const removeToast = useCallback((id: string) => {
+  const dismissToast = useCallback((id: string) => {
+    const timer = timersRef.current.get(id);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      timersRef.current.delete(id);
+    }
     setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      timers.forEach((timer) => clearTimeout(timer));
+      timers.clear();
+    };
   }, []);
 
   const addToast = useCallback(
     (type: ToastType, message: string, title?: string, durationMs = 3800) => {
       const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-      const item: ToastItem = { id, type, message, title, durationMs };
+      const normalizedType: ToastItem['type'] = type === 'warning' ? 'warn' : type;
+      const item: ToastItem = { id, type: normalizedType, message, title, durationMs };
 
       setToasts((prev) => [...prev.slice(-4), item]);
 
       if (durationMs > 0) {
-        setTimeout(() => {
-          removeToast(id);
+        const timer = setTimeout(() => {
+          timersRef.current.delete(id);
+          setToasts((prev) => {
+            const next = prev.filter((t) => t.id !== id);
+            return next.length === prev.length ? prev : next;
+          });
         }, durationMs);
+        timersRef.current.set(id, timer);
       }
     },
-    [removeToast]
+    []
   );
 
   const success = useCallback(
@@ -65,17 +94,18 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     [addToast]
   );
 
-  const value = useMemo(
+  const value = useMemo<ToastContextValue>(
     () => ({
-      toasts,
       addToast,
-      removeToast,
+      dismissToast,
+      removeToast: dismissToast,
       success,
       error,
       warn,
+      warning: warn,
       info,
     }),
-    [toasts, addToast, removeToast, success, error, warn, info]
+    [addToast, dismissToast, success, error, warn, info]
   );
 
   return (
@@ -130,7 +160,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 <div className="text-sm leading-snug break-words font-medium">{t.message}</div>
               </div>
               <button
-                onClick={() => removeToast(t.id)}
+                type="button"
+                onClick={() => dismissToast(t.id)}
                 className="shrink-0 p-1 rounded-md text-white/50 hover:text-white hover:bg-white/10 transition-colors"
                 aria-label="Закрыть уведомление"
               >

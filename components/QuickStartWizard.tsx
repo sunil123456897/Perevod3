@@ -7,6 +7,7 @@ import {
   Cpu,
   Play,
   CheckCircle2,
+  AlertTriangle,
   ChevronDown,
   ChevronUp,
   X,
@@ -16,7 +17,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import type { NovelProject, ChapterRecord } from '@/lib/seed-data';
-import type { LlmProviderConfig } from '@/lib/qa-linter';
+import type { LlmProviderConfig } from '@/lib/pipeline-types';
 
 interface QuickStartWizardProps {
   novels: NovelProject[];
@@ -65,7 +66,29 @@ export default function QuickStartWizard({
     activeNovel.chapters.find((c) => !c.translated) || activeNovel.chapters[0];
 
   const hasApiKey = Boolean(process.env.NEXT_PUBLIC_GEMINI_API_KEY) || serverHasKey;
-  const isColabActive = llmConfig.provider === 'colab_ollama' && Boolean(llmConfig.colabEndpointUrl);
+  const isColabActive =
+    llmConfig.provider === 'colab_ollama' && Boolean(llmConfig.colabEndpointUrl?.trim());
+  const isEngineReady =
+    llmConfig.provider === 'antigravity_cli' ||
+    (llmConfig.provider === 'colab_ollama' ? isColabActive : hasApiKey);
+
+  const primaryModelLabel = llmConfig.modelId || 'default';
+  const criticModelLabel = llmConfig.criticModelId || primaryModelLabel;
+  const stylistModelLabel = llmConfig.stylistModelId || criticModelLabel;
+
+  const providerTitle =
+    llmConfig.provider === 'colab_ollama'
+      ? 'Google Colab L4 Ollama'
+      : llmConfig.provider === 'antigravity_cli'
+        ? 'Antigravity CLI (Local)'
+        : 'Google Gemini (Dual Rank)';
+
+  const providerModelsSubtitle =
+    llmConfig.provider === 'colab_ollama'
+      ? `${primaryModelLabel} (Gemma/Qwen local)`
+      : stylistModelLabel !== criticModelLabel
+        ? `Pass 1: ${primaryModelLabel} · Pass 2: ${criticModelLabel} · Pass 3: ${stylistModelLabel}`
+        : `Pass 1: ${primaryModelLabel} · Pass 2/3: ${criticModelLabel}`;
 
   if (isDismissed) {
     return (
@@ -201,18 +224,26 @@ export default function QuickStartWizard({
               </div>
 
               <div className="p-2 rounded-lg bg-[#0c1017] border border-white/10 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-300 font-medium">
-                    {llmConfig.provider === 'colab_ollama'
-                      ? 'Google Colab L4 Ollama'
-                      : 'Google Gemini (Dual Rank)'}
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-slate-300 font-medium truncate">
+                    {providerTitle}
                   </span>
-                  <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400">
-                    <CheckCircle2 className="w-3 h-3" /> Готов
-                  </span>
+                  {isEngineReady ? (
+                    <span className="inline-flex shrink-0 items-center gap-1 text-[10px] text-emerald-400">
+                      <CheckCircle2 className="w-3 h-3" /> Готов
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={onOpenLlmSettings}
+                      className="inline-flex shrink-0 items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-300 hover:bg-amber-500/20"
+                    >
+                      <AlertTriangle className="w-3 h-3" /> Нужен ключ / Colab
+                    </button>
+                  )}
                 </div>
-                <div className="text-[10px] text-slate-400 font-mono mt-1">
-                  Pass 1: Flash 3.8 · Pass 2/3: Argon 4
+                <div className="text-[10px] text-slate-400 font-mono mt-1 truncate">
+                  {providerModelsSubtitle}
                 </div>
               </div>
 
@@ -248,9 +279,9 @@ export default function QuickStartWizard({
               <div className="flex items-center gap-1 text-[9px] font-mono text-slate-400 py-1 px-2 rounded bg-black/40 border border-white/5 mb-2 overflow-x-auto">
                 <span className="text-cyan-400">AST</span>
                 <span>→</span>
-                <span className="text-amber-400">Flash</span>
+                <span className="text-amber-400">Pass 1</span>
                 <span>→</span>
-                <span className="text-purple-400">Argon</span>
+                <span className="text-purple-400">Pass 2</span>
                 <span>→</span>
                 <span className="text-emerald-400">Stylist</span>
                 <span>→</span>

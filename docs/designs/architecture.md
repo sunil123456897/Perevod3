@@ -1,32 +1,34 @@
-# Architecture Blueprint: Autonomous Web-Novel Translation Studio (EGM Hay)
+# Architecture Blueprint: Autonomous Web-Novel Translation Studio
 
 ## System Overview
-Автономная студия литературного перевода длинных веб-новелл (JP/CN/KR/EN → RU) представляет собой 4-фазную систему машинного перевода следующего поколения. В основе лежит архитектурная изоляция **Source Firewall** (WMT 2026 / EAMT 2024), которая исключает «синтаксический гипноз оригинала» (*shining-through effect*) при сохранении 100% фактологической и терминологической точности.
+Автономная студия литературного перевода длинных веб-новелл (JP/CN/KR/EN → RU) представляет собой 4-фазный многоагентный конвейер с архитектурной изоляцией **Source Firewall** (WMT 2026 / EAMT 2024), серверной БД `SQLite WAL`, фоновым SSE-брокером задач и детерминированной верификацией по 20 правилам русского слога.
 
 ```mermaid
 graph TD
-    Source[Raw Text: JP/KR/CN/EN] --> P0[Pass 0: RubyGikunParser & Normalizer]
-    P0 --> Locks[Dialogue Lock & Frame Lock Chunker]
-    Locks --> P1[Pass 1: Draft Translator + S-VoCAL + Pacing Few-Shot]
-    P1 --> P2[Pass 2: Bilingual Span Critic LiTransProQA]
-    P2 --> Gate1[Mechanical Gate: Add-Only Anchors & Invariants]
-    Gate1 --> P3[Pass 3: Blind Literary Stylist Nora Gal Rules]
-    P3 --> Gate2[Step 4: Rollback Gate 5 Invariants Gsurf]
-    Gate2 --> Release[Verified Chapter: 10/10 Russian Prose]
+    UI["Client UI (Next.js components/*)"] -->|"/api/auth + /api/projects + /api/jobs SSE"| API["Server Routes (app/api/*)"]
+    API -->|"owner_pid Lease + WAL OCC"| DB["SQLite WAL + Async JSON Mirror (sqlite-db-server.ts)"]
+    API -->|"ServerPipelineExecutionAdapter"| Engine["Server Engine (pipeline-run-engine.ts)"]
+    UI -.->|"Browser-safe Leaf/Core ONLY"| Core["QA & Batch Core (qa-linter.ts / pipeline-batch-runner.ts)"]
+    Engine --> P0["Pass 0: RubyGikunParser & PreFlight"]
+    P0 --> P1["Pass 1: Draft + S-VoCAL + DelTA"]
+    P1 --> P2["Pass 2: Decision-1 Radar & Span Critic"]
+    P2 --> P3["Pass 3: Blind Literary Stylist (No x_s)"]
+    P3 --> Gate["Step 4: Gsurf Rollback & PROSE_GATE"]
 ```
 
 ## Subsystems & Component Boundaries
-- [`lib/`](file:///c:/Users/vanya/Desktop/автономная-студия-перевода-веб-новелл/lib/README.md): Ядро лингвистической обработки, детерминированный QA-линтер (20 правил), AST-препроцессоры CJK, адаптеры инференса и шлюзы отката.
-- [`components/`](file:///c:/Users/vanya/Desktop/автономная-студия-перевода-веб-новелл/components/README.md): Реактивный интерфейс Next.js 15: параллельный редактор с Zen-режимом, 3-шаговый онбординг-мастер, хранилище канона и экспорт для Рулейта.
-- [`app/api/`](file:///c:/Users/vanya/Desktop/автономная-студия-перевода-веб-новелл/app/api/README.md): Серверные роуты инференса (`/api/pipeline`) и управления проектами (`/api/projects`).
+- [`lib/`](../../lib/README.md): Строгий ациклический граф (0 циклических импортов). Браузерно-безопасные листья (`pipeline-types.ts`, `russian-morphology.ts`, `scene-analysis.ts`, `qa-linter.ts`, `pipeline-batch-runner.ts`) полностью отделены от серверных модулей (`llm-inference-port.ts`, `pipeline-run-engine.ts`, `chapter-verifier-server.ts`, `sqlite-db-server.ts`, `job-broker.ts`, `api-security.ts`).
+- [`components/`](../../components/README.md): Реактивный интерфейс (`PipelineStudioApp`, `StudioAuthGate`, `components/studio/*`, `components/editor/*`) с инкрементальным SSE-обновлением глав и ленивым графиком `TranslationAnalyticsChart`. Клиентский бандл гарантированно не содержит серверных SDK и адаптеров.
+- [`app/api/`](../../app/api/README.md): Серверные роуты аутентификации (`/api/auth`), инференса (`/api/pipeline`), CRUD/OCC (`/api/projects`) и SSE-задач (`/api/jobs`).
 
 ## Global Invariants
-1. **Source Firewall Invariant**: Текст оригинала $x_s$ никогда не попадает в контекстное окно `Pass 3 (Blind Literary Stylist)`. Стилист видит только выверенный русский текст $y'$ и точечные директивы ($\le 3$ на абзац).
-2. **Surface Invariants ($G_{surf}$)**: Ни один абзац с искаженными числами, стёртыми каноническими терминами глоссария или сломанным балансом скобок/кавычек не может попасть в финальный текст; шлюз `verifyAndRollbackStylistPass` выполняет мгновенный поабзацный откат.
-3. **No Heavy Python in Frontend Runtime**: Все парсеры (фуригана, CJK-склонения, 20 правил линтера) работают на чистом TypeScript со временем выполнения полного тестового набора $\le 1.5$ с.
-4. **Data Continuity**: Сериализация проектов версионируется (v2.5 / v4.1), а экспорт на Рулейт строго формирует Unix LF и 2-параметрические заголовки.
+1. **Zero-Cycle DAG & Bundle Isolation**: В `lib/` поддерживается 0 циклических runtime-зависимостей; клиентские чанки `.next/static/chunks/*` не содержат `@google/genai`, `node:sqlite`, `llm-inference-port`, `gemini-decision-engine` и CLI-обвязки.
+2. **Source Firewall & Surface Invariants ($G_{surf}$)**: Текст оригинала $x_s$ не попадает в контекст `Pass 3 (Blind Stylist)`, а любой абзац с нарушением чисел, глоссария, скобок или длины $> \pm 45\%$ откатывается шлюзом `verifyAndRollbackStylistPass`.
+3. **Persistence, Concurrency & Process Lease**: `StudioSqliteDatabase` (`node:sqlite` WAL) использует поглавный OCC (`revision`), сериализованную отложенную запись `data/novels_db.json` (с обязательным flush в `close()`) и таблицу `pipeline_jobs.owner_pid`, блокирующую одновременный запуск CLI/SSE-задач над одной новеллой (`409 Conflict`).
+4. **Fail-Closed Outages & Explicit Degradation**: Сбой Pass 1 переводит главу в карантин без затирания прежнего текста; частичные деградации Pass 2/3 или Decision 1 пробрасываются в `degradedWarnings`.
 
 ## Verification
-- Unit & Integration Test Suite: `node --test lib/qa-linter.test.ts` (55 tests)
-- Static Analysis: `npx tsc --noEmit` & `npm run lint`
+- Test suite: `npm test` (`lib/qa-linter.test.ts` + `lib/audit-fixes.test.ts`)
+- Typecheck & Lint: `npx tsc --noEmit && npm run lint`
 - Production Build: `npm run build`
+- Corpus Gate: `node scripts/forensic-novel-audit.ts --novel my-step-daughters-are-the-villainesses --range 1-209 --gate`

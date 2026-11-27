@@ -6,9 +6,17 @@ services:
     container_name: translation-studio
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - NODE_ENV=production
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GOOGLE_API_KEYS=${GOOGLE_API_KEYS:-}
+      - STUDIO_API_TOKEN=${STUDIO_API_TOKEN:-}
+      - COLAB_OLLAMA_URL=${COLAB_OLLAMA_URL:-}
+      - COLAB_MODEL_ID=${COLAB_MODEL_ID:-}
+      - HTTP_PROXY=${HTTP_PROXY:-}
+      - HTTPS_PROXY=${HTTPS_PROXY:-}
+      - STUDIO_ALLOWED_HOSTS=${STUDIO_ALLOWED_HOSTS:-}
+      - STUDIO_ALLOWED_ORIGINS=${STUDIO_ALLOWED_ORIGINS:-}
     volumes:
       - ./data:/app/data

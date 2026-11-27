@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -10,7 +10,6 @@ import {
   Eye,
   Save,
   RotateCcw,
-  ChevronRight,
   ChevronDown,
   ChevronUp,
   History,
@@ -23,32 +22,34 @@ import {
   Minimize2,
   Type,
   BookmarkPlus,
-  SlidersHorizontal,
 } from 'lucide-react';
 import { useToast } from './ToastProvider';
+import EditorInspectorPanels from './editor/EditorInspectorPanels';
+import EditorModes from './editor/EditorModes';
 import {
-  finalizeAndVerifyChapter,
   runQaLinter,
-  autoRepairRussianText,
-  surgicalRepairDriftedParagraphs,
   generateChapterMemorySummary,
+  alignChapterParagraphs,
+  detectTautologies,
+  computeWordDiff,
+} from '@/lib/qa-linter';
+import { finalizeAndVerifyChapter } from '@/lib/chapter-verifier';
+import {
   generateBilingualChapterSummary,
   buildDelTAContextPacket,
   extractCsiCulturalNotes,
   evaluateDitingQuality,
-  alignChapterParagraphs,
-  detectTautologies,
-  computeWordDiff,
-  GENRE_PRESET_LABELS,
-  PROSE_TONE_LABELS,
-  type CanonicalGlossary,
-  type GlossaryTermMeta,
-  type LintRuleId,
-  type GenrePreset,
-  type ProseTone,
-  type ScoutedTerm,
-  type LlmProviderConfig,
-} from '@/lib/qa-linter';
+} from '@/lib/delta-diting';
+import type {
+  ChapterQaSummary,
+  CanonicalGlossary,
+  GlossaryTermMeta,
+  LintRuleId,
+  GenrePreset,
+  ProseTone,
+  ScoutedTerm,
+  LlmProviderConfig,
+} from '@/lib/pipeline-types';
 import type { ChapterRecord, ChapterVersionSnapshot } from '@/lib/seed-data';
 
 interface ParallelEditorViewProps {
@@ -69,7 +70,11 @@ interface ParallelEditorViewProps {
   isPipelineBusy: boolean;
   llmConfig?: LlmProviderConfig;
   onAddCanonTerm?: (category: keyof CanonicalGlossary, eng: string, rus: string) => void;
-  onApplyCanonRipple?: (eng: string, newRus: string) => void;
+  onApplyCanonRipple?: (
+    oldRusTerm: string,
+    newRusTerm: string,
+    targetEngKey?: string
+  ) => number | void;
 }
 
 export default function ParallelEditorView({
@@ -97,6 +102,9 @@ export default function ParallelEditorView({
   const [draftTitleRus, setDraftTitleRus] = useState(chapter.titleRus);
   const [draftEng, setDraftEng] = useState(chapter.engText);
   const [draftRus, setDraftRus] = useState(chapter.rusText);
+  const [debouncedDraftTitleRus, setDebouncedDraftTitleRus] = useState(chapter.titleRus);
+  const [debouncedDraftEng, setDebouncedDraftEng] = useState(chapter.engText);
+  const [debouncedDraftRus, setDebouncedDraftRus] = useState(chapter.rusText);
   const [draftSummary, setDraftSummary] = useState(chapter.summary || '');
   const [highlightTerms, setHighlightTerms] = useState(false);
   const [editorMode, setEditorMode] = useState<'split' | 'aligned_1to1' | 'inline_diff'>(
@@ -119,10 +127,12 @@ export default function ParallelEditorView({
   const [showQuickTermModal, setShowQuickTermModal] = useState(false);
   const [quickTermEng, setQuickTermEng] = useState('');
   const [quickTermRus, setQuickTermRus] = useState('');
+  const [quickTermOldRus, setQuickTermOldRus] = useState('');
   const [quickTermCategory, setQuickTermCategory] = useState<keyof CanonicalGlossary>('system_and_terms');
   const [quickTermRipple, setQuickTermRipple] = useState(true);
 
   const toast = useToast();
+  const handleManualSaveRef = useRef<() => void>(() => {});
 
   // Typography Preferences
   const [fontSize, setFontSize] = useState<'sm' | 'base' | 'lg' | 'xl'>('base');
@@ -143,28 +153,108 @@ export default function ParallelEditorView({
   // Stylist View Mode
   const [stylistViewMode, setStylistViewMode] = useState<'final' | 'pre_stylist' | 'stylist_diff'>('final');
 
-  React.useEffect(() => {
+  const flatGlossaryPairs = useMemo(() => {
+    const pairs: Array<{
+      eng: string;
+      rus: string;
+      category: string;
+      gender?: string;
+      voiceNote?: string;
+    }> = [];
+    Object.entries(glossary).forEach(([cat, entries]) => {
+      Object.entries((entries as Record<string, string>) || {}).forEach(([eng, rus]) => {
+        pairs.push({
+          eng,
+          rus,
+          category: cat,
+          gender: glossaryMeta?.[eng]?.gender,
+          voiceNote: glossaryMeta?.[eng]?.voiceNote,
+        });
+      });
+    });
+    return pairs.sort((a, b) => b.eng.length - a.eng.length);
+  }, [glossary, glossaryMeta]);
+
+  const openQuickTermFromSelection = useCallback(
+    (selRaw: string) => {
+      const sel = selRaw.trim();
+      if (!sel) {
+        setQuickTermOldRus('');
+        setShowQuickTermModal(true);
+        return;
+      }
+      const lowerSel = sel.toLowerCase();
+      const matched = flatGlossaryPairs.find(
+        (p) => p.eng.toLowerCase() === lowerSel || p.rus.toLowerCase() === lowerSel
+      );
+      if (matched) {
+        setQuickTermEng(matched.eng);
+        setQuickTermRus(matched.rus);
+        setQuickTermOldRus(matched.rus);
+        if (
+          matched.category === 'characters' ||
+          matched.category === 'realms' ||
+          matched.category === 'sects_and_places' ||
+          matched.category === 'system_and_terms' ||
+          matched.category === 'units'
+        ) {
+          setQuickTermCategory(matched.category);
+        }
+      } else if (/[a-zA-Z]/.test(sel)) {
+        setQuickTermEng(sel);
+        setQuickTermRus('');
+        setQuickTermOldRus('');
+      } else {
+        setQuickTermEng('');
+        setQuickTermRus(sel);
+        setQuickTermOldRus(sel);
+      }
+      setShowQuickTermModal(true);
+    },
+    [flatGlossaryPairs]
+  );
+
+  // Debounce heavy QA/DITING/CSI analysis while typing to avoid 75ms/keystroke lag
+  useEffect(() => {
+    if (
+      draftRus === debouncedDraftRus &&
+      draftEng === debouncedDraftEng &&
+      draftTitleRus === debouncedDraftTitleRus
+    ) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setDebouncedDraftTitleRus(draftTitleRus);
+      setDebouncedDraftEng(draftEng);
+      setDebouncedDraftRus(draftRus);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [
+    draftTitleRus,
+    draftEng,
+    draftRus,
+    debouncedDraftTitleRus,
+    debouncedDraftEng,
+    debouncedDraftRus,
+  ]);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'M' || e.key === 'm')) {
+      const isModifier = e.ctrlKey || e.metaKey;
+      if (isModifier && !e.shiftKey && !e.altKey && (e.key.toLowerCase() === 's' || e.code === 'KeyS')) {
+        e.preventDefault();
+        handleManualSaveRef.current();
+      } else if (isModifier && e.shiftKey && (e.key.toLowerCase() === 'm' || e.code === 'KeyM')) {
         e.preventDefault();
         const sel = window.getSelection()?.toString().trim() || '';
-        if (sel) {
-          if (/[a-zA-Z]/.test(sel)) {
-            setQuickTermEng(sel);
-            setQuickTermRus('');
-          } else {
-            setQuickTermRus(sel);
-            setQuickTermEng('');
-          }
-        }
-        setShowQuickTermModal(true);
+        openQuickTermFromSelection(sel);
       } else if (e.key === 'Escape' && isZenMode) {
         setIsZenMode(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isZenMode]);
+  }, [isZenMode, openQuickTermFromSelection]);
 
   if (syncedChapterId !== chapter.id) {
     setSyncedChapterId(chapter.id);
@@ -172,6 +262,9 @@ export default function ParallelEditorView({
     setDraftTitleRus(chapter.titleRus);
     setDraftEng(chapter.engText);
     setDraftRus(chapter.rusText);
+    setDebouncedDraftTitleRus(chapter.titleRus);
+    setDebouncedDraftEng(chapter.engText);
+    setDebouncedDraftRus(chapter.rusText);
     setDraftSummary(chapter.summary || '');
     setRepairNotice('');
     setLastPreRepairSnapshot(null);
@@ -182,6 +275,8 @@ export default function ParallelEditorView({
     if (chapter.rusText !== draftRus) {
       setDraftTitleRus(chapter.titleRus);
       setDraftRus(chapter.rusText);
+      setDebouncedDraftTitleRus(chapter.titleRus);
+      setDebouncedDraftRus(chapter.rusText);
       setDraftSummary(chapter.summary || '');
     }
   }
@@ -198,49 +293,58 @@ export default function ParallelEditorView({
     const sorted = [...allChapters].sort((a, b) => a.number - b.number);
     const idx = sorted.findIndex((c) => c.id === chapter.id);
     const earlier = idx > 0 ? sorted.slice(0, idx) : [];
-    return buildDelTAContextPacket(draftEng, previousChapter, earlier, glossary, 3);
-  }, [allChapters, chapter.id, draftEng, previousChapter, glossary]);
+    return buildDelTAContextPacket(debouncedDraftEng, previousChapter, earlier, glossary, 3);
+  }, [allChapters, chapter.id, debouncedDraftEng, previousChapter, glossary]);
 
-  // CHORUS C3 Cultural Footnotes & Rationales
+  // CHORUS C3 Cultural Footnotes & Rationales (debounced)
   const csiCulturalNotes = useMemo(() => {
-    if (chapter.csiNotes && chapter.csiNotes.length > 0 && draftRus === chapter.rusText) {
+    if (chapter.csiNotes && chapter.csiNotes.length > 0 && debouncedDraftRus === chapter.rusText) {
       return chapter.csiNotes;
     }
-    return extractCsiCulturalNotes(draftEng, draftRus, glossary);
-  }, [chapter.csiNotes, chapter.rusText, draftEng, draftRus, glossary]);
+    return extractCsiCulturalNotes(debouncedDraftEng, debouncedDraftRus, glossary);
+  }, [chapter.csiNotes, chapter.rusText, debouncedDraftEng, debouncedDraftRus, glossary]);
 
-  // DITING 6-Dimension Quality Report
+  // DITING 6-Dimension Quality Report (debounced)
   const ditingReport = useMemo(
-    () => evaluateDitingQuality(draftEng, draftRus, glossary, glossaryMeta, enabledRuleIds),
-    [draftEng, draftRus, glossary, glossaryMeta, enabledRuleIds]
+    () =>
+      evaluateDitingQuality(
+        debouncedDraftEng,
+        debouncedDraftRus,
+        glossary,
+        glossaryMeta,
+        enabledRuleIds
+      ),
+    [debouncedDraftEng, debouncedDraftRus, glossary, glossaryMeta, enabledRuleIds]
   );
 
   const lintReport = useMemo(
     () =>
-      runQaLinter(draftEng, draftRus, glossary, {
+      runQaLinter(debouncedDraftEng, debouncedDraftRus, glossary, {
         enabledRuleIds,
         glossaryMeta,
       }),
-    [draftEng, draftRus, glossary, enabledRuleIds, glossaryMeta]
+    [debouncedDraftEng, debouncedDraftRus, glossary, enabledRuleIds, glossaryMeta]
   );
 
-  // 1:1 Paragraph Alignment Grid
+  // 1:1 Paragraph Alignment Grid (live when actively editing aligned cells, debounced otherwise)
+  const alignedEngInput = editorMode === 'aligned_1to1' ? draftEng : debouncedDraftEng;
+  const alignedRusInput = editorMode === 'aligned_1to1' ? draftRus : debouncedDraftRus;
   const alignmentGrid = useMemo(
-    () => alignChapterParagraphs(draftEng, draftRus),
-    [draftEng, draftRus]
+    () => alignChapterParagraphs(alignedEngInput, alignedRusInput),
+    [alignedEngInput, alignedRusInput]
   );
 
-  // Live bilingual summary synchronization with current draft
+  // Live bilingual summary synchronization with current draft (debounced)
   const liveBilingualSummary = useMemo(() => {
-    if (!draftEng.trim() || !draftRus.trim()) return null;
+    if (!debouncedDraftEng.trim() || !debouncedDraftRus.trim()) return null;
     return generateBilingualChapterSummary(
       chapter.number,
       chapter.titleEng,
-      draftEng,
-      draftTitleRus || `Глава ${chapter.number}`,
-      draftRus
+      debouncedDraftEng,
+      debouncedDraftTitleRus || `Глава ${chapter.number}`,
+      debouncedDraftRus
     );
-  }, [chapter.number, chapter.titleEng, draftEng, draftTitleRus, draftRus]);
+  }, [chapter.number, chapter.titleEng, debouncedDraftEng, debouncedDraftTitleRus, debouncedDraftRus]);
 
   const handleSyncSummaryToDraft = () => {
     if (liveBilingualSummary) {
@@ -250,22 +354,62 @@ export default function ParallelEditorView({
   };
 
   const handleSaveQuickTerm = () => {
-    if (!quickTermEng.trim() || !quickTermRus.trim()) return;
+    const engKey = quickTermEng.trim();
+    const newRus = quickTermRus.trim();
+    if (!engKey || !newRus) return;
+
+    const existingEntry = flatGlossaryPairs.find(
+      (p) => p.eng.toLowerCase() === engKey.toLowerCase()
+    );
+    const oldRusCandidate =
+      quickTermOldRus.trim() && quickTermOldRus.trim() !== newRus
+        ? quickTermOldRus.trim()
+        : existingEntry && existingEntry.rus.trim() !== newRus
+        ? existingEntry.rus.trim()
+        : '';
+
     if (onAddCanonTerm) {
-      onAddCanonTerm(quickTermCategory, quickTermEng.trim(), quickTermRus.trim());
+      onAddCanonTerm(quickTermCategory, engKey, newRus);
     }
-    if (quickTermRipple && onApplyCanonRipple) {
-      onApplyCanonRipple(quickTermEng.trim(), quickTermRus.trim());
+
+    const rippleTargetOld = oldRusCandidate || engKey;
+    let rippleCount: number | void = 0;
+    if (quickTermRipple && onApplyCanonRipple && rippleTargetOld !== newRus) {
+      rippleCount = onApplyCanonRipple(rippleTargetOld, newRus, engKey);
     }
-    const re = new RegExp(`\\b${quickTermEng.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\b`, 'gi');
-    if (re.test(draftRus)) {
-      setDraftRus((prev) => prev.replace(re, quickTermRus.trim()));
+
+    const termsToReplaceInDraft = Array.from(
+      new Set([oldRusCandidate, engKey].filter((t) => Boolean(t) && t !== newRus))
+    );
+    if (termsToReplaceInDraft.length > 0) {
+      setDraftRus((prev) => {
+        let next = prev;
+        for (const term of termsToReplaceInDraft) {
+          const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const re = /^[a-zA-Z0-9\s'-]+$/.test(term)
+            ? new RegExp(`\\b${escaped}\\b`, 'gi')
+            : new RegExp(escaped, 'g');
+          next = next.replace(re, newRus);
+        }
+        return next;
+      });
     }
+
     setShowQuickTermModal(false);
-    toast.success(`«${quickTermEng}» → «${quickTermRus}» добавлен в канон`, 'Канонический термин');
+    setQuickTermOldRus('');
+    toast.success(
+      oldRusCandidate
+        ? `«${oldRusCandidate}» → «${newRus}» (${engKey})`
+        : `«${engKey}» → «${newRus}» добавлен в канон`,
+      'Канонический термин'
+    );
     setRepairNotice(
-      `Термин «${quickTermEng}» → «${quickTermRus}» добавлен в канон${
-        quickTermRipple ? ' с Canon Ripple' : ''
+      `Термин «${engKey}» → «${newRus}» сохранён в канон${
+        quickTermRipple
+          ? ` (Canon Ripple: «${rippleTargetOld}» → «${newRus}»${
+              typeof rippleCount === 'number' && rippleCount > 0 ? `, обновлено ${rippleCount}` : ''
+            })`
+          : ''
       }.`
     );
   };
@@ -314,9 +458,9 @@ export default function ParallelEditorView({
   }, [chapter.versionHistory, lastPreRepairSnapshot]);
 
   const stylistDiffSegments = useMemo(() => {
-    if (!preStylistSnapshot) return [];
-    return computeWordDiff(preStylistSnapshot, draftRus);
-  }, [preStylistSnapshot, draftRus]);
+    if (!preStylistSnapshot || stylistViewMode !== 'stylist_diff') return [];
+    return computeWordDiff(preStylistSnapshot, debouncedDraftRus);
+  }, [preStylistSnapshot, debouncedDraftRus, stylistViewMode]);
 
   const handleEditorMouseUp = () => {
     const selection = window.getSelection();
@@ -329,45 +473,51 @@ export default function ParallelEditorView({
     }
   };
 
-  // Tautology & Repetition Radar
-  const tautologyItems = useMemo(() => detectTautologies(draftRus), [draftRus]);
+  // Tautology & Repetition Radar (debounced)
+  const tautologyItems = useMemo(
+    () => detectTautologies(debouncedDraftRus),
+    [debouncedDraftRus]
+  );
 
   // Word-level Inline Diff when comparing before/after repair
   const wordDiffSegments = useMemo(() => {
-    if (!lastPreRepairSnapshot) return [];
-    return computeWordDiff(lastPreRepairSnapshot, draftRus);
-  }, [lastPreRepairSnapshot, draftRus]);
+    if (!lastPreRepairSnapshot || editorMode !== 'inline_diff') return [];
+    return computeWordDiff(lastPreRepairSnapshot, debouncedDraftRus);
+  }, [lastPreRepairSnapshot, debouncedDraftRus, editorMode]);
 
-  const flatGlossaryPairs = useMemo(() => {
-    const pairs: Array<{
-      eng: string;
-      rus: string;
-      category: string;
-      gender?: string;
-      voiceNote?: string;
-    }> = [];
-    Object.entries(glossary).forEach(([cat, entries]) => {
-      Object.entries((entries as Record<string, string>) || {}).forEach(([eng, rus]) => {
-        pairs.push({
-          eng,
-          rus,
-          category: cat,
-          gender: glossaryMeta?.[eng]?.gender,
-          voiceNote: glossaryMeta?.[eng]?.voiceNote,
-        });
-      });
-    });
-    return pairs.sort((a, b) => b.eng.length - a.eng.length);
-  }, [glossary, glossaryMeta]);
+  const buildQaSummary = (
+    report: { passed: boolean; errorCount: number; warningCount: number; score?: number },
+    textLen: number
+  ): ChapterQaSummary => ({
+    passed: report.passed,
+    score:
+      typeof report.score === 'number'
+        ? report.score
+        : Math.max(0, 100 - report.errorCount * 15 - report.warningCount * 3),
+    errorCount: report.errorCount,
+    warningCount: report.warningCount,
+    fingerprint: `${textLen}:${report.errorCount}:${report.warningCount}`,
+    computedAt: new Date().toISOString(),
+  });
 
   const versionHistoryList = useMemo<ChapterVersionSnapshot[]>(() => {
     const existing = chapter.versionHistory || [];
     if (existing.length > 0) return existing;
     if (!chapter.rusText.trim()) return [];
-    const baseReport = runQaLinter(chapter.engText, chapter.rusText, glossary, {
-      enabledRuleIds,
-      glossaryMeta,
-    });
+    const basePassed =
+      chapter.qaSummary !== undefined
+        ? chapter.qaSummary.passed
+        : runQaLinter(chapter.engText, chapter.rusText, glossary, {
+            enabledRuleIds,
+            glossaryMeta,
+          }).passed;
+    const baseErrorCount =
+      chapter.qaSummary !== undefined
+        ? chapter.qaSummary.errorCount
+        : runQaLinter(chapter.engText, chapter.rusText, glossary, {
+            enabledRuleIds,
+            glossaryMeta,
+          }).errorCount;
     return [
       {
         id: `ver-init-${chapter.id}`,
@@ -378,13 +528,14 @@ export default function ParallelEditorView({
         titleRus: chapter.titleRus,
         rusText: chapter.rusText,
         wordCountRus: chapter.wordCountRus,
-        qaPassed: baseReport.passed,
-        qaErrorCount: baseReport.errorCount,
+        qaPassed: basePassed,
+        qaErrorCount: baseErrorCount,
       },
     ];
   }, [
     chapter.id,
     chapter.versionHistory,
+    chapter.qaSummary,
     chapter.rusText,
     chapter.engText,
     chapter.titleRus,
@@ -410,12 +561,15 @@ export default function ParallelEditorView({
         next.push(snap);
       }
     }
-    return next.slice(-12);
+    return next.slice(-10);
   };
 
   const handleInstantDeterministicRepair = () => {
     const preText = draftRus;
-    const preReport = lintReport;
+    const preReport = runQaLinter(draftEng, preText, glossary, {
+      enabledRuleIds,
+      glossaryMeta,
+    });
     setLastPreRepairSnapshot(preText);
     setComparedVersionLabel('Предыдущая редакция (до Авто-ремонта QA)');
     const verified = finalizeAndVerifyChapter({
@@ -461,6 +615,7 @@ export default function ParallelEditorView({
     ]);
 
     setDraftRus(repairedText);
+    setDebouncedDraftRus(repairedText);
     setDraftSummary(nextSummary);
     setEditorMode('inline_diff');
     if (combinedFixes.length > 0) {
@@ -470,6 +625,7 @@ export default function ParallelEditorView({
       setRepairNotice('Все 100% проверок QA пройдены.');
       toast.success('Все 100% проверок QA пройдены', 'Канон QA');
     }
+    const isVerified = postReport.passed && Boolean(repairedText.trim());
     onSaveChapter({
       ...chapter,
       titleRus: draftTitleRus,
@@ -479,7 +635,10 @@ export default function ParallelEditorView({
       versionHistory: updatedHistory,
       translated: Boolean(repairedText.trim()),
       edited: Boolean(repairedText.trim()),
-      verified: postReport.passed && Boolean(repairedText.trim()),
+      verified: isVerified,
+      status: isVerified ? 'verified' : repairedText.trim() ? 'translated' : 'pending',
+      quarantineReason: isVerified ? undefined : chapter.quarantineReason,
+      qaSummary: buildQaSummary(postReport, repairedText.length),
       wordCountEng: draftEng.trim().split(/\s+/).filter(Boolean).length,
       wordCountRus: repairedText.trim().split(/\s+/).filter(Boolean).length,
       lastUpdated: nowStr,
@@ -555,9 +714,14 @@ export default function ParallelEditorView({
   };
 
   const handleAiVerifierRepair = async () => {
+    const preText = draftRus;
+    const preReport = runQaLinter(draftEng, preText, glossary, {
+      enabledRuleIds,
+      glossaryMeta,
+    });
     setIsAiRepairing(true);
     setRepairNotice('');
-    setLastPreRepairSnapshot(draftRus);
+    setLastPreRepairSnapshot(preText);
     try {
       const response = await fetch('/api/pipeline', {
         method: 'POST',
@@ -566,73 +730,147 @@ export default function ParallelEditorView({
           action: 'self_repair',
           chapterNumber: chapter.number,
           titleEng: chapter.titleEng,
+          titleRus: draftTitleRus,
           engText: draftEng,
-          rusText: draftRus,
+          rusText: preText,
           glossary,
           glossaryMeta,
           enabledRuleIds,
           genrePreset,
           proseTone,
           previousChapterSummary: previousChapter?.summary || '',
+          existingSummaryRus: draftSummary,
+          existingSummaryEng: chapter.summaryEng,
           styleGuideMd,
           contextMd,
           llmConfig,
         }),
       });
-      const data = await response.json();
-      const nextRus = data.repairedText || data.rusText;
-      if (nextRus) {
-        const nextSummary =
-          data.chapterSummary ||
-          draftSummary ||
-          generateChapterMemorySummary(
-            chapter.number,
-            draftTitleRus || chapter.titleEng,
-            nextRus
-          );
-        setDraftRus(nextRus);
-        setDraftSummary(nextSummary);
-        setEditorMode('inline_diff');
-        setRepairNotice(
-          data.appliedFixes?.length
-            ? `Литературный критик и QA: ${data.appliedFixes.join(' · ')}`
-            : 'ИИ-редактор завершил вычитку.'
-        );
-        onSaveChapter({
-          ...chapter,
-          titleRus: draftTitleRus,
-          engText: draftEng,
-          rusText: nextRus,
-          summary: nextSummary,
-          translated: true,
-          edited: true,
-          verified: Boolean(data.lintReport?.passed),
-          wordCountEng: draftEng.trim().split(/\s+/).filter(Boolean).length,
-          wordCountRus: nextRus.trim().split(/\s+/).filter(Boolean).length,
-          lastUpdated: new Date().toISOString().slice(0, 16).replace('T', ' '),
-        });
+      const data = await response.json().catch(() => ({} as Record<string, unknown>));
+      if (!response.ok || data?.ok === false) {
+        const errMsg =
+          (typeof data?.error === 'string' && data.error) ||
+          `Сервер вернул HTTP ${response.status}`;
+        throw new Error(errMsg);
       }
-    } catch {
-      const fallback = finalizeAndVerifyChapter({
-        chapterNumber: chapter.number,
-        titleEng: chapter.titleEng,
+
+      const nextRus =
+        typeof data?.repairedText === 'string'
+          ? data.repairedText
+          : typeof data?.rusText === 'string'
+          ? data.rusText
+          : '';
+
+      if (data?.quarantined === true || nextRus.startsWith('[КАРАНТИН:')) {
+        const qReason =
+          (typeof data?.quarantineReason === 'string' && data.quarantineReason) ||
+          'ИИ-редактор вернул неполный или повреждённый фрагмент';
+        setLastPreRepairSnapshot(null);
+        setRepairNotice(`ИИ-ремонт отклонён (карантин): ${qReason}. Текст не изменён.`);
+        toast.warning(`Текст главы не изменён: ${qReason}`, 'Защита от порчи');
+        return;
+      }
+
+      if (!nextRus.trim()) {
+        throw new Error('ИИ-редактор вернул пустой ответ.');
+      }
+
+      const nextSummary =
+        (typeof data?.chapterSummary === 'string' && data.chapterSummary) ||
+        draftSummary ||
+        generateChapterMemorySummary(
+          chapter.number,
+          draftTitleRus || chapter.titleEng,
+          nextRus
+        );
+      const postReport =
+        data?.lintReport && typeof (data.lintReport as { passed?: unknown }).passed === 'boolean'
+          ? (data.lintReport as {
+              passed: boolean;
+              errorCount: number;
+              warningCount: number;
+              score?: number;
+            })
+          : runQaLinter(draftEng, nextRus, glossary, {
+              enabledRuleIds,
+              glossaryMeta,
+            });
+      const nowStr = new Date().toISOString().slice(0, 16).replace('T', ' ');
+      const updatedHistory = appendSnapshotsToHistory(versionHistoryList, [
+        {
+          id: `ver-pre-ai-${Date.now()}`,
+          timestamp: chapter.lastUpdated || nowStr,
+          stageLabel: 'До ИИ-вычитки (редактор)',
+          titleRus: draftTitleRus,
+          rusText: preText,
+          wordCountRus: preText.trim() ? preText.trim().split(/\s+/).filter(Boolean).length : 0,
+          qaPassed: preReport.passed,
+          qaErrorCount: preReport.errorCount,
+        },
+        {
+          id: `ver-post-ai-${Date.now() + 1}`,
+          timestamp: nowStr,
+          stageLabel: 'ИИ-ремонт и верификация',
+          titleRus: draftTitleRus,
+          rusText: nextRus,
+          wordCountRus: nextRus.trim().split(/\s+/).filter(Boolean).length,
+          qaPassed: postReport.passed,
+          qaErrorCount: postReport.errorCount,
+        },
+      ]);
+
+      setDraftRus(nextRus);
+      setDebouncedDraftRus(nextRus);
+      setDraftSummary(nextSummary);
+      setComparedVersionLabel('Предыдущая редакция (до ИИ-вычитки)');
+      setEditorMode('inline_diff');
+      const appliedFixes = Array.isArray(data?.appliedFixes)
+        ? (data.appliedFixes as string[])
+        : [];
+      setRepairNotice(
+        appliedFixes.length
+          ? `Литературный критик и QA: ${appliedFixes.join(' · ')}`
+          : 'ИИ-редактор завершил вычитку и сохранил снимок в историю.'
+      );
+      toast.success('ИИ-редактор завершил вычитку (снимок сохранён)', 'ИИ-ремонт');
+
+      const isVerified = Boolean(postReport.passed) && Boolean(nextRus.trim());
+      onSaveChapter({
+        ...chapter,
         titleRus: draftTitleRus,
         engText: draftEng,
-        candidateRusText: draftRus,
-        glossary,
-        glossaryMeta,
-        enabledRuleIds,
-        runSurgicalDriftRepair: true,
+        rusText: nextRus,
+        summary: nextSummary,
+        versionHistory: updatedHistory,
+        translated: true,
+        edited: true,
+        verified: isVerified,
+        status: isVerified ? 'verified' : 'translated',
+        quarantineReason: undefined,
+        qaSummary: buildQaSummary(postReport, nextRus.length),
+        lastEngineUsed:
+          (typeof data?.engineLabel === 'string' && data.engineLabel) ||
+          llmConfig?.provider ||
+          chapter.lastEngineUsed,
+        wordCountEng: draftEng.trim().split(/\s+/).filter(Boolean).length,
+        wordCountRus: nextRus.trim().split(/\s+/).filter(Boolean).length,
+        lastUpdated: nowStr,
       });
-      setDraftRus(fallback.rusText);
-      setEditorMode('inline_diff');
-      setRepairNotice('Выполнен локальный авто-ремонт по правилам канона.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Сбой сети или LLM';
+      setLastPreRepairSnapshot(null);
+      setRepairNotice(`Ошибка ИИ-вычитки: ${msg}. Текст главы не изменён.`);
+      toast.error(msg, 'Ошибка ИИ-ремонта');
     } finally {
       setIsAiRepairing(false);
     }
   };
 
   const handleManualSave = () => {
+    const freshLint = runQaLinter(draftEng, draftRus, glossary, {
+      enabledRuleIds,
+      glossaryMeta,
+    });
     const nextSummary =
       draftSummary.trim() ||
       (draftRus.trim()
@@ -651,10 +889,14 @@ export default function ParallelEditorView({
         titleRus: draftTitleRus,
         rusText: draftRus,
         wordCountRus: draftRus.trim() ? draftRus.trim().split(/\s+/).length : 0,
-        qaPassed: lintReport.passed,
-        qaErrorCount: lintReport.errorCount,
+        qaPassed: freshLint.passed,
+        qaErrorCount: freshLint.errorCount,
       },
     ]);
+    const isVerified = freshLint.passed && draftRus.trim().length > 0;
+    setDebouncedDraftTitleRus(draftTitleRus);
+    setDebouncedDraftEng(draftEng);
+    setDebouncedDraftRus(draftRus);
     setDraftSummary(nextSummary);
     onSaveChapter({
       ...chapter,
@@ -665,7 +907,10 @@ export default function ParallelEditorView({
       versionHistory: updatedHistory,
       translated: Boolean(draftRus.trim()),
       edited: Boolean(draftRus.trim()),
-      verified: lintReport.passed && draftRus.trim().length > 0,
+      verified: isVerified,
+      status: isVerified ? 'verified' : draftRus.trim() ? 'translated' : 'pending',
+      quarantineReason: isVerified ? undefined : chapter.quarantineReason,
+      qaSummary: buildQaSummary(freshLint, draftRus.length),
       wordCountEng: draftEng.trim().split(/\s+/).filter(Boolean).length,
       wordCountRus: draftRus.trim() ? draftRus.trim().split(/\s+/).length : 0,
       lastUpdated: nowStr,
@@ -673,6 +918,10 @@ export default function ParallelEditorView({
     setRepairNotice('Глава, версия в истории и память сюжета сохранены.');
     toast.success(`Глава ${chapter.subPart || chapter.number} сохранена`, 'Сохранено');
   };
+
+  useEffect(() => {
+    handleManualSaveRef.current = handleManualSave;
+  });
 
   const renderHighlightedEnglish = (text: string) => {
     if (!highlightTerms) {
@@ -1140,429 +1389,45 @@ export default function ParallelEditorView({
         </div>
       )}
 
-      {/* Version History Panel (Compare & Rollback across Pipeline Passes) */}
-      {showVersionHistoryPanel && (
-        <div
-          role="region"
-          aria-label="История версий главы"
-          className="rounded-xl border border-amber-500/30 bg-slate-900/80 p-4 space-y-3"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <span className="text-xs font-semibold text-amber-300">
-                История версий и результатов прохождения конвейера (Глава{' '}
-                {chapter.subPart || chapter.number})
-              </span>
-              <p className="text-[11px] text-slate-400">
-                Сравните любую предыдущую фазу конвейера с текущим текстом пословно (Diff) или
-                откатите главу в один клик.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowVersionHistoryPanel(false)}
-              className="text-xs text-slate-400 hover:text-white"
-            >
-              Свернуть
-            </button>
-          </div>
-
-          {versionHistoryList.length === 0 ? (
-            <p className="text-xs text-slate-400">
-              Для этой главы пока нет сохранённых версий — запустите перевод или нажмите «Сохранить».
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
-              {[...versionHistoryList].reverse().map((snap, revIdx) => {
-                const versionNumber = versionHistoryList.length - revIdx;
-                const isIdenticalToCurrent = snap.rusText.trim() === draftRus.trim();
-
-                return (
-                  <div
-                    key={snap.id}
-                    className={`rounded-lg border p-3 text-xs space-y-2 transition ${
-                      isIdenticalToCurrent
-                        ? 'border-emerald-500/40 bg-emerald-950/15'
-                        : 'border-slate-800 bg-slate-950/85'
-                    }`}
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center rounded bg-amber-500/20 px-1.5 py-0.5 font-mono text-[11px] font-bold text-amber-300">
-                          v{versionNumber}
-                        </span>
-                        <span className="font-semibold text-slate-100">
-                          {snap.stageLabel}
-                        </span>
-                      </div>
-                      <span className="font-mono text-[11px] text-slate-400 tabular-nums">
-                        {snap.timestamp} · {snap.wordCountRus} сл.
-                      </span>
-                    </div>
-
-                    <p className="line-clamp-2 text-slate-400 font-serif">
-                      {snap.rusText}
-                    </p>
-
-                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                      <span
-                        className={`font-mono text-[11px] font-medium ${
-                          snap.qaPassed ? 'text-emerald-400' : 'text-rose-400'
-                        }`}
-                      >
-                        {snap.qaPassed
-                          ? '100% QA Pass'
-                          : `Замечаний QA: ${snap.qaErrorCount}`}
-                      </span>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleCompareWithVersion(snap)}
-                          className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-slate-200 hover:border-amber-500/50 hover:text-amber-300 transition"
-                        >
-                          <GitCompare className="h-3 w-3" />
-                          Сравнить с текущим
-                        </button>
-
-                        {isIdenticalToCurrent ? (
-                          <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
-                            Активная версия
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleRollbackToVersion(snap)}
-                            className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 border border-amber-500/40 px-2.5 py-1 text-[11px] font-semibold text-amber-300 hover:bg-amber-500/25 transition"
-                          >
-                            <Undo2 className="h-3 w-3" />
-                            Откатить к v{versionNumber}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Tautology Radar Panel */}
-      {showTautologyPanel && (
-        <div className="rounded-xl border border-amber-500/30 bg-slate-900/80 p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-amber-300">
-              Радар тавтологий и лексических повторов в соседних предложениях
-            </span>
-            <button
-              type="button"
-              onClick={() => setShowTautologyPanel(false)}
-              className="text-xs text-slate-400 hover:text-white"
-            >
-              Свернуть
-            </button>
-          </div>
-          {tautologyItems.length === 0 ? (
-            <p className="text-xs text-emerald-400">
-              Лексических повторов в скользящем окне не обнаружено — проза разнообразна.
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-              {tautologyItems.map((t, idx) => (
-                <div
-                  key={idx}
-                  className="rounded-lg border border-slate-800 bg-slate-950/80 p-3 text-xs space-y-1"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-amber-300">
-                      Строка #{t.line} · повтор «{t.wordSample}» ({t.count} раза в абзаце)
-                    </span>
-                    <span className="font-mono text-[11px] text-slate-500">
-                      основа: {t.stem}-
-                    </span>
-                  </div>
-                  <p className="text-slate-400">«{t.snippet}»</p>
-                  {t.synonymHint && (
-                    <p className="text-emerald-400 font-medium">{t.synonymHint}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* CHORUS C3 Cultural Footnotes (CSI) & DITING 6D Quality Judge Panel */}
-      {showCsiDitingPanel && (
-        <div
-          role="region"
-          aria-label="Культурные сноски CSI и оценка DITING"
-          className="rounded-xl border border-slate-800 bg-slate-900/80 p-4 space-y-4"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
-            <div>
-              <span className="text-xs font-semibold text-amber-300">
-                3-Ролевой конвейер LCD-MAS · Журнал культурных реалий CSI (CHORUS C3) и судья DITING
-              </span>
-              <p className="text-[11px] text-slate-400">
-                Прозрачное обоснование адаптации идиом, гоноративов и терминов + многомерная оценка нарративной достоверности.
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="font-mono text-xs tabular-nums text-emerald-400">
-                {ditingReport.mqmGrade} · {ditingReport.overallScore}/100
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowCsiDitingPanel(false)}
-                className="text-xs text-slate-400 hover:text-white"
-              >
-                Свернуть
-              </button>
-            </div>
-          </div>
-
-          {/* 6-Dimension DITING Score Strip */}
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
-            {[
-              { label: 'Идиоматика', val: ditingReport.idiomAccuracy },
-              { label: 'Связность сцен', val: ditingReport.referentialCohesion },
-              { label: 'Голоса героев', val: ditingReport.characterVoiceFidelity },
-              { label: 'Культурный код', val: ditingReport.culturalAdaptation },
-              { label: 'Ритмика прозы', val: ditingReport.literaryRhythm },
-              { label: 'Точность канона', val: ditingReport.terminologyPrecision },
-            ].map((dim) => (
-              <div
-                key={dim.label}
-                className="rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2 text-xs"
-              >
-                <div className="text-[11px] text-slate-400 truncate">{dim.label}</div>
-                <div
-                  className={`mt-0.5 font-mono text-sm font-semibold tabular-nums ${
-                    dim.val >= 95
-                      ? 'text-emerald-400'
-                      : dim.val >= 85
-                        ? 'text-amber-300'
-                        : 'text-rose-400'
-                  }`}
-                >
-                  {dim.val}%
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* CSI Cultural Notes List */}
-          <div className="space-y-2">
-            <div className="text-xs font-medium text-slate-300">
-              Обоснование решений локализатора CSI ({csiCulturalNotes.length})
-            </div>
-            <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
-              {csiCulturalNotes.map((note) => (
-                <div
-                  key={note.id}
-                  className="rounded-lg border border-slate-800 bg-slate-950/85 p-3 text-xs space-y-1.5"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-semibold text-slate-100">{note.sourcePhrase}</span>
-                    <span className="font-mono text-[11px] text-amber-300">
-                      {note.categoryLabel}
-                    </span>
-                  </div>
-                  <div className="text-emerald-400 font-medium">
-                    Адаптация: {note.adaptedRus}
-                  </div>
-                  <p className="text-slate-400 leading-relaxed">{note.rationale}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 4-Component DelTA Memory & Continuity Inspector */}
-      {showMemoryBar && (
-        <div
-          role="region"
-          aria-label="Четырёхкомпонентная память DelTA"
-          className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 space-y-4"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
-            <div>
-              <span className="text-xs font-semibold text-amber-300">
-                Четырёхуровневая память документа DelTA (Doc2Sent)
-              </span>
-              <p className="text-[11px] text-slate-400 font-mono tabular-nums">
-                Реестр сущностей R^(i): {deltaContextPacket.properNounCount} терм. · Окно M^(i):{' '}
-                {deltaContextPacket.shortTermWindow.length} абз. ENG↔RUS · Долгосрочная память N^(i):{' '}
-                {deltaContextPacket.longTermMemories.length} сцен
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowMemoryBar(false)}
-              className="text-xs text-slate-400 hover:text-white"
-            >
-              Свернуть
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="space-y-1.5">
-              <div className="text-xs font-semibold text-slate-300">
-                Двуязычное макро-резюме предыдущей главы (A_s [ENG] + A_t [RUS]){' '}
-                {previousChapter ? `(Глава ${previousChapter.number})` : '(начало книги)'}
-              </div>
-              <div className="rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs space-y-2 leading-relaxed">
-                <div>
-                  <span className="font-mono text-[11px] text-slate-500">ENG (A_s): </span>
-                  <span className="text-slate-300">{deltaContextPacket.bilingualSummary.eng}</span>
-                </div>
-                <div className="border-t border-slate-800/80 pt-1.5">
-                  <span className="font-mono text-[11px] text-amber-400">RUS (A_t): </span>
-                  <span className="text-slate-200">{deltaContextPacket.bilingualSummary.rus}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-amber-300">
-                  Память текущей главы (передаётся в следующую главу)
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const auto = generateBilingualChapterSummary(
-                      chapter.number,
-                      chapter.titleEng,
-                      draftEng,
-                      draftTitleRus || chapter.titleEng,
-                      draftRus
-                    );
-                    setDraftSummary(auto.rus);
-                  }}
-                  className="text-[11px] text-amber-400 hover:text-amber-300"
-                >
-                  Сгенерировать автоматически
-                </button>
-              </div>
-              <textarea
-                value={draftSummary}
-                onChange={(e) => setDraftSummary(e.target.value)}
-                rows={3}
-                placeholder="Краткая сводка событий, прорывов и локаций этой главы..."
-                className="w-full rounded-lg border border-slate-800 bg-slate-950 p-2.5 text-xs text-slate-200 focus:border-amber-500 focus:outline-none"
-              />
-            </div>
-          </div>
-
-          {/* Short-Term Sliding Window M^(i): Last 3 ENG <-> RUS paragraphs */}
-          {deltaContextPacket.shortTermWindow.length > 0 && (
-            <div className="space-y-2 pt-1">
-              <div className="text-xs font-semibold text-slate-300">
-                Краткосрочное скользящее окно M^(i) (3 последних абзаца ENG ↔ RUS из Главы{' '}
-                {previousChapter?.number})
-              </div>
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                {deltaContextPacket.shortTermWindow.map((pair) => (
-                  <div
-                    key={pair.index}
-                    className="rounded-lg border border-slate-800 bg-slate-950/90 p-2.5 text-xs space-y-1.5"
-                  >
-                    <div className="font-mono text-[11px] text-slate-500">
-                      Опорная пара #{pair.index}
-                    </div>
-                    <p className="line-clamp-2 text-slate-400">{pair.engParagraph}</p>
-                    <p className="line-clamp-2 text-emerald-300/90 border-t border-slate-800/80 pt-1">
-                      {pair.rusParagraph}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Collapsible QA Issues List */}
-      {hasIssues && showIssuesPanel && (
-        <div className="rounded-xl border border-rose-500/30 bg-slate-900/80 p-4 space-y-2.5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-rose-300">
-              Журнал замечаний QA-линтера ({GENRE_PRESET_LABELS[genrePreset].title} ·{' '}
-              {PROSE_TONE_LABELS[proseTone].title})
-            </span>
-            <button
-              type="button"
-              onClick={handleInstantDeterministicRepair}
-              className="text-xs font-semibold text-emerald-400 hover:text-emerald-300"
-            >
-              Исправить все в 1 клик →
-            </button>
-          </div>
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-            {lintReport.issues.map((issue) => (
-              <div
-                key={issue.id}
-                className="rounded-lg border border-slate-800 bg-slate-950/80 p-2.5 text-xs"
-              >
-                <div className="font-medium text-slate-200">
-                  {issue.ruleTitle}: {issue.explanation}
-                </div>
-                {issue.suggestion && (
-                  <div className="mt-1 flex items-center gap-1 text-emerald-400">
-                    <ChevronRight className="h-3 w-3 shrink-0" />
-                    <span>{issue.suggestion}</span>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Collapsible Style Guide Drawer */}
-      {showContextDrawer && (
-        <div className="grid grid-cols-1 gap-4 rounded-xl border border-slate-800 bg-slate-900/70 p-4 lg:grid-cols-2">
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">
-              Стилевой гид (STYLE_GUIDE.md)
-            </label>
-            <textarea
-              value={editStyleMd}
-              onChange={(e) => setEditStyleMd(e.target.value)}
-              rows={5}
-              className="w-full rounded-lg border border-slate-800 bg-slate-950 p-3 font-mono text-xs text-slate-200 focus:border-amber-500/60 focus:outline-none"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-300">
-                Контекст мира (CONTEXT.md)
-              </label>
-              <button
-                type="button"
-                onClick={() => {
-                  onUpdateStyleAndContext(editStyleMd, editContextMd);
-                  setRepairNotice('Стилевой гид и контекст обновлены.');
-                }}
-                className="rounded bg-amber-500 px-2.5 py-1 text-xs font-semibold text-slate-950 hover:bg-amber-400"
-              >
-                Применить
-              </button>
-            </div>
-            <textarea
-              value={editContextMd}
-              onChange={(e) => setEditContextMd(e.target.value)}
-              rows={5}
-              className="w-full rounded-lg border border-slate-800 bg-slate-950 p-3 font-mono text-xs text-slate-200 focus:border-amber-500/60 focus:outline-none"
-            />
-          </div>
-        </div>
-      )}
+      <EditorInspectorPanels
+        chapter={chapter}
+        previousChapter={previousChapter}
+        draftTitleRus={draftTitleRus}
+        draftEng={draftEng}
+        draftRus={draftRus}
+        draftSummary={draftSummary}
+        setDraftSummary={setDraftSummary}
+        showVersionHistoryPanel={showVersionHistoryPanel}
+        onCloseVersionHistory={() => setShowVersionHistoryPanel(false)}
+        versionHistoryList={versionHistoryList}
+        onCompareWithVersion={handleCompareWithVersion}
+        onRollbackToVersion={handleRollbackToVersion}
+        showTautologyPanel={showTautologyPanel}
+        onCloseTautology={() => setShowTautologyPanel(false)}
+        tautologyItems={tautologyItems}
+        showCsiDitingPanel={showCsiDitingPanel}
+        onCloseCsiDiting={() => setShowCsiDitingPanel(false)}
+        ditingReport={ditingReport}
+        csiCulturalNotes={csiCulturalNotes}
+        showMemoryBar={showMemoryBar}
+        onCloseMemoryBar={() => setShowMemoryBar(false)}
+        deltaContextPacket={deltaContextPacket}
+        hasIssues={hasIssues}
+        showIssuesPanel={showIssuesPanel}
+        genrePreset={genrePreset}
+        proseTone={proseTone}
+        lintReport={lintReport}
+        onInstantRepair={handleInstantDeterministicRepair}
+        showContextDrawer={showContextDrawer}
+        editStyleMd={editStyleMd}
+        setEditStyleMd={setEditStyleMd}
+        editContextMd={editContextMd}
+        setEditContextMd={setEditContextMd}
+        onApplyStyleAndContext={() => {
+          onUpdateStyleAndContext(editStyleMd, editContextMd);
+          setRepairNotice('Стилевой гид и контекст обновлены.');
+        }}
+      />
 
       {/* MODE 1: Unified Minimalist 2-Column Editorial Sheet */}
       {editorMode === 'split' && (
@@ -1709,159 +1574,18 @@ export default function ParallelEditorView({
         </div>
       )}
 
-      {/* MODE 2: 1:1 Paragraph Alignment Grid */}
-      {editorMode === 'aligned_1to1' && (
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-xs">
-            <div className="flex items-center gap-2">
-              <Columns2 className="h-4 w-4 text-amber-400" />
-              <span className="font-semibold text-slate-200">
-                Поабзацная матрица выравнивания 1:1 (ENG: {alignmentGrid.engCount} абз. ↔ RUS:{' '}
-                {alignmentGrid.rusCount} абз.)
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              {alignmentGrid.hasDrift ? (
-                <span className="text-rose-400 font-medium">
-                  Обнаружено расхождение числа абзацев — проверьте подсвеченные блоки
-                </span>
-              ) : (
-                <span className="text-emerald-400 font-medium">
-                  Все абзацы синхронизированы 1:1 без пропусков
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={handleInstantDeterministicRepair}
-                className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/30"
-              >
-                <Wand2 className="h-3 w-3" />
-                Точечный ремонт сбойных абзацев
-              </button>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            {alignmentGrid.pairs.map((row) => {
-              const engWordCount = row.engParagraph
-                ? row.engParagraph.split(/\s+/).filter(Boolean).length
-                : 0;
-              const rusWordCount = row.rusParagraph
-                ? row.rusParagraph.split(/\s+/).filter(Boolean).length
-                : 0;
-              const isOk = !row.isDrifted && row.missingNumbers.length === 0;
-              return (
-                <div
-                  key={row.index}
-                  className={`grid grid-cols-1 gap-4 rounded-xl border p-4 lg:grid-cols-2 ${
-                    isOk
-                      ? 'border-slate-800 bg-slate-900/30'
-                      : 'border-rose-500/40 bg-rose-950/15'
-                  }`}
-                >
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
-                      <span>Абзац #{row.index + 1} (ENG)</span>
-                      <span>{engWordCount} слов</span>
-                    </div>
-                    <div className="text-sm text-slate-200 leading-relaxed">
-                      {row.engParagraph ? (
-                        renderHighlightedEnglish(row.engParagraph)
-                      ) : (
-                        <span className="italic text-rose-300">
-                          [В оригинале нет соответствующего абзаца]
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px] font-mono">
-                      <span className="text-amber-300">Абзац #{row.index + 1} (RUS)</span>
-                      <span className={isOk ? 'text-emerald-400' : 'text-rose-400 font-semibold'}>
-                        {rusWordCount} слов
-                        {row.missingNumbers.length > 0
-                          ? ` · Потеряны числа: ${row.missingNumbers.join(', ')}`
-                          : ''}
-                      </span>
-                    </div>
-                    <textarea
-                      value={row.rusParagraph}
-                      onChange={(e) => handleUpdateAlignedParagraph(row.index, e.target.value)}
-                      rows={Math.max(3, Math.ceil(row.engParagraph.length / 95))}
-                      placeholder="Введите перевод этого абзаца..."
-                      className="w-full rounded-lg border border-slate-800 bg-slate-950/80 p-3 text-sm leading-relaxed text-slate-100 focus:border-amber-500 focus:outline-none"
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* MODE 3: Word-Level Inline Diff with 1-Click Undo */}
-      {editorMode === 'inline_diff' && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-5 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
-            <div>
-              <h4 className="text-sm font-semibold text-white">
-                Пословное сравнение изменений (Inline Word Diff)
-                {comparedVersionLabel ? ` · База: ${comparedVersionLabel}` : ''}
-              </h4>
-              <p className="text-xs text-slate-400">
-                Красный зачёркнутый текст — удалённые фрагменты старой версии; зелёный — новый
-                текст в текущей редакции.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              {lastPreRepairSnapshot && (
-                <button
-                  type="button"
-                  onClick={handleUndoRepair}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/20"
-                >
-                  <Undo2 className="h-3.5 w-3.5" />
-                  Отменить правки
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setEditorMode('split')}
-                className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-slate-950 hover:bg-amber-400"
-              >
-                Принять и вернуться в редактор
-              </button>
-            </div>
-          </div>
-
-          <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-200 font-serif">
-            {wordDiffSegments.map((seg, i) => {
-              if (seg.type === 'removed') {
-                return (
-                  <span
-                    key={i}
-                    className="rounded bg-rose-500/20 px-1 py-0.5 text-rose-300 line-through decoration-rose-400"
-                  >
-                    {seg.text}
-                  </span>
-                );
-              }
-              if (seg.type === 'added') {
-                return (
-                  <span
-                    key={i}
-                    className="rounded bg-emerald-500/25 px-1 py-0.5 font-medium text-emerald-200"
-                  >
-                    {seg.text}
-                  </span>
-                );
-              }
-              return <React.Fragment key={i}>{seg.text}</React.Fragment>;
-            })}
-          </div>
-        </div>
-      )}
+      <EditorModes
+        editorMode={editorMode}
+        alignmentGrid={alignmentGrid}
+        renderHighlightedEnglish={renderHighlightedEnglish}
+        onUpdateAlignedParagraph={handleUpdateAlignedParagraph}
+        onInstantRepair={handleInstantDeterministicRepair}
+        comparedVersionLabel={comparedVersionLabel}
+        wordDiffSegments={wordDiffSegments}
+        lastPreRepairSnapshot={lastPreRepairSnapshot}
+        onUndoRepair={handleUndoRepair}
+        onExitInlineDiff={() => setEditorMode('split')}
+      />
 
       {showQuickTermModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4">
@@ -1886,7 +1610,16 @@ export default function ParallelEditorView({
                 <input
                   type="text"
                   value={quickTermEng}
-                  onChange={(e) => setQuickTermEng(e.target.value)}
+                  onChange={(e) => {
+                    const nextEng = e.target.value;
+                    setQuickTermEng(nextEng);
+                    const found = flatGlossaryPairs.find(
+                      (p) => p.eng.toLowerCase() === nextEng.trim().toLowerCase()
+                    );
+                    if (found) {
+                      setQuickTermOldRus(found.rus);
+                    }
+                  }}
                   placeholder="e.g. Origin Points, Lin Xuan"
                   className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder-slate-500 focus:border-amber-400 focus:outline-none"
                 />
@@ -1900,6 +1633,19 @@ export default function ParallelEditorView({
                   onChange={(e) => setQuickTermRus(e.target.value)}
                   placeholder="например: Очки Истока, Линь Сюань"
                   className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder-slate-500 focus:border-amber-400 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1 font-medium">
+                  Прежний вариант для замены (если термин уже был в главах):
+                </label>
+                <input
+                  type="text"
+                  value={quickTermOldRus}
+                  onChange={(e) => setQuickTermOldRus(e.target.value)}
+                  placeholder="определяется автоматически по канону или выделению"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-800/70 px-3 py-1.5 text-slate-200 placeholder-slate-500 focus:border-amber-400 focus:outline-none"
                 />
               </div>
 
@@ -1956,14 +1702,7 @@ export default function ParallelEditorView({
           <button
             type="button"
             onClick={() => {
-              if (selectedTextSnippet.isEnglish) {
-                setQuickTermEng(selectedTextSnippet.text);
-                setQuickTermRus('');
-              } else {
-                setQuickTermRus(selectedTextSnippet.text);
-                setQuickTermEng('');
-              }
-              setShowQuickTermModal(true);
+              openQuickTermFromSelection(selectedTextSnippet.text);
               setSelectedTextSnippet(null);
             }}
             className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 text-black font-semibold text-xs shadow-2xl shadow-amber-500/40 hover:from-amber-400 hover:to-amber-500 transition-all border border-amber-300 active:scale-95"

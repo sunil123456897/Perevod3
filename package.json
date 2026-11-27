@@ -4,14 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
+    "dev": "node --use-env-proxy node_modules/next/dist/bin/next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node --use-env-proxy node_modules/next/dist/bin/next start",
     "lint": "eslint .",
     "clean": "next clean",
     "test": "node --test lib/qa-linter.test.ts lib/audit-fixes.test.ts",
-    "batch": "node --env-file-if-exists=.env.local scripts/headless-runner.ts",
-    "audit:novel": "node scripts/forensic-novel-audit.ts"
+    "batch": "node --use-env-proxy --env-file-if-exists=.env.local scripts/headless-runner.ts",
+    "audit:novel": "node --use-env-proxy scripts/forensic-novel-audit.ts",
+    "audit:keys": "node --use-env-proxy --env-file-if-exists=.env.local scripts/audit-gemini-keys.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
