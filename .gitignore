@@ -12,3 +12,6 @@ __pycache__/
 data/studio.db
 data/studio.db-wal
 data/studio.db-shm
+data/novels/
+data/novels_db.json
+.aistudio/

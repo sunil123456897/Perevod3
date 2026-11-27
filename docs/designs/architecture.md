@@ -31,4 +31,4 @@ graph TD
 - Test suite: `npm test` (`lib/qa-linter.test.ts` + `lib/audit-fixes.test.ts`)
 - Typecheck & Lint: `npx tsc --noEmit && npm run lint`
 - Production Build: `npm run build`
-- Corpus Gate: `node scripts/forensic-novel-audit.ts --novel my-step-daughters-are-the-villainesses --range 1-209 --gate`
+- Corpus Gate: `node scripts/forensic-novel-audit.ts --novel <novel-slug> --range 1-50 --gate`

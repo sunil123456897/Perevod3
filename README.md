@@ -63,7 +63,7 @@ npm test
 npx tsc --noEmit && npm run lint
 
 # Форензик-аудит новеллы и PROSE_GATE
-node scripts/forensic-novel-audit.ts --novel my-step-daughters-are-the-villainesses --range 1-209 --gate
+node scripts/forensic-novel-audit.ts --novel <novel-slug> --range 1-50 --gate
 ```
 
 ### Запуск локального сервера разработки и Production
