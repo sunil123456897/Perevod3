@@ -118,12 +118,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           const isWarn = t.type === 'warn';
 
           const surfaceColor = isSuccess
-            ? 'border-emerald-500/40 bg-[#151925]/95 text-[#F3F4F6]'
+            ? 'border-emerald-500/35 bg-[#1B1B21]/95 text-[#F2EFE9]'
             : isError
-              ? 'border-rose-500/45 bg-[#151925]/95 text-[#F3F4F6]'
+              ? 'border-rose-500/45 bg-[#1B1B21]/95 text-[#F2EFE9]'
               : isWarn
-                ? 'border-[#D99B26]/45 bg-[#151925]/95 text-[#F3F4F6]'
-                : 'border-white/[0.14] bg-[#151925]/95 text-[#F3F4F6]';
+                ? 'border-[#D69E36]/45 bg-[#1B1B21]/95 text-[#F2EFE9]'
+                : 'border-[#F2EFE9]/[0.14] bg-[#1B1B21]/95 text-[#F2EFE9]';
 
           const IconComponent = isSuccess
             ? CheckCircle2
@@ -134,35 +134,35 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 : Info;
 
           const iconColor = isSuccess
-            ? 'text-emerald-400'
+            ? 'text-[#6EE7B7]'
             : isError
-              ? 'text-rose-400'
+              ? 'text-[#FDA4AF]'
               : isWarn
-                ? 'text-[#D99B26]'
-                : 'text-[#B0B8C9]';
+                ? 'text-[#E3AE48]'
+                : 'text-[#B8B4AC]';
 
           return (
             <div
               key={t.id}
               role={isError ? 'alert' : 'status'}
               aria-live={isError ? 'assertive' : 'polite'}
-              className={`pointer-events-auto flex items-start gap-3 rounded-xl border p-3.5 backdrop-blur-md shadow-[0_18px_40px_rgba(0,0,0,0.72)] transition-all duration-200 ${surfaceColor}`}
+              className={`pointer-events-auto flex items-start gap-3 rounded-xl border p-3.5 backdrop-blur-md shadow-[0_18px_40px_rgba(0,0,0,0.72)] transition-[opacity,transform] duration-200 ${surfaceColor}`}
             >
               <IconComponent className={`h-5 w-5 shrink-0 mt-0.5 ${iconColor}`} aria-hidden="true" />
               <div className="flex-1 min-w-0 pr-1">
                 {t.title && (
-                  <div className="text-xs font-semibold text-[#F3F4F6] mb-0.5">
+                  <div className="text-sm font-semibold text-[#F2EFE9] mb-0.5">
                     {t.title}
                   </div>
                 )}
-                <div className="text-xs leading-relaxed break-words text-[#B0B8C9]">
+                <div className="text-[13px] leading-relaxed break-words text-[#B8B4AC]">
                   {t.message}
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => dismissToast(t.id)}
-                className="inline-flex min-h-7 min-w-7 shrink-0 items-center justify-center rounded-lg text-[#8893A8] hover:bg-white/[0.06] hover:text-[#F3F4F6] transition-colors"
+                className="inline-flex min-h-7 min-w-7 shrink-0 items-center justify-center rounded-lg text-[#8E8A82] hover:bg-[#F2EFE9]/[0.07] hover:text-[#F2EFE9] transition-colors duration-150"
                 aria-label="Закрыть уведомление"
               >
                 <X className="h-4 w-4" aria-hidden="true" />

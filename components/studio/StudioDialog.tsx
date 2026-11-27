@@ -43,7 +43,6 @@ export function StudioDialog({
     }
   }, [isOpen]);
 
-  // Progressive-enhancement click-outside fallback when closedby="any" is unsupported
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog || !isOpen || !dismissable) return;
@@ -96,18 +95,18 @@ export function StudioDialog({
         onClose();
       }}
       {...closedByProps}
-      className={`w-[calc(100vw-2rem)] ${maxWidthClass} max-h-[88dvh] rounded-2xl border border-white/[0.11] bg-[#10131C] text-[#F3F4F6] shadow-[0_24px_64px_rgba(0,0,0,0.78)] overflow-hidden`}
+      className={`w-[calc(100vw-2rem)] ${maxWidthClass} max-h-[88dvh] rounded-2xl border border-[#F2EFE9]/[0.12] bg-[#141418] text-[#F2EFE9] shadow-[0_24px_64px_rgba(0,0,0,0.75)] overflow-hidden`}
     >
-      <div className="flex items-start justify-between gap-4 border-b border-white/[0.08] px-6 py-4 shrink-0">
+      <div className="flex items-start justify-between gap-4 border-b border-[#F2EFE9]/[0.08] px-6 py-4 shrink-0">
         <div className="min-w-0 space-y-1">
           <h1
             id={titleId}
-            className="font-display text-base font-semibold text-[#F3F4F6] flex items-center gap-2"
+            className="font-display text-lg font-semibold text-[#F2EFE9] flex items-center gap-2"
           >
             {title}
           </h1>
           {subtitle && (
-            <p className="text-xs text-[#A6B0C3] leading-relaxed">{subtitle}</p>
+            <p className="text-[13px] text-[#B8B4AC] leading-relaxed">{subtitle}</p>
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -116,7 +115,7 @@ export function StudioDialog({
             type="button"
             onClick={onClose}
             aria-label="Закрыть окно"
-            className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-lg border border-transparent text-[#8893A8] transition-colors hover:bg-white/[0.06] hover:text-[#F3F4F6]"
+            className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-lg text-[#8E8A82] transition-colors duration-150 hover:bg-[#F2EFE9]/[0.07] hover:text-[#F2EFE9]"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -128,7 +127,7 @@ export function StudioDialog({
       </div>
 
       {footer && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.08] bg-[#0A0C12] px-6 py-3.5 shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#F2EFE9]/[0.08] bg-[#101014] px-6 py-3.5 shrink-0">
           {footer}
         </div>
       )}

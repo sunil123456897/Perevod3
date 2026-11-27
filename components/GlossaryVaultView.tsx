@@ -267,7 +267,7 @@ export default function GlossaryVaultView({
     {
       id: 'ripple',
       label: 'Глобальная замена (Ripple)',
-      icon: <Replace className="h-3.5 w-3.5 text-[#D99B26]" aria-hidden="true" />,
+      icon: <Replace className="h-3.5 w-3.5 text-[#D69E36]" aria-hidden="true" />,
     },
   ];
 
@@ -287,14 +287,14 @@ export default function GlossaryVaultView({
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Unified Sub-Tab Bar + Primary Action */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.08] pb-2">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#F2EFE9]/[0.08] pb-2">
         <div
           role="tablist"
           aria-label="Разделы глоссария"
           onKeyDown={handleTabKeyDown}
-          className="flex items-center gap-1 overflow-x-auto studio-tablist"
+          className="flex items-center gap-2 overflow-x-auto studio-tablist"
         >
           {subTabs.map((t, i) => {
             const isSelected = subView === t.id;
@@ -310,8 +310,8 @@ export default function GlossaryVaultView({
                 aria-selected={isSelected}
                 tabIndex={isSelected ? 0 : -1}
                 onClick={() => setSubView(t.id)}
-                className={`studio-tab inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-                  isSelected ? 'text-[#F3F4F6]' : 'text-[#8893A8] hover:text-[#F3F4F6]'
+                className={`studio-tab inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap shrink-0 tabular-nums ${
+                  isSelected ? 'text-[#F2EFE9]' : 'text-[#8E8A82] hover:text-[#F2EFE9]'
                 }`}
               >
                 {t.icon}
@@ -326,16 +326,16 @@ export default function GlossaryVaultView({
             <button
               type="button"
               onClick={() => setShowAddForm((prev) => !prev)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#D99B26] px-3.5 py-2 text-xs font-semibold text-[#090A0F] transition-colors hover:bg-[#E5AC3D]"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#D69E36] px-4 py-2 text-[13px] font-semibold text-[#11100D] transition-colors hover:bg-[#E3AE48]"
             >
-              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+              <Plus className="h-4 w-4" aria-hidden="true" />
               <span>Добавить термин</span>
             </button>
           )}
           <button
             type="button"
             onClick={exportGlossaryJson}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.1] bg-[#10131C] px-3 py-2 text-xs font-medium text-[#B0B8C9] transition-colors hover:border-white/[0.2] hover:text-[#F3F4F6]"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[#F2EFE9]/[0.1] bg-[#141418] px-3 py-2 text-[13px] font-medium text-[#B8B4AC] transition-colors hover:border-[#F2EFE9]/[0.22] hover:text-[#F2EFE9]"
           >
             <Download className="h-3.5 w-3.5" aria-hidden="true" />
             <span>Экспорт JSON</span>
@@ -347,14 +347,14 @@ export default function GlossaryVaultView({
       {showAddForm && subView === 'canon' && (
         <form
           onSubmit={handleAddSubmit}
-          className="rounded-xl border border-white/[0.1] bg-[#10131C] p-4 space-y-3"
+          className="rounded-xl border border-[#F2EFE9]/[0.1] bg-[#141418] p-5 space-y-3.5"
         >
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-12">
             <select
               aria-label="Категория термина"
               value={newCategory}
               onChange={(e) => setNewCategory(e.target.value as GlossaryCategory)}
-              className="rounded-lg border border-white/[0.1] bg-[#0A0C12] px-3 py-2 text-xs text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none sm:col-span-3"
+              className="rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-3 py-2 text-sm text-[#F2EFE9] focus:border-[#D69E36] focus:outline-none sm:col-span-3"
             >
               {(Object.keys(CATEGORY_LABELS) as GlossaryCategory[]).map((cat) => (
                 <option key={cat} value={cat}>
@@ -368,7 +368,7 @@ export default function GlossaryVaultView({
               value={newEng}
               onChange={(e) => setNewEng(e.target.value)}
               placeholder="Оригинал ENG (напр. Su Qingxue)"
-              className="rounded-lg border border-white/[0.1] bg-[#0A0C12] px-3 py-2 text-xs text-[#F3F4F6] placeholder:text-[#8893A8] focus:border-[#D99B26] focus:outline-none sm:col-span-3"
+              className="rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-3 py-2 text-sm text-[#F2EFE9] placeholder:text-[#8E8A82] focus:border-[#D69E36] focus:outline-none sm:col-span-3"
             />
             <input
               type="text"
@@ -376,13 +376,13 @@ export default function GlossaryVaultView({
               value={newRus}
               onChange={(e) => setNewRus(e.target.value)}
               placeholder="Канон RUS (напр. Су Цинсюэ)"
-              className="rounded-lg border border-white/[0.1] bg-[#0A0C12] px-3 py-2 text-xs text-[#F3F4F6] placeholder:text-[#8893A8] focus:border-[#D99B26] focus:outline-none sm:col-span-3"
+              className="rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-3 py-2 text-sm text-[#F2EFE9] placeholder:text-[#8E8A82] focus:border-[#D69E36] focus:outline-none sm:col-span-3"
             />
             <select
               aria-label="Грамматический род"
               value={newGender}
               onChange={(e) => setNewGender(e.target.value as GrammaticalGender)}
-              className="rounded-lg border border-white/[0.1] bg-[#0A0C12] px-3 py-2 text-xs text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none sm:col-span-3"
+              className="rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-3 py-2 text-sm text-[#F2EFE9] focus:border-[#D69E36] focus:outline-none sm:col-span-3"
               title="Грамматический род для контроля глаголов"
             >
               {GENDER_OPTIONS.map((g) => (
@@ -400,7 +400,7 @@ export default function GlossaryVaultView({
               value={newDeclensionNote}
               onChange={(e) => setNewDeclensionNote(e.target.value)}
               placeholder="Склонение (напр. женский род, не склоняется)"
-              className="rounded-lg border border-white/[0.1] bg-[#0A0C12] px-3 py-2 text-xs text-[#F3F4F6] placeholder:text-[#8893A8] focus:border-[#D99B26] focus:outline-none sm:col-span-5"
+              className="rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-3 py-2 text-sm text-[#F2EFE9] placeholder:text-[#8E8A82] focus:border-[#D69E36] focus:outline-none sm:col-span-5"
             />
             <input
               type="text"
@@ -408,11 +408,11 @@ export default function GlossaryVaultView({
               value={newVoiceNote}
               onChange={(e) => setNewVoiceNote(e.target.value)}
               placeholder="Речевой портрет и «ты/Вы» (напр. Холодный тон; к старейшинам на «Вы»)"
-              className="rounded-lg border border-white/[0.1] bg-[#0A0C12] px-3 py-2 text-xs text-[#F3F4F6] placeholder:text-[#8893A8] focus:border-[#D99B26] focus:outline-none sm:col-span-5"
+              className="rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-3 py-2 text-sm text-[#F2EFE9] placeholder:text-[#8E8A82] focus:border-[#D69E36] focus:outline-none sm:col-span-5"
             />
             <button
               type="submit"
-              className="rounded-lg bg-[#D99B26] px-4 py-2 text-xs font-semibold text-[#090A0F] transition-colors hover:bg-[#E5AC3D] sm:col-span-2"
+              className="rounded-lg bg-[#D69E36] px-4 py-2 text-sm font-semibold text-[#11100D] transition-colors hover:bg-[#E3AE48] sm:col-span-2"
             >
               Сохранить
             </button>
@@ -424,17 +424,17 @@ export default function GlossaryVaultView({
       {subView === 'canon' && (
         <div role="tabpanel" aria-labelledby="glossary-tab-canon" className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <button
                 type="button"
                 onClick={() => {
                   setOnlyUnknownGender(false);
                   setActiveCategory('all');
                 }}
-                className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                className={`text-[13px] font-medium transition-colors pb-1 border-b-2 ${
                   !onlyUnknownGender && activeCategory === 'all'
-                    ? 'border border-white/[0.12] bg-[#151925] text-[#F3F4F6]'
-                    : 'border border-transparent text-[#8893A8] hover:text-[#F3F4F6]'
+                    ? 'border-[#D69E36] text-[#F2EFE9]'
+                    : 'border-transparent text-[#8E8A82] hover:text-[#F2EFE9]'
                 }`}
               >
                 Все
@@ -447,10 +447,10 @@ export default function GlossaryVaultView({
                     setOnlyUnknownGender(false);
                     setActiveCategory(cat);
                   }}
-                  className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                  className={`text-[13px] font-medium transition-colors pb-1 border-b-2 ${
                     !onlyUnknownGender && activeCategory === cat
-                      ? 'border border-white/[0.12] bg-[#151925] text-[#E5AC3D]'
-                      : 'border border-transparent text-[#8893A8] hover:text-[#F3F4F6]'
+                      ? 'border-[#D69E36] text-[#E3AE48]'
+                      : 'border-transparent text-[#8E8A82] hover:text-[#F2EFE9]'
                   }`}
                 >
                   {CATEGORY_LABELS[cat]}
@@ -460,20 +460,20 @@ export default function GlossaryVaultView({
                 <button
                   type="button"
                   onClick={() => setOnlyUnknownGender((v) => !v)}
-                  className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors tabular-nums ${
+                  className={`text-[13px] font-medium transition-colors pb-1 border-b-2 tabular-nums ${
                     onlyUnknownGender
-                      ? 'border-[#D99B26]/60 bg-[#D99B26]/20 text-[#E5AC3D]'
-                      : 'border-[#D99B26]/30 bg-[#D99B26]/10 text-[#E5AC3D] hover:bg-[#D99B26]/15'
+                      ? 'border-[#D69E36] text-[#E3AE48]'
+                      : 'border-transparent text-[#D69E36] hover:text-[#E3AE48]'
                   }`}
                 >
-                  Персонажи без пола ({unknownCharactersCount})
+                  Без пола ({unknownCharactersCount})
                 </button>
               )}
             </div>
 
             <div className="relative w-full sm:w-72">
               <Search
-                className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8893A8]"
+                className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8E8A82]"
                 aria-hidden="true"
               />
               <input
@@ -482,14 +482,14 @@ export default function GlossaryVaultView({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Поиск по термину, склонению, речи..."
-                className="w-full rounded-lg border border-white/[0.1] bg-[#10131C] py-1.5 pl-8 pr-8 text-xs text-[#F3F4F6] placeholder:text-[#8893A8] focus:border-[#D99B26] focus:outline-none"
+                className="w-full rounded-lg border border-[#F2EFE9]/[0.1] bg-[#141418] py-1.5 pl-9 pr-8 text-sm text-[#F2EFE9] placeholder:text-[#8E8A82] focus:border-[#D69E36] focus:outline-none"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
                   aria-label="Очистить поиск"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex min-h-6 min-w-6 items-center justify-center rounded text-[#8893A8] hover:text-[#F3F4F6]"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex min-h-6 min-w-6 items-center justify-center rounded text-[#8E8A82] hover:text-[#F2EFE9]"
                 >
                   <X className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
@@ -497,13 +497,13 @@ export default function GlossaryVaultView({
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-white/[0.08] bg-[#10131C]">
+          <div className="overflow-x-auto rounded-xl border border-[#F2EFE9]/[0.08] bg-[#141418]">
             <table className="w-full text-left border-collapse tabular-nums">
               <caption className="visually-hidden">
                 Утверждённый канонический глоссарий произведения
               </caption>
               <thead>
-                <tr className="border-b border-white/[0.08] bg-[#0D1017] text-[11px] font-medium text-[#8893A8]">
+                <tr className="border-b border-[#F2EFE9]/[0.08] bg-[#101014] text-[13px] font-medium text-[#8E8A82]">
                   <th scope="col" className="py-3 pl-4 pr-3">Оригинал (ENG)</th>
                   <th scope="col" className="px-3 py-3">Утверждённый канон (RUS)</th>
                   <th scope="col" className="px-3 py-3">Род (М/Ж) и падежи</th>
@@ -511,13 +511,13 @@ export default function GlossaryVaultView({
                   <th scope="col" className="py-3 pl-3 pr-4 text-right">Действие</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/[0.05] text-xs">
+              <tbody className="divide-y divide-[#F2EFE9]/[0.06] text-[13px]">
                 {flattenedCanon.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-10 text-center">
-                      <div className="space-y-2">
-                        <BookOpen className="mx-auto h-6 w-6 text-[#8893A8]" aria-hidden="true" />
-                        <p className="text-sm font-medium text-[#F3F4F6]">
+                    <td colSpan={5} className="px-6 py-12 text-center">
+                      <div className="space-y-2.5">
+                        <BookOpen className="mx-auto h-6 w-6 text-[#8E8A82]" aria-hidden="true" />
+                        <p className="text-sm font-medium text-[#F2EFE9]">
                           Термины по заданному фильтру не найдены
                         </p>
                         {(activeCategory !== 'all' || onlyUnknownGender || searchQuery.trim()) && (
@@ -528,7 +528,7 @@ export default function GlossaryVaultView({
                               setOnlyUnknownGender(false);
                               setSearchQuery('');
                             }}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.12] bg-[#151925] px-3 py-1.5 text-xs font-medium text-[#F3F4F6] hover:border-[#D99B26]/50"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-[#F2EFE9]/[0.12] bg-[#1B1B21] px-3.5 py-1.5 text-[13px] font-medium text-[#F2EFE9] hover:border-[#D69E36]/50 transition-colors"
                           >
                             Сбросить фильтры
                           </button>
@@ -547,29 +547,25 @@ export default function GlossaryVaultView({
                         key={`${item.category}-${item.eng}`}
                         className={`transition-colors ${
                           isUnclassifiedCharacter
-                            ? 'bg-[#D99B26]/[0.06] hover:bg-[#D99B26]/[0.1]'
-                            : 'hover:bg-white/[0.025]'
+                            ? 'bg-[#D69E36]/[0.06] hover:bg-[#D69E36]/[0.1]'
+                            : 'hover:bg-[#F2EFE9]/[0.025]'
                         }`}
                       >
-                        <td className="py-2.5 pl-4 pr-3">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="font-mono font-medium text-[#F3F4F6]">
-                              {item.eng}
-                            </span>
+                        <td className="py-3.5 pl-4 pr-3">
+                          <div className="text-sm font-medium text-[#F2EFE9]">
+                            {item.eng}
+                          </div>
+                          <div className="text-[13px] text-[#8E8A82] mt-0.5">
+                            {CATEGORY_LABELS[item.category]}
                             {isUnclassifiedCharacter && (
-                              <span className="rounded border border-[#D99B26]/40 bg-[#D99B26]/15 px-1.5 py-0.5 text-[10px] font-semibold text-[#E5AC3D]">
-                                Пол не указан
-                              </span>
+                              <span className="text-[#E3AE48]"> · Пол не указан</span>
                             )}
                           </div>
-                          <div className="text-[11px] text-[#8893A8]">
-                            {CATEGORY_LABELS[item.category]}
-                          </div>
                         </td>
-                        <td className="px-3 py-2.5 font-medium text-[#E5AC3D]">
+                        <td className="px-3 py-3.5 text-sm font-medium text-[#E3AE48]">
                           {item.rus}
                         </td>
-                        <td className="px-3 py-2.5">
+                        <td className="px-3 py-3.5">
                           <div className="flex flex-wrap items-center gap-2">
                             <select
                               aria-label={`Грамматический род для ${item.eng}`}
@@ -586,10 +582,10 @@ export default function GlossaryVaultView({
                                   item.voiceNote
                                 );
                               }}
-                              className={`rounded-lg border px-2 py-1 text-[11px] focus:outline-none ${
+                              className={`rounded-lg border px-2.5 py-1.5 text-[13px] focus:outline-none ${
                                 isUnclassifiedCharacter
-                                  ? 'border-[#D99B26]/50 bg-[#151925] text-[#E5AC3D] focus:border-[#D99B26]'
-                                  : 'border-white/[0.1] bg-[#0A0C12] text-[#B0B8C9] focus:border-[#D99B26]'
+                                  ? 'border-[#D69E36]/50 bg-[#1B1B21] text-[#E3AE48] focus:border-[#D69E36]'
+                                  : 'border-[#F2EFE9]/[0.1] bg-[#101014] text-[#B8B4AC] focus:border-[#D69E36]'
                               }`}
                             >
                               {item.category !== 'characters' && (
@@ -602,13 +598,13 @@ export default function GlossaryVaultView({
                               ))}
                             </select>
                             {item.declensionNote && (
-                              <span className="text-[11px] text-[#8893A8]">
+                              <span className="text-[13px] text-[#8E8A82]">
                                 {item.declensionNote}
                               </span>
                             )}
                           </div>
                         </td>
-                        <td className="px-3 py-2.5">
+                        <td className="px-3 py-3.5">
                           <input
                             type="text"
                             aria-label={`Речевой портрет для ${item.eng}`}
@@ -623,13 +619,13 @@ export default function GlossaryVaultView({
                             }
                             placeholder={
                               item.category === 'characters'
-                                ? 'Задать тон речи / обращение ты-Вы...'
+                                ? 'Тон речи и обращение ты/Вы...'
                                 : 'Примечание для ИИ...'
                             }
-                            className="w-full min-w-[200px] rounded-lg border border-white/[0.08] bg-[#0A0C12] px-2.5 py-1.5 text-[11px] text-[#F3F4F6] placeholder:text-[#8893A8] focus:border-[#D99B26] focus:outline-none"
+                            className="w-full min-w-[200px] rounded-lg border border-[#F2EFE9]/[0.09] bg-[#101014] px-3 py-1.5 text-[13px] text-[#F2EFE9] placeholder:text-[#8E8A82] focus:border-[#D69E36] focus:outline-none"
                           />
                         </td>
-                        <td className="py-2.5 pl-3 pr-4 text-right">
+                        <td className="py-3.5 pl-3 pr-4 text-right">
                           <div className="inline-flex items-center gap-1">
                             <button
                               type="button"
@@ -640,19 +636,19 @@ export default function GlossaryVaultView({
                                 setRippleNewRus(item.rus);
                                 setSubView('ripple');
                               }}
-                              className="inline-flex min-h-7 min-w-7 items-center justify-center rounded-lg text-[#8893A8] transition-colors hover:bg-white/[0.06] hover:text-[#E5AC3D]"
+                              className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-lg text-[#8E8A82] transition-colors hover:bg-[#F2EFE9]/[0.06] hover:text-[#E3AE48]"
                               title="Переименовать во всех переведённых главах (Ripple)"
                             >
-                              <Replace className="h-3.5 w-3.5" aria-hidden="true" />
+                              <Replace className="h-4 w-4" aria-hidden="true" />
                             </button>
                             <button
                               type="button"
                               aria-label={`Удалить ${item.eng} из канона`}
                               onClick={() => onRemoveCanonTerm(item.category, item.eng)}
-                              className="inline-flex min-h-7 min-w-7 items-center justify-center rounded-lg text-[#8893A8] transition-colors hover:bg-rose-500/15 hover:text-rose-300"
+                              className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-lg text-[#8E8A82] transition-colors hover:bg-[#F07587]/15 hover:text-[#FDA4AF]"
                               title="Удалить из канона"
                             >
-                              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                              <Trash2 className="h-4 w-4" aria-hidden="true" />
                             </button>
                           </div>
                         </td>
@@ -666,16 +662,16 @@ export default function GlossaryVaultView({
         </div>
       )}
 
-      {/* SUBVIEW 2: SCOUTED BUFFER */}
+      {/* SUBVIEW 2: SCOUTED BUFFER — Flat Divided List */}
       {subView === 'scouted' && (
-        <div role="tabpanel" aria-labelledby="glossary-tab-scouted" className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.09] bg-[#10131C] p-4">
+        <div role="tabpanel" aria-labelledby="glossary-tab-scouted" className="space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[#F2EFE9]/[0.08]">
             <div className="space-y-0.5">
-              <div className="text-xs font-semibold text-[#F3F4F6]">
-                Сканирование новых терминов и авто-одобрение
-              </div>
-              <p className="text-xs text-[#8893A8]">
-                Кандидаты с точностью ≥92% можно утвердить в канонический глоссарий одной кнопкой.
+              <h2 className="text-lg font-semibold tracking-[-0.02em] text-[#F2EFE9]">
+                Сканирование новых терминов
+              </h2>
+              <p className="text-[13px] text-[#8E8A82]">
+                Кандидаты с точностью от 92% можно утвердить в канон одной кнопкой.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -683,22 +679,22 @@ export default function GlossaryVaultView({
                 <button
                   type="button"
                   onClick={() => setOnlyUnknownScoutedGender((v) => !v)}
-                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors tabular-nums ${
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-medium transition-colors tabular-nums ${
                     onlyUnknownScoutedGender
-                      ? 'border-[#D99B26]/60 bg-[#D99B26]/20 text-[#E5AC3D]'
-                      : 'border-[#D99B26]/30 bg-[#D99B26]/10 text-[#E5AC3D] hover:bg-[#D99B26]/15'
+                      ? 'border-[#D69E36]/60 bg-[#D69E36]/20 text-[#E3AE48]'
+                      : 'border-[#D69E36]/30 bg-[#D69E36]/10 text-[#E3AE48] hover:bg-[#D69E36]/18'
                   }`}
                 >
-                  Персонажи без пола ({unknownScoutedCharactersCount})
+                  Без пола ({unknownScoutedCharactersCount})
                 </button>
               )}
               {highConfidencePendingCount > 0 && (
                 <button
                   type="button"
                   onClick={() => onAutoApproveHighConfidence(0.92)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3.5 py-1.5 text-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/25"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#52C79A]/40 bg-[#52C79A]/12 px-3.5 py-1.5 text-[13px] font-semibold text-[#6EE7B7] transition-colors hover:bg-[#52C79A]/22 tabular-nums"
                 >
-                  <CheckCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                  <CheckCheck className="h-4 w-4" aria-hidden="true" />
                   <span>Авто-утвердить ≥92% ({highConfidencePendingCount})</span>
                 </button>
               )}
@@ -706,7 +702,7 @@ export default function GlossaryVaultView({
                 aria-label="Выбор главы для сканирования ИИ-скаутом"
                 value={selectedChapterForScout}
                 onChange={(e) => setSelectedChapterForScout(e.target.value)}
-                className="rounded-lg border border-white/[0.1] bg-[#0A0C12] px-3 py-1.5 text-xs text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none"
+                className="rounded-lg border border-[#F2EFE9]/[0.1] bg-[#141418] px-3 py-1.5 text-[13px] text-[#F2EFE9] focus:border-[#D69E36] focus:outline-none"
               >
                 {chapters.map((ch) => (
                   <option key={ch.id} value={ch.id}>
@@ -718,7 +714,7 @@ export default function GlossaryVaultView({
                 type="button"
                 onClick={() => onScoutChapterTerms(selectedChapterForScout)}
                 disabled={isScouting}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#D99B26] px-3.5 py-1.5 text-xs font-semibold text-[#090A0F] transition-colors hover:bg-[#E5AC3D] disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#D69E36] px-4 py-1.5 text-[13px] font-semibold text-[#11100D] transition-colors hover:bg-[#E3AE48] disabled:opacity-50"
               >
                 <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
                 <span>{isScouting ? 'Сканирование...' : 'Запустить ИИ-скаут'}</span>
@@ -727,13 +723,13 @@ export default function GlossaryVaultView({
           </div>
 
           {visiblePendingScouted.length === 0 ? (
-            <div className="rounded-xl border border-white/[0.08] bg-[#10131C] p-10 text-center text-xs text-[#8893A8]">
+            <div className="rounded-xl border border-[#F2EFE9]/[0.08] bg-[#141418] p-12 text-center text-sm text-[#8E8A82]">
               {onlyUnknownScoutedGender
                 ? 'Все кандидаты-персонажи уже классифицированы по роду.'
                 : 'Все найденные термины рассмотрены и добавлены в канон.'}
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="rounded-xl border border-[#F2EFE9]/[0.08] bg-[#141418] divide-y divide-[#F2EFE9]/[0.07]">
               {visiblePendingScouted.map((term) => {
                 const currentRus =
                   editedSuggestions[term.id] !== undefined
@@ -749,41 +745,37 @@ export default function GlossaryVaultView({
                 return (
                   <div
                     key={term.id}
-                    className={`flex flex-col justify-between rounded-xl border p-4 space-y-3 ${
-                      isUnclassifiedCharacter
-                        ? 'border-[#D99B26]/40 bg-[#10131C]'
-                        : 'border-white/[0.08] bg-[#10131C]'
+                    className={`p-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between ${
+                      isUnclassifiedCharacter ? 'bg-[#D69E36]/[0.04]' : ''
                     }`}
                   >
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-mono text-sm font-semibold text-[#F3F4F6]">
-                            {term.eng}
-                          </span>
-                          {isUnclassifiedCharacter && (
-                            <span className="rounded border border-[#D99B26]/40 bg-[#D99B26]/15 px-1.5 py-0.5 text-[10px] font-semibold text-[#E5AC3D]">
-                              Пол не указан
-                            </span>
-                          )}
-                        </div>
+                    <div className="space-y-1.5 min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline gap-2.5 tabular-nums">
+                        <span className="text-sm font-semibold text-[#F2EFE9]">
+                          {term.eng}
+                        </span>
                         <span
-                          className={`font-mono text-[11px] tabular-nums ${
+                          className={`text-[13px] ${
                             term.confidence >= 0.92
-                              ? 'text-emerald-300 font-semibold'
-                              : 'text-[#8893A8]'
+                              ? 'text-[#6EE7B7] font-medium'
+                              : 'text-[#8E8A82]'
                           }`}
                         >
                           Глава {term.chapter_first_seen} ·{' '}
                           {Math.round(term.confidence * 100)}%
                         </span>
+                        {isUnclassifiedCharacter && (
+                          <span className="text-[13px] font-medium text-[#E3AE48]">
+                            · Пол не указан
+                          </span>
+                        )}
                       </div>
-                      <p className="text-xs text-[#B0B8C9] leading-relaxed">
+                      <p className="text-[13px] text-[#B8B4AC] leading-relaxed">
                         «{term.context_snippet}»
                       </p>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2 pt-2.5 border-t border-white/[0.07]">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0 lg:w-[460px] lg:justify-end">
                       <input
                         type="text"
                         aria-label={`Русский вариант для ${term.eng}`}
@@ -794,7 +786,7 @@ export default function GlossaryVaultView({
                             [term.id]: e.target.value,
                           }))
                         }
-                        className="min-w-[140px] flex-1 rounded-lg border border-white/[0.1] bg-[#0A0C12] px-2.5 py-1.5 text-xs font-medium text-[#E5AC3D] focus:border-[#D99B26] focus:outline-none"
+                        className="min-w-[160px] flex-1 rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-3 py-1.5 text-sm font-medium text-[#E3AE48] focus:border-[#D69E36] focus:outline-none"
                       />
                       {term.category === 'characters' && (
                         <select
@@ -806,10 +798,10 @@ export default function GlossaryVaultView({
                               [term.id]: e.target.value as GrammaticalGender,
                             }))
                           }
-                          className={`rounded-lg border px-2 py-1.5 text-xs focus:outline-none ${
+                          className={`rounded-lg border px-2.5 py-1.5 text-[13px] focus:outline-none ${
                             isUnclassifiedCharacter
-                              ? 'border-[#D99B26]/50 bg-[#151925] text-[#E5AC3D]'
-                              : 'border-white/[0.1] bg-[#0A0C12] text-[#B0B8C9]'
+                              ? 'border-[#D69E36]/50 bg-[#1B1B21] text-[#E3AE48]'
+                              : 'border-[#F2EFE9]/[0.1] bg-[#101014] text-[#B8B4AC]'
                           }`}
                         >
                           {GENDER_OPTIONS.map((g) => (
@@ -829,7 +821,7 @@ export default function GlossaryVaultView({
                             term.category === 'characters' ? currentGender : undefined
                           )
                         }
-                        className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-200 transition-colors hover:bg-emerald-500/25"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#52C79A]/40 bg-[#52C79A]/12 px-3 py-1.5 text-[13px] font-semibold text-[#6EE7B7] transition-colors hover:bg-[#52C79A]/22"
                       >
                         <Check className="h-3.5 w-3.5" aria-hidden="true" />
                         <span>В канон</span>
@@ -838,10 +830,10 @@ export default function GlossaryVaultView({
                         type="button"
                         aria-label={`Отклонить термин ${term.eng}`}
                         onClick={() => onRejectScoutedTerm(term.id)}
-                        className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-lg border border-white/[0.1] bg-[#0A0C12] text-[#8893A8] transition-colors hover:text-rose-300"
+                        className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] text-[#8E8A82] transition-colors hover:text-[#FDA4AF]"
                         title="Отклонить"
                       >
-                        <X className="h-3.5 w-3.5" aria-hidden="true" />
+                        <X className="h-4 w-4" aria-hidden="true" />
                       </button>
                     </div>
                   </div>
@@ -852,33 +844,33 @@ export default function GlossaryVaultView({
         </div>
       )}
 
-      {/* SUBVIEW 3: RETROACTIVE CANON RIPPLE REFACTORING */}
+      {/* SUBVIEW 3: RETROACTIVE CANON RIPPLE REFACTORING — Flat Hierarchy */}
       {subView === 'ripple' && (
         <div
           role="tabpanel"
           aria-labelledby="glossary-tab-ripple"
-          className="space-y-4 rounded-xl border border-white/[0.09] bg-[#10131C] p-5"
+          className="space-y-6 rounded-xl border border-[#F2EFE9]/[0.08] bg-[#141418] p-6"
         >
           <div className="space-y-1">
-            <h2 className="font-display text-sm font-semibold text-[#F3F4F6]">
+            <h2 className="text-lg font-semibold tracking-[-0.02em] text-[#F2EFE9]">
               Каскадная замена термина во всех переведённых главах
             </h2>
-            <p className="text-xs text-[#8893A8]">
+            <p className="text-[13px] text-[#8E8A82]">
               Переименование ранга, артефакта или имени обновит все падежные словоформы в переведённых главах и в каноне.
             </p>
           </div>
 
           {rippleSuccessBanner && (
-            <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-2.5 text-xs text-emerald-200">
+            <div className="border-l-2 border-[#52C79A] pl-3.5 py-1 text-[13px] text-[#6EE7B7]">
               {rippleSuccessBanner}
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-12">
+          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-12">
             <div className="sm:col-span-4">
               <label
                 htmlFor="ripple-canon-select"
-                className="mb-1.5 block text-[11px] font-medium text-[#B0B8C9]"
+                className="mb-1.5 block text-[13px] font-medium text-[#B8B4AC]"
               >
                 Выбрать из канона
               </label>
@@ -893,9 +885,9 @@ export default function GlossaryVaultView({
                     setRippleOldRus(found.rus);
                   }
                 }}
-                className="w-full rounded-lg border border-white/[0.1] bg-[#0A0C12] px-3 py-2 text-xs text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none"
+                className="w-full rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-3 py-2 text-sm text-[#F2EFE9] focus:border-[#D69E36] focus:outline-none"
               >
-                <option value="">— Произвольный термин —</option>
+                <option value="">Произвольный термин</option>
                 {flattenedCanon.map((c) => (
                   <option key={`${c.category}-${c.eng}`} value={c.eng}>
                     {c.eng} → {c.rus}
@@ -907,7 +899,7 @@ export default function GlossaryVaultView({
             <div className="sm:col-span-3">
               <label
                 htmlFor="ripple-old-rus"
-                className="mb-1.5 block text-[11px] font-medium text-[#B0B8C9]"
+                className="mb-1.5 block text-[13px] font-medium text-[#B8B4AC]"
               >
                 Старый перевод (RUS)
               </label>
@@ -917,14 +909,14 @@ export default function GlossaryVaultView({
                 value={rippleOldRus}
                 onChange={(e) => setRippleOldRus(e.target.value)}
                 placeholder="Напр. Очки Истока"
-                className="w-full rounded-lg border border-white/[0.1] bg-[#0A0C12] px-3 py-2 text-xs text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none"
+                className="w-full rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-3 py-2 text-sm text-[#F2EFE9] focus:border-[#D69E36] focus:outline-none"
               />
             </div>
 
             <div className="sm:col-span-3">
               <label
                 htmlFor="ripple-new-rus"
-                className="mb-1.5 block text-[11px] font-medium text-[#B0B8C9]"
+                className="mb-1.5 block text-[13px] font-medium text-[#B8B4AC]"
               >
                 Новый канон (RUS)
               </label>
@@ -934,7 +926,7 @@ export default function GlossaryVaultView({
                 value={rippleNewRus}
                 onChange={(e) => setRippleNewRus(e.target.value)}
                 placeholder="Напр. Очки Изначальности"
-                className="w-full rounded-lg border border-white/[0.1] bg-[#0A0C12] px-3 py-2 text-xs font-medium text-[#E5AC3D] focus:border-[#D99B26] focus:outline-none"
+                className="w-full rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-3 py-2 text-sm font-medium text-[#E3AE48] focus:border-[#D69E36] focus:outline-none"
               />
             </div>
 
@@ -943,45 +935,45 @@ export default function GlossaryVaultView({
                 type="button"
                 onClick={handleExecuteRipple}
                 disabled={ripplePreview.totalOccurrences === 0 && !rippleEngKey}
-                className="w-full rounded-lg bg-[#D99B26] px-3 py-2 text-xs font-semibold text-[#090A0F] transition-colors hover:bg-[#E5AC3D] disabled:opacity-40"
+                className="w-full rounded-lg bg-[#D69E36] px-3.5 py-2 text-sm font-semibold text-[#11100D] transition-colors hover:bg-[#E3AE48] disabled:opacity-40 tabular-nums"
               >
                 Заменить ({ripplePreview.totalOccurrences})
               </button>
             </div>
           </div>
 
-          <div className="space-y-2 pt-2">
-            <div className="text-xs font-medium text-[#B0B8C9] tabular-nums">
+          <div className="space-y-3 pt-4 border-t border-[#F2EFE9]/[0.08]">
+            <div className="text-[13px] font-medium text-[#B8B4AC] tabular-nums">
               Предпросмотр: найдено {ripplePreview.totalOccurrences} вхождений в{' '}
               {ripplePreview.changes.length} главах
             </div>
 
             {ripplePreview.changes.length === 0 ? (
-              <div className="rounded-lg border border-white/[0.07] bg-[#0A0C12] p-4 text-xs text-[#8893A8]">
+              <p className="text-[13px] text-[#8E8A82]">
                 В переведённых главах не найдено вхождений «{rippleOldRus}».
-              </div>
+              </p>
             ) : (
-              <div className="space-y-2">
+              <div className="divide-y divide-[#F2EFE9]/[0.07]">
                 {ripplePreview.changes.map((m) => (
                   <div
                     key={m.chapterId}
-                    className="rounded-lg border border-white/[0.08] bg-[#0A0C12] p-3 text-xs space-y-2"
+                    className="py-4 first:pt-1 last:pb-0 text-[13px] space-y-2.5"
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-[#E5AC3D]">
+                    <div className="flex items-baseline justify-between gap-2 tabular-nums">
+                      <span className="font-semibold text-[#E3AE48]">
                         Глава {m.chapterNumber}
                       </span>
-                      <span className="font-mono text-[11px] text-emerald-300">
+                      <span className="text-[#6EE7B7]">
                         Замен: {m.ReplacementsCount}
                       </span>
                     </div>
-                    <div className="grid grid-cols-1 gap-2 md:grid-cols-2 text-[11px]">
-                      <div className="rounded-lg border border-rose-500/25 bg-rose-950/20 p-2.5 text-[#B0B8C9]">
-                        <span className="font-semibold text-rose-300">Было: </span>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 leading-relaxed">
+                      <div className="border-l-2 border-[#F07587]/60 pl-3 text-[#B8B4AC]">
+                        <span className="font-medium text-[#FDA4AF]">Было: </span>
                         {m.previewBefore}
                       </div>
-                      <div className="rounded-lg border border-emerald-500/25 bg-emerald-950/20 p-2.5 text-[#F3F4F6]">
-                        <span className="font-semibold text-emerald-300">Станет: </span>
+                      <div className="border-l-2 border-[#52C79A]/60 pl-3 text-[#F2EFE9]">
+                        <span className="font-medium text-[#6EE7B7]">Станет: </span>
                         {m.previewAfter}
                       </div>
                     </div>

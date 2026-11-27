@@ -56,19 +56,19 @@ export default function StudioAuthGate({
   };
 
   return (
-    <main className="flex min-h-[100dvh] items-center justify-center bg-[#090A0F] px-4 py-8">
-      <div className="w-full max-w-md rounded-2xl border border-white/[0.11] bg-[#10131C] p-6 sm:p-7 shadow-[0_24px_64px_rgba(0,0,0,0.75)] space-y-5">
-        <div className="flex items-start gap-3.5 border-b border-white/[0.08] pb-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#D99B26]/35 bg-[#D99B26]/15 text-[#D99B26]">
+    <main className="flex min-h-[100dvh] items-center justify-center bg-[#0D0D0F] px-4 py-8">
+      <div className="w-full max-w-md rounded-2xl border border-[#F2EFE9]/[0.12] bg-[#141418] p-6 sm:p-7 shadow-[0_24px_64px_rgba(0,0,0,0.75)] space-y-5">
+        <div className="flex items-start gap-3.5 border-b border-[#F2EFE9]/[0.08] pb-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#D69E36]/35 bg-[#D69E36]/12 text-[#D69E36]">
             <ShieldCheck className="h-5 w-5" aria-hidden="true" />
           </div>
           <div className="space-y-1">
-            <h1 className="font-display text-base font-bold text-[#F3F4F6]">
+            <h1 className="font-display text-lg font-semibold text-[#F2EFE9]">
               Доступ к студии «Канон Сянься»
             </h1>
-            <p className="text-xs leading-relaxed text-[#B0B8C9]">
+            <p className="text-[13px] leading-relaxed text-[#B8B4AC]">
               На сервере включена защита{' '}
-              <code className="font-mono text-[#E5AC3D]">STUDIO_API_TOKEN</code>.
+              <code className="font-mono text-[#E3AE48]">STUDIO_API_TOKEN</code>.
               Авторизация установит защищённую{' '}
               <code className="font-mono">HttpOnly</code>-сессию в браузере.
             </p>
@@ -79,9 +79,9 @@ export default function StudioAuthGate({
           <div className="space-y-1.5">
             <label
               htmlFor="studio-api-token-input"
-              className="flex items-center gap-1.5 text-xs font-medium text-[#F3F4F6]"
+              className="flex items-center gap-1.5 text-[13px] font-medium text-[#F2EFE9]"
             >
-              <KeyRound className="h-3.5 w-3.5 text-[#D99B26]" aria-hidden="true" />
+              <KeyRound className="h-3.5 w-3.5 text-[#D69E36]" aria-hidden="true" />
               <span>Токен доступа (STUDIO_API_TOKEN)</span>
             </label>
             <div className="relative">
@@ -96,13 +96,13 @@ export default function StudioAuthGate({
                   if (error) setError(null);
                 }}
                 placeholder="Вставьте токен доступа..."
-                className="w-full rounded-xl border border-white/[0.12] bg-[#0A0C12] py-2.5 pl-3.5 pr-11 font-mono text-xs text-[#F3F4F6] placeholder:text-[#8893A8] focus:border-[#D99B26] focus:outline-none"
+                className="w-full rounded-xl border border-[#F2EFE9]/[0.14] bg-[#101014] py-2.5 pl-3.5 pr-11 font-mono text-sm text-[#F2EFE9] placeholder:text-[#8E8A82] focus:border-[#D69E36] focus:outline-none"
               />
               <button
                 type="button"
                 onClick={() => setShowToken((v) => !v)}
                 aria-label={showToken ? 'Скрыть токен' : 'Показать токен'}
-                className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex min-h-7 min-w-7 items-center justify-center rounded-md text-[#8893A8] hover:text-[#F3F4F6]"
+                className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex min-h-7 min-w-7 items-center justify-center rounded-md text-[#8E8A82] hover:text-[#F2EFE9]"
               >
                 {showToken ? (
                   <EyeOff className="h-4 w-4" aria-hidden="true" />
@@ -116,7 +116,7 @@ export default function StudioAuthGate({
           {error && (
             <div
               role="alert"
-              className="rounded-xl border border-rose-500/35 bg-rose-500/10 px-3.5 py-2.5 text-xs text-rose-300"
+              className="rounded-xl border border-rose-500/35 bg-rose-500/10 px-3.5 py-2.5 text-[13px] text-[#FDA4AF]"
             >
               {error}
             </div>
@@ -125,7 +125,7 @@ export default function StudioAuthGate({
           <button
             type="submit"
             disabled={submitting}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#D99B26] px-4 py-2.5 text-xs font-semibold text-[#090A0F] transition-colors hover:bg-[#E5AC3D] disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#D69E36] px-4 py-2.5 text-sm font-semibold text-[#11100D] transition-colors duration-150 hover:bg-[#E3AE48] disabled:opacity-50"
           >
             <span>{submitting ? 'Проверка токена...' : 'Открыть студию'}</span>
             <ArrowRight className="h-4 w-4" aria-hidden="true" />

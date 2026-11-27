@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Search,
   BookOpen,
@@ -58,15 +58,23 @@ function CommandPaletteContent({
 }: Omit<CommandPaletteModalProps, 'isOpen' | 'activeTab'>) {
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   const commands = useMemo<CommandItem[]>(() => {
     const base: CommandItem[] = [
       {
         id: 'tab-pipeline',
-        label: 'Открыть вкладку «Главы и конвейер»',
-        hint: 'Вкладка',
+        label: 'Открыть вкладку «Главы»',
+        hint: 'Раздел',
         keywords: 'главы конвейер список pipeline',
-        icon: <FileText className="h-3.5 w-3.5 text-[#A6B0C3]" aria-hidden="true" />,
+        icon: <FileText className="h-4 w-4 text-[#B8B4AC]" aria-hidden="true" />,
         run: () => {
           onNavigateTab('pipeline');
           onClose();
@@ -75,9 +83,9 @@ function CommandPaletteContent({
       {
         id: 'tab-editor',
         label: 'Открыть параллельный редактор',
-        hint: 'Вкладка',
+        hint: 'Раздел',
         keywords: 'редактор текст перевод split',
-        icon: <BookOpen className="h-3.5 w-3.5 text-[#D99B26]" aria-hidden="true" />,
+        icon: <BookOpen className="h-4 w-4 text-[#D69E36]" aria-hidden="true" />,
         run: () => {
           onNavigateTab('editor');
           onClose();
@@ -85,10 +93,10 @@ function CommandPaletteContent({
       },
       {
         id: 'tab-glossary',
-        label: 'Открыть канонический глоссарий и скаут',
-        hint: 'Вкладка',
+        label: 'Открыть глоссарий и скаутинг',
+        hint: 'Раздел',
         keywords: 'глоссарий канон термины персонажи род',
-        icon: <BookOpen className="h-3.5 w-3.5 text-[#A6B0C3]" aria-hidden="true" />,
+        icon: <BookOpen className="h-4 w-4 text-[#B8B4AC]" aria-hidden="true" />,
         run: () => {
           onNavigateTab('glossary');
           onClose();
@@ -96,10 +104,10 @@ function CommandPaletteContent({
       },
       {
         id: 'tab-export',
-        label: 'Открыть «Экспорт Рулейт и EPUB 3»',
-        hint: 'Вкладка',
+        label: 'Открыть экспорт Рулейт и EPUB 3',
+        hint: 'Раздел',
         keywords: 'экспорт рулейт epub zip скачать',
-        icon: <Download className="h-3.5 w-3.5 text-[#A6B0C3]" aria-hidden="true" />,
+        icon: <Download className="h-4 w-4 text-[#B8B4AC]" aria-hidden="true" />,
         run: () => {
           onNavigateTab('export');
           onClose();
@@ -110,7 +118,7 @@ function CommandPaletteContent({
         label: 'Настройки ИИ-движка и моделей',
         hint: 'Модели',
         keywords: 'ии модели gemini colab api настройки',
-        icon: <Cpu className="h-3.5 w-3.5 text-[#D99B26]" aria-hidden="true" />,
+        icon: <Cpu className="h-4 w-4 text-[#D69E36]" aria-hidden="true" />,
         run: () => {
           onClose();
           onOpenLlmSettings();
@@ -121,7 +129,7 @@ function CommandPaletteContent({
         label: 'Правила QA-линтера и профиль жанра',
         hint: 'QA',
         keywords: 'правила линтер qa жанр профиль',
-        icon: <SlidersHorizontal className="h-3.5 w-3.5 text-[#A6B0C3]" aria-hidden="true" />,
+        icon: <SlidersHorizontal className="h-4 w-4 text-[#B8B4AC]" aria-hidden="true" />,
         run: () => {
           onClose();
           onOpenRules();
@@ -132,7 +140,7 @@ function CommandPaletteContent({
         label: 'Импорт глав (.epub, .txt, .md или текстом)',
         hint: 'Импорт',
         keywords: 'импорт загрузка epub txt добавить главу',
-        icon: <Upload className="h-3.5 w-3.5 text-[#A6B0C3]" aria-hidden="true" />,
+        icon: <Upload className="h-4 w-4 text-[#B8B4AC]" aria-hidden="true" />,
         run: () => {
           onClose();
           onOpenImport();
@@ -143,7 +151,7 @@ function CommandPaletteContent({
         label: 'Создать новый проект книги',
         hint: 'Книга',
         keywords: 'новая книга создать проект новелла',
-        icon: <FolderPlus className="h-3.5 w-3.5 text-[#A6B0C3]" aria-hidden="true" />,
+        icon: <FolderPlus className="h-4 w-4 text-[#B8B4AC]" aria-hidden="true" />,
         run: () => {
           onClose();
           onOpenNewNovel();
@@ -151,10 +159,10 @@ function CommandPaletteContent({
       },
       {
         id: 'cmd-logs',
-        label: 'Показать или скрыть журнал событий конвейера',
-        hint: 'Лог',
+        label: 'Показать или скрыть журнал событий',
+        hint: 'Журнал',
         keywords: 'журнал логи события отладка',
-        icon: <Terminal className="h-3.5 w-3.5 text-[#A6B0C3]" aria-hidden="true" />,
+        icon: <Terminal className="h-4 w-4 text-[#B8B4AC]" aria-hidden="true" />,
         run: () => {
           onToggleLogs();
           onClose();
@@ -168,7 +176,7 @@ function CommandPaletteContent({
         label: 'Перевести следующие 3 непереведённые главы',
         hint: 'Конвейер',
         keywords: 'перевести следующие 3 главы запуск пакет',
-        icon: <Zap className="h-3.5 w-3.5 text-[#D99B26]" aria-hidden="true" />,
+        icon: <Zap className="h-4 w-4 text-[#D69E36]" aria-hidden="true" />,
         run: () => {
           onClose();
           onTranslateNext3();
@@ -261,10 +269,11 @@ function CommandPaletteContent({
     <div className="space-y-4">
       <div className="relative">
         <Search
-          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8893A8]"
+          className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8E8A82]"
           aria-hidden="true"
         />
         <input
+          ref={searchInputRef}
           type="search"
           autoFocus
           aria-label="Поиск главы по номеру, названию или команде"
@@ -274,20 +283,20 @@ function CommandPaletteContent({
             setCursor(0);
           }}
           onKeyDown={handleKeyDown}
-          placeholder="Номер главы, заголовок или действие..."
-          className="w-full rounded-xl border border-white/[0.12] bg-[#0A0C12] py-2.5 pl-9 pr-3 text-sm text-[#F3F4F6] placeholder:text-[#8893A8] focus:border-[#D99B26] focus:outline-none"
+          placeholder="Номер главы, название или действие..."
+          className="w-full rounded-xl border border-[#F2EFE9]/[0.14] bg-[#101014] py-2.5 pl-10 pr-3 text-sm text-[#F2EFE9] placeholder:text-[#8E8A82] focus:border-[#D69E36] focus:outline-none"
         />
       </div>
 
       {flatEntries.length === 0 ? (
-        <div className="rounded-xl border border-white/[0.07] bg-[#0A0C12] py-8 text-center text-xs text-[#8893A8]">
+        <div className="py-8 text-center text-[13px] text-[#8E8A82]">
           Ничего не найдено по запросу «{query}»
         </div>
       ) : (
         <div className="space-y-4">
           {filteredCommands.length > 0 && (
             <div className="space-y-1">
-              <div className="px-1 text-[11px] font-medium text-[#8893A8]">
+              <div className="px-2 text-[13px] font-medium text-[#8E8A82]">
                 Команды студии
               </div>
               <div className="space-y-0.5">
@@ -299,10 +308,10 @@ function CommandPaletteContent({
                       type="button"
                       onClick={cmd.run}
                       onMouseEnter={() => setCursor(idx)}
-                      className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-xs transition-colors ${
+                      className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors duration-150 ${
                         active
-                          ? 'bg-[#D99B26]/15 text-[#F3F4F6]'
-                          : 'text-[#B0B8C9] hover:bg-white/[0.04]'
+                          ? 'bg-[#D69E36]/15 text-[#F2EFE9]'
+                          : 'text-[#B8B4AC] hover:bg-[#F2EFE9]/[0.05]'
                       }`}
                     >
                       <span className="flex items-center gap-2.5 min-w-0">
@@ -310,7 +319,7 @@ function CommandPaletteContent({
                         <span className="truncate font-medium">{cmd.label}</span>
                       </span>
                       {cmd.hint && (
-                        <span className="font-mono text-[11px] text-[#8893A8] shrink-0">
+                        <span className="text-[13px] text-[#8E8A82] shrink-0">
                           {cmd.hint}
                         </span>
                       )}
@@ -322,8 +331,8 @@ function CommandPaletteContent({
           )}
 
           {filteredChapters.length > 0 && (
-            <div className="space-y-1">
-              <div className="px-1 text-[11px] font-medium text-[#8893A8]">
+            <div className="space-y-1 border-t border-[#F2EFE9]/[0.08] pt-3">
+              <div className="px-2 text-[13px] font-medium text-[#8E8A82]">
                 Главы активной книги
               </div>
               <div className="space-y-0.5">
@@ -332,12 +341,12 @@ function CommandPaletteContent({
                   const active = clampedCursor === globalIdx;
                   const statusLabel =
                     ch.status === 'quarantined'
-                      ? { text: 'Карантин', cls: 'text-rose-300' }
+                      ? { text: 'Карантин', cls: 'text-[#FDA4AF]' }
                       : ch.verified
-                        ? { text: 'QA 100%', cls: 'text-emerald-300' }
+                        ? { text: 'QA 100%', cls: 'text-[#6EE7B7]' }
                         : ch.translated
-                          ? { text: 'Черновик', cls: 'text-[#E5AC3D]' }
-                          : { text: 'Ожидает', cls: 'text-[#8893A8]' };
+                          ? { text: 'Черновик', cls: 'text-[#E3AE48]' }
+                          : { text: 'Ожидает', cls: 'text-[#8E8A82]' };
 
                   return (
                     <button
@@ -349,25 +358,25 @@ function CommandPaletteContent({
                         onClose();
                       }}
                       onMouseEnter={() => setCursor(globalIdx)}
-                      className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-xs transition-colors ${
+                      className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors duration-150 ${
                         active
-                          ? 'bg-[#D99B26]/15 text-[#F3F4F6]'
-                          : 'text-[#B0B8C9] hover:bg-white/[0.04]'
+                          ? 'bg-[#D69E36]/15 text-[#F2EFE9]'
+                          : 'text-[#B8B4AC] hover:bg-[#F2EFE9]/[0.05]'
                       }`}
                     >
                       <span className="flex items-center gap-2.5 min-w-0">
-                        <span className="font-mono text-[11px] text-[#8893A8] w-10 shrink-0 tabular-nums">
+                        <span className="text-[13px] text-[#8E8A82] w-10 shrink-0 tabular-nums">
                           #{ch.subPart || ch.number}
                         </span>
-                        <span className="truncate font-medium text-[#F3F4F6]">
+                        <span className="truncate font-medium text-[#F2EFE9]">
                           {ch.titleRus || ch.titleEng}
                         </span>
                       </span>
                       <span className="flex items-center gap-2 shrink-0">
-                        <span className={`font-mono text-[11px] ${statusLabel.cls}`}>
+                        <span className={`text-[13px] tabular-nums ${statusLabel.cls}`}>
                           {statusLabel.text}
                         </span>
-                        <ArrowRight className="h-3 w-3 text-[#8893A8]" aria-hidden="true" />
+                        <ArrowRight className="h-3.5 w-3.5 text-[#8E8A82]" aria-hidden="true" />
                       </span>
                     </button>
                   );
@@ -400,7 +409,7 @@ export function CommandPaletteModal({
       isOpen={isOpen}
       onClose={onClose}
       title="Быстрый переход и команды"
-      subtitle="Переходите к любой главе или действию с клавиатуры (↑ ↓ Enter)"
+      subtitle="Навигация стрелками, Enter для открытия, Esc для выхода"
       titleId="command-palette-title"
       maxWidthClass="max-w-xl"
     >

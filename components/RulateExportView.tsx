@@ -288,7 +288,7 @@ export default function RulateExportView({
     {
       id: 'epub',
       label: `Книга EPUB 3 (${exportableChapters.length} гл.)`,
-      icon: <BookOpen className="h-3.5 w-3.5 text-[#D99B26]" aria-hidden="true" />,
+      icon: <BookOpen className="h-3.5 w-3.5 text-[#D69E36]" aria-hidden="true" />,
     },
     { id: 'merge', label: `Склейка полуглав (${splitCandidates.length})` },
   ];
@@ -309,14 +309,14 @@ export default function RulateExportView({
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Sub-Navigation & Export Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.08] pb-2">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#F2EFE9]/[0.08] pb-2">
         <div
           role="tablist"
           aria-label="Режимы экспорта и склейки"
           onKeyDown={handleTabKeyDown}
-          className="flex items-center gap-1 overflow-x-auto studio-tablist"
+          className="flex items-center gap-2 overflow-x-auto studio-tablist"
         >
           {exportTabs.map((t, i) => {
             const isSelected = subTab === t.id;
@@ -332,8 +332,8 @@ export default function RulateExportView({
                 aria-selected={isSelected}
                 tabIndex={isSelected ? 0 : -1}
                 onClick={() => setSubTab(t.id)}
-                className={`studio-tab inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-                  isSelected ? 'text-[#F3F4F6]' : 'text-[#8893A8] hover:text-[#F3F4F6]'
+                className={`studio-tab inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap shrink-0 tabular-nums ${
+                  isSelected ? 'text-[#F2EFE9]' : 'text-[#8E8A82] hover:text-[#F2EFE9]'
                 }`}
               >
                 {t.icon}
@@ -345,8 +345,8 @@ export default function RulateExportView({
 
         <div className="flex flex-wrap items-center gap-2.5">
           {subTab !== 'merge' && (
-            <div className="flex flex-wrap items-center gap-2.5">
-              <label className="inline-flex items-center gap-2 text-xs text-[#B0B8C9] cursor-pointer">
+            <div className="flex flex-wrap items-center gap-3 text-[13px] tabular-nums">
+              <label className="inline-flex items-center gap-2 text-[#B8B4AC] hover:text-[#F2EFE9] cursor-pointer">
                 <input
                   type="checkbox"
                   checked={includeUnverified}
@@ -354,17 +354,17 @@ export default function RulateExportView({
                     setIncludeUnverified(e.target.checked);
                     setSelectedBatchIdx(0);
                   }}
-                  className="h-3.5 w-3.5 rounded border-white/[0.2] bg-[#0A0C12]"
+                  className="h-4 w-4 rounded border-[#F2EFE9]/[0.2] bg-[#101014]"
                 />
                 <span>Включать непроверенные</span>
               </label>
               {unverifiedExcludedCount > 0 && !includeUnverified && (
-                <span className="rounded border border-[#D99B26]/35 bg-[#D99B26]/10 px-2 py-0.5 font-mono text-[11px] tabular-nums text-[#E5AC3D]">
+                <span className="text-[#E3AE48]">
                   скрыто: {unverifiedExcludedCount}
                 </span>
               )}
               {quarantinedCount > 0 && (
-                <span className="rounded border border-rose-500/35 bg-rose-500/10 px-2 py-0.5 font-mono text-[11px] tabular-nums text-rose-300">
+                <span className="text-[#FDA4AF]">
                   карантин: {quarantinedCount}
                 </span>
               )}
@@ -379,7 +379,7 @@ export default function RulateExportView({
                 setBatchSize(Number(e.target.value));
                 setSelectedBatchIdx(0);
               }}
-              className="rounded-lg border border-white/[0.1] bg-[#10131C] px-3 py-1.5 font-mono text-xs text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none"
+              className="rounded-lg border border-[#F2EFE9]/[0.1] bg-[#141418] px-3 py-1.5 text-[13px] tabular-nums text-[#F2EFE9] focus:border-[#D69E36] focus:outline-none"
             >
               <option value={5}>По 5 глав</option>
               <option value={10}>По 10 глав</option>
@@ -392,9 +392,9 @@ export default function RulateExportView({
               type="button"
               onClick={handleDownloadChaptersZip}
               title="Каждая глава отдельным файлом внутри ZIP"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.1] bg-[#10131C] px-3 py-1.5 text-xs font-medium text-[#F3F4F6] hover:border-white/[0.2] transition-colors tabular-nums"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#F2EFE9]/[0.1] bg-[#141418] px-3 py-1.5 text-[13px] font-medium text-[#F2EFE9] hover:border-[#F2EFE9]/[0.22] transition-colors tabular-nums"
             >
-              <Download className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+              <Download className="h-3.5 w-3.5 text-[#6EE7B7]" aria-hidden="true" />
               <span>ZIP по главам ({exportableChapters.length})</span>
             </button>
           )}
@@ -403,9 +403,9 @@ export default function RulateExportView({
             <button
               type="button"
               onClick={handleDownloadEpub}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.1] bg-[#10131C] px-3 py-1.5 text-xs font-medium text-[#F3F4F6] hover:border-[#D99B26]/50 transition-colors tabular-nums"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#F2EFE9]/[0.1] bg-[#141418] px-3 py-1.5 text-[13px] font-medium text-[#F2EFE9] hover:border-[#D69E36]/50 transition-colors tabular-nums"
             >
-              <BookOpen className="h-3.5 w-3.5 text-[#D99B26]" aria-hidden="true" />
+              <BookOpen className="h-3.5 w-3.5 text-[#D69E36]" aria-hidden="true" />
               <span>EPUB ({exportableChapters.length})</span>
             </button>
           )}
@@ -414,7 +414,7 @@ export default function RulateExportView({
             <button
               type="button"
               onClick={handleDownloadAllRulateZip}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#D99B26] px-3.5 py-1.5 text-xs font-semibold text-[#090A0F] hover:bg-[#E5AC3D] transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#D69E36] px-4 py-1.5 text-[13px] font-semibold text-[#11100D] hover:bg-[#E3AE48] transition-colors"
             >
               <Download className="h-3.5 w-3.5" aria-hidden="true" />
               <span>Все тома Rulate (.zip)</span>
@@ -426,18 +426,18 @@ export default function RulateExportView({
       {subTab === 'rulate' ? (
         <div role="tabpanel" aria-labelledby="export-tab-rulate">
           {packages.length === 0 ? (
-            <div className="rounded-xl border border-white/[0.08] bg-[#10131C] py-12 text-center space-y-1">
-              <p className="text-sm font-medium text-[#F3F4F6]">
+            <div className="rounded-xl border border-[#F2EFE9]/[0.08] bg-[#141418] py-14 text-center space-y-1.5">
+              <p className="text-sm font-medium text-[#F2EFE9]">
                 Нет глав, готовых к экспорту
               </p>
               {(unverifiedExcludedCount > 0 || quarantinedCount > 0) && (
-                <p className="text-xs text-[#8893A8] tabular-nums">
+                <p className="text-[13px] text-[#8E8A82] tabular-nums">
                   Исключено непроверенных: {unverifiedExcludedCount} · в карантине: {quarantinedCount}
                 </p>
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
               <div className="lg:col-span-4 space-y-3">
                 {packages.map((pkg, idx) => {
                   const isActive = selectedBatchIdx === idx;
@@ -446,8 +446,8 @@ export default function RulateExportView({
                       key={pkg.filename}
                       className={`rounded-xl border transition-colors ${
                         isActive
-                          ? 'border-[#D99B26]/60 bg-[#151925]'
-                          : 'border-white/[0.08] bg-[#10131C] hover:border-white/[0.16]'
+                          ? 'border-[#D69E36]/60 bg-[#1B1B21]'
+                          : 'border-[#F2EFE9]/[0.08] bg-[#141418] hover:border-[#F2EFE9]/[0.18]'
                       }`}
                     >
                       <button
@@ -456,32 +456,32 @@ export default function RulateExportView({
                         aria-current={isActive ? 'true' : undefined}
                         className="w-full p-4 text-left"
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-semibold text-sm text-[#F3F4F6]">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="font-semibold text-sm text-[#F2EFE9]">
                             {pkg.chapterRange}
                           </span>
-                          <span className="font-mono text-xs tabular-nums text-[#8893A8]">
+                          <span className="text-[13px] tabular-nums text-[#8E8A82]">
                             {(pkg.byteSize / 1024).toFixed(1)} КБ
                           </span>
                         </div>
 
-                        <div className="mt-1.5 flex items-center gap-2 text-xs text-[#B0B8C9] font-mono tabular-nums">
+                        <div className="mt-1.5 flex items-center gap-2 text-[13px] text-[#B8B4AC] tabular-nums">
                           <span>{pkg.chapterCount} гл.</span>
                           <span aria-hidden="true">·</span>
-                          <span className="text-emerald-300 inline-flex items-center gap-1">
+                          <span className="text-[#6EE7B7] inline-flex items-center gap-1">
                             <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
                             Unix LF
                           </span>
                         </div>
                       </button>
 
-                      <div className="px-4 py-2.5 border-t border-white/[0.07] flex justify-end">
+                      <div className="px-4 py-2.5 border-t border-[#F2EFE9]/[0.07] flex justify-end">
                         <button
                           type="button"
                           onClick={() => handleDownloadPackage(pkg)}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.12] bg-[#0A0C12] px-3 py-1.5 text-xs font-medium text-[#F3F4F6] hover:border-[#D99B26]/50 hover:text-[#E5AC3D] transition-colors"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-3 py-1.5 text-[13px] font-medium text-[#F2EFE9] hover:border-[#D69E36]/50 hover:text-[#E3AE48] transition-colors"
                         >
-                          <Download className="h-3.5 w-3.5 text-[#D99B26]" aria-hidden="true" />
+                          <Download className="h-3.5 w-3.5 text-[#D69E36]" aria-hidden="true" />
                           <span>Скачать .md</span>
                         </button>
                       </div>
@@ -490,30 +490,30 @@ export default function RulateExportView({
                 })}
               </div>
 
-              <div className="lg:col-span-8 flex flex-col rounded-xl border border-white/[0.09] bg-[#10131C] p-5">
+              <div className="lg:col-span-8 flex flex-col rounded-xl border border-[#F2EFE9]/[0.08] bg-[#141418] p-5">
                 {activePackage && (
                   <>
-                    <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-3 border-b border-white/[0.08]">
-                      <span className="font-mono text-xs text-[#F3F4F6] truncate">
+                    <div className="flex flex-wrap items-center justify-between gap-2 pb-3.5 mb-3.5 border-b border-[#F2EFE9]/[0.08]">
+                      <code className="font-mono text-[13px] text-[#F2EFE9] truncate">
                         {activePackage.filename}
-                      </span>
+                      </code>
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
                           onClick={handleDownloadPackage.bind(null, activePackage)}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.1] bg-[#151925] px-3 py-1.5 text-xs font-medium text-[#F3F4F6] hover:border-white/[0.2]"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#F2EFE9]/[0.1] bg-[#1B1B21] px-3 py-1.5 text-[13px] font-medium text-[#F2EFE9] hover:border-[#F2EFE9]/[0.22] transition-colors"
                         >
-                          <Download className="h-3.5 w-3.5 text-[#D99B26]" aria-hidden="true" />
+                          <Download className="h-3.5 w-3.5 text-[#D69E36]" aria-hidden="true" />
                           <span>Скачать том</span>
                         </button>
                         <button
                           type="button"
                           onClick={handleCopyContent}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.1] bg-[#151925] px-3 py-1.5 text-xs font-medium text-[#F3F4F6] hover:border-white/[0.2]"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#F2EFE9]/[0.1] bg-[#1B1B21] px-3 py-1.5 text-[13px] font-medium text-[#F2EFE9] hover:border-[#F2EFE9]/[0.22] transition-colors"
                         >
                           {copied ? (
                             <>
-                              <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                              <Check className="h-3.5 w-3.5 text-[#6EE7B7]" aria-hidden="true" />
                               <span>Скопировано</span>
                             </>
                           ) : (
@@ -526,7 +526,7 @@ export default function RulateExportView({
                       </div>
                     </div>
 
-                    <pre className="flex-1 overflow-auto studio-scroll rounded-lg border border-white/[0.07] bg-[#0A0C12] p-4 font-mono text-xs leading-relaxed text-[#B0B8C9] max-h-[460px] whitespace-pre-wrap">
+                    <pre className="flex-1 overflow-auto studio-scroll rounded-lg border border-[#F2EFE9]/[0.07] bg-[#101014] p-4 font-mono text-[13px] leading-relaxed text-[#B8B4AC] max-h-[480px] whitespace-pre-wrap">
                       {activePackage.content}
                     </pre>
                   </>
@@ -538,38 +538,39 @@ export default function RulateExportView({
       ) : subTab === 'epub' ? (
         <div role="tabpanel" aria-labelledby="export-tab-epub">
           {exportableChapters.length === 0 ? (
-            <div className="rounded-xl border border-white/[0.08] bg-[#10131C] py-12 text-center space-y-1">
-              <p className="text-sm font-medium text-[#F3F4F6]">
+            <div className="rounded-xl border border-[#F2EFE9]/[0.08] bg-[#141418] py-14 text-center space-y-1.5">
+              <p className="text-sm font-medium text-[#F2EFE9]">
                 Нет глав, готовых для сборки книги EPUB 3
               </p>
               {(unverifiedExcludedCount > 0 || quarantinedCount > 0) && (
-                <p className="text-xs text-[#8893A8] tabular-nums">
+                <p className="text-[13px] text-[#8E8A82] tabular-nums">
                   Исключено непроверенных: {unverifiedExcludedCount} · в карантине: {quarantinedCount}
                 </p>
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-              <div className="lg:col-span-5 space-y-4 rounded-xl border border-white/[0.09] bg-[#10131C] p-5">
+            <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 items-start">
+              {/* Left Column: Flat Form Surface (Depth 1) */}
+              <div className="lg:col-span-5 space-y-5 rounded-xl border border-[#F2EFE9]/[0.08] bg-[#141418] p-6">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h2 className="font-display text-sm font-semibold text-[#F3F4F6]">
-                      Компилятор электронной книги (.epub)
+                    <h2 className="text-lg font-semibold tracking-[-0.02em] text-[#F2EFE9]">
+                      Сборка книги (.epub)
                     </h2>
-                    <p className="text-[11px] font-mono text-[#8893A8] mt-1">
+                    <p className="text-[13px] text-[#8E8A82] mt-1">
                       IDPF EPUB 3.0 · без сжатия mimetype
                     </p>
                   </div>
-                  <span className="rounded-md border border-emerald-500/35 bg-emerald-500/10 px-2.5 py-1 font-mono text-xs tabular-nums text-emerald-300 shrink-0">
+                  <span className="text-[13px] font-medium tabular-nums text-[#6EE7B7] shrink-0">
                     ~{estimatedTextKb} КБ
                   </span>
                 </div>
 
-                <div className="space-y-3 pt-1">
+                <div className="space-y-4">
                   <div>
                     <label
                       htmlFor="epub-author-input"
-                      className="block text-xs text-[#B0B8C9] mb-1.5"
+                      className="block text-[13px] font-medium text-[#B8B4AC] mb-1.5"
                     >
                       Автор / Оригинальный источник (dc:creator)
                     </label>
@@ -578,14 +579,14 @@ export default function RulateExportView({
                       type="text"
                       value={epubAuthor}
                       onChange={(e) => setEpubAuthor(e.target.value)}
-                      className="w-full rounded-lg border border-white/[0.1] bg-[#0A0C12] px-3 py-2 text-xs text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none"
+                      className="w-full rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-3 py-2 text-sm text-[#F2EFE9] focus:border-[#D69E36] focus:outline-none"
                     />
                   </div>
 
                   <div>
                     <label
                       htmlFor="epub-translator-input"
-                      className="block text-xs text-[#B0B8C9] mb-1.5"
+                      className="block text-[13px] font-medium text-[#B8B4AC] mb-1.5"
                     >
                       Команда перевода / Конвейер
                     </label>
@@ -594,111 +595,116 @@ export default function RulateExportView({
                       type="text"
                       value={epubTranslator}
                       onChange={(e) => setEpubTranslator(e.target.value)}
-                      className="w-full rounded-lg border border-white/[0.1] bg-[#0A0C12] px-3 py-2 text-xs text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none"
+                      className="w-full rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-3 py-2 text-sm text-[#F2EFE9] focus:border-[#D69E36] focus:outline-none"
                     />
                   </div>
 
-                  <div className="space-y-2 pt-1">
-                    <label className="flex items-center gap-2.5 text-xs text-[#B0B8C9] cursor-pointer">
+                  <div className="space-y-2.5 pt-1 text-[13px] text-[#B8B4AC]">
+                    <label className="flex items-center gap-2.5 hover:text-[#F2EFE9] cursor-pointer">
                       <input
                         type="checkbox"
                         checked={includeHeroPassport}
                         onChange={(e) => setIncludeHeroPassport(e.target.checked)}
-                        className="h-3.5 w-3.5 rounded border-white/[0.2] bg-[#0A0C12]"
+                        className="h-4 w-4 rounded border-[#F2EFE9]/[0.2] bg-[#101014]"
                       />
                       <span>Титульный лист с «Паспортом состояния героя»</span>
                     </label>
 
-                    <label className="flex items-center gap-2.5 text-xs text-[#B0B8C9] cursor-pointer">
+                    <label className="flex items-center gap-2.5 hover:text-[#F2EFE9] cursor-pointer">
                       <input
                         type="checkbox"
                         checked={includeCsiFootnotes}
                         onChange={(e) => setIncludeCsiFootnotes(e.target.checked)}
-                        className="h-3.5 w-3.5 rounded border-white/[0.2] bg-[#0A0C12]"
+                        className="h-4 w-4 rounded border-[#F2EFE9]/[0.2] bg-[#101014]"
                       />
                       <span>Культурные сноски CHORUS C3 (CSI) в конце глав</span>
                     </label>
                   </div>
                 </div>
 
-                <div className="pt-3 border-t border-white/[0.08] flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-xs text-[#8893A8] font-mono tabular-nums">
+                <div className="pt-4 border-t border-[#F2EFE9]/[0.08] flex flex-wrap items-center justify-between gap-3">
+                  <div className="text-[13px] text-[#8E8A82] tabular-nums">
                     {exportableChapters.length} гл. · {totalExportWords.toLocaleString('ru-RU')} сл.
                   </div>
                   <button
                     type="button"
                     onClick={handleDownloadEpub}
-                    className="inline-flex items-center gap-2 rounded-lg bg-[#D99B26] px-4 py-2 text-xs font-semibold text-[#090A0F] hover:bg-[#E5AC3D] transition-colors"
+                    className="inline-flex items-center gap-2 rounded-lg bg-[#D69E36] px-4 py-2 text-sm font-semibold text-[#11100D] hover:bg-[#E3AE48] transition-colors"
                   >
-                    <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Download className="h-4 w-4" aria-hidden="true" />
                     <span>Скачать {epubFilenamePreview}</span>
                   </button>
                 </div>
               </div>
 
-              <div className="lg:col-span-7 space-y-4 rounded-xl border border-white/[0.09] bg-[#10131C] p-5">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] pb-3">
+              {/* Right Column: Open Structure (Zero Card-in-Card Nesting) */}
+              <div className="lg:col-span-7 space-y-6">
+                <div className="flex flex-wrap items-baseline justify-between gap-2 pb-3 border-b border-[#F2EFE9]/[0.08]">
                   <div className="flex items-center gap-2">
-                    <FileCode2 className="h-4 w-4 text-[#D99B26]" aria-hidden="true" />
-                    <span className="text-xs font-semibold text-[#F3F4F6]">
-                      Структура архива OEBPS и оформление системных блоков
+                    <FileCode2 className="h-4 w-4 text-[#D69E36]" aria-hidden="true" />
+                    <span className="text-sm font-semibold text-[#F2EFE9]">
+                      Структура архива OEBPS и оформление
                     </span>
                   </div>
-                  <span className="text-[11px] font-mono text-emerald-300">
+                  <code className="text-[13px] font-mono text-[#6EE7B7]">
                     application/epub+zip (CRC-32)
-                  </span>
+                  </code>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <div className="rounded-lg border border-white/[0.08] bg-[#0A0C12] p-3 space-y-1.5 font-mono">
-                    <div className="text-[11px] text-[#8893A8] font-sans font-medium">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <div className="text-[13px] font-medium text-[#B8B4AC]">
                       Контейнер EPUB 3
                     </div>
-                    <div className="text-[#E5AC3D]">├── mimetype (20 B, STORE)</div>
-                    <div className="text-[#B0B8C9]">├── META-INF/container.xml</div>
-                    <div className="text-[#B0B8C9]">├── OEBPS/content.opf</div>
-                    <div className="text-[#B0B8C9]">├── OEBPS/nav.xhtml</div>
-                    <div className="text-[#B0B8C9]">├── OEBPS/toc.ncx</div>
-                    <div className="text-[#B0B8C9]">├── OEBPS/styles.css</div>
-                    <div className="text-[#B0B8C9]">├── OEBPS/title.xhtml</div>
-                    <div className="text-emerald-300">
-                      └── OEBPS/chapter_1..{exportableChapters.length}.xhtml
-                    </div>
+                    <pre className="rounded-lg border border-[#F2EFE9]/[0.08] bg-[#101014] p-3.5 font-mono text-[13px] leading-relaxed text-[#B8B4AC] overflow-x-auto">
+                      <span className="text-[#E3AE48]">├── mimetype (20 B, STORE)</span>
+                      {'\n'}├── META-INF/container.xml
+                      {'\n'}├── OEBPS/content.opf
+                      {'\n'}├── OEBPS/nav.xhtml
+                      {'\n'}├── OEBPS/toc.ncx
+                      {'\n'}├── OEBPS/styles.css
+                      {'\n'}├── OEBPS/title.xhtml
+                      {'\n'}
+                      <span className="text-[#6EE7B7]">
+                        └── OEBPS/chapter_1..{exportableChapters.length}.xhtml
+                      </span>
+                    </pre>
                   </div>
 
-                  <div className="rounded-lg border border-white/[0.08] bg-[#0A0C12] p-3 space-y-2">
-                    <div className="text-[11px] text-[#8893A8] font-medium">
-                      Предпросмотр рамки <code className="font-mono text-[#E5AC3D]">.system-box</code>
+                  <div className="space-y-3">
+                    <div className="text-[13px] font-medium text-[#B8B4AC]">
+                      Оформление системных рамок{' '}
+                      <code className="font-mono text-[#E3AE48]">.system-box</code>
                     </div>
-                    <div className="rounded-md border border-[#D99B26]/40 bg-[#10131C] px-3 py-2 font-mono text-[11px] text-[#F3F4F6]">
+                    <div className="border-l-2 border-[#D69E36] bg-[#141418] pl-3.5 pr-3 py-3 font-mono text-[13px] text-[#F2EFE9] leading-relaxed">
                       [Система: Обнаружен прорыв на 3-й уровень Конденсации Ци!]
                     </div>
-                    <p className="text-[11px] text-[#8893A8] leading-relaxed">
-                      Строки в квадратных скобках <code className="font-mono">[...]</code> оформляются системным блоком для читалок и ЛитРес.
+                    <p className="text-[13px] text-[#8E8A82] leading-relaxed">
+                      Строки в квадратных скобках <code className="font-mono text-[#B8B4AC]">[...]</code> автоматически оформляются системным блоком для читалок и ЛитРес.
                     </p>
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <div className="text-[11px] font-medium text-[#8893A8]">
+                <div className="space-y-2 pt-4 border-t border-[#F2EFE9]/[0.08]">
+                  <div className="text-[13px] font-medium text-[#B8B4AC]">
                     Оглавление книги (nav.xhtml)
                   </div>
-                  <div className="max-h-48 overflow-y-auto studio-scroll rounded-lg border border-white/[0.08] bg-[#0A0C12] p-3 space-y-1.5 text-xs">
+                  <div className="max-h-56 overflow-y-auto studio-scroll divide-y divide-[#F2EFE9]/[0.06] text-[13px] pr-1">
                     {exportableChapters.map((ch) => (
                       <div
                         key={`${ch.number}-${ch.subPart || ''}`}
-                        className="flex items-center justify-between gap-2 border-b border-white/[0.05] pb-1 last:border-0"
+                        className="flex items-baseline justify-between gap-3 py-2.5"
                       >
-                        <span className="text-[#F3F4F6] truncate">
-                          <strong className="font-mono text-[#D99B26] mr-2 tabular-nums">
+                        <span className="text-[#F2EFE9] truncate">
+                          <span className="text-[#D69E36] font-medium mr-2 tabular-nums">
                             #{ch.subPart || ch.number}
-                          </strong>
+                          </span>
                           {ch.titleRus}
                         </span>
-                        <span className="font-mono text-[11px] text-[#8893A8] shrink-0 tabular-nums">
+                        <span className="text-[#8E8A82] shrink-0 tabular-nums">
                           {ch.contentRus.trim().split(/\s+/).length} сл.
                           {ch.csiNotes && ch.csiNotes.length > 0 && (
-                            <span className="ml-2 text-[#E5AC3D]">
+                            <span className="ml-2 text-[#E3AE48]">
                               · {ch.csiNotes.length} CSI
                             </span>
                           )}
@@ -715,13 +721,13 @@ export default function RulateExportView({
         <div
           role="tabpanel"
           aria-labelledby="export-tab-merge"
-          className="rounded-xl border border-white/[0.09] bg-[#10131C] p-6 max-w-2xl space-y-4"
+          className="rounded-xl border border-[#F2EFE9]/[0.08] bg-[#141418] p-6 max-w-2xl space-y-5"
         >
           <div>
-            <h2 className="font-display text-sm font-semibold text-[#F3F4F6]">
+            <h2 className="text-lg font-semibold tracking-[-0.02em] text-[#F2EFE9]">
               Объединение разбитых глав (например, 7.1 + 7.2 → 7)
             </h2>
-            <p className="text-xs text-[#8893A8] mt-1">
+            <p className="text-[13px] text-[#8E8A82] mt-1">
               Склеивает английский оригинал и русский перевод двух полуглав через разделитель «---».
             </p>
           </div>
@@ -729,14 +735,14 @@ export default function RulateExportView({
           <form onSubmit={handleTriggerMerge} className="space-y-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label htmlFor="merge-part-a" className="block text-xs text-[#B0B8C9] mb-1.5">
+                <label htmlFor="merge-part-a" className="block text-[13px] font-medium text-[#B8B4AC] mb-1.5">
                   Первая часть
                 </label>
                 <select
                   id="merge-part-a"
                   value={partAId}
                   onChange={(e) => setPartAId(e.target.value)}
-                  className="w-full rounded-lg border border-white/[0.1] bg-[#0A0C12] px-3 py-2 text-xs text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none"
+                  className="w-full rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-3 py-2 text-sm text-[#F2EFE9] focus:border-[#D69E36] focus:outline-none"
                 >
                   {chapters.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -747,14 +753,14 @@ export default function RulateExportView({
               </div>
 
               <div>
-                <label htmlFor="merge-part-b" className="block text-xs text-[#B0B8C9] mb-1.5">
+                <label htmlFor="merge-part-b" className="block text-[13px] font-medium text-[#B8B4AC] mb-1.5">
                   Вторая часть
                 </label>
                 <select
                   id="merge-part-b"
                   value={partBId}
                   onChange={(e) => setPartBId(e.target.value)}
-                  className="w-full rounded-lg border border-white/[0.1] bg-[#0A0C12] px-3 py-2 text-xs text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none"
+                  className="w-full rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-3 py-2 text-sm text-[#F2EFE9] focus:border-[#D69E36] focus:outline-none"
                 >
                   {chapters.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -767,7 +773,7 @@ export default function RulateExportView({
 
             <div className="flex items-end gap-3">
               <div className="w-36">
-                <label htmlFor="merge-target-num" className="block text-xs text-[#B0B8C9] mb-1.5">
+                <label htmlFor="merge-target-num" className="block text-[13px] font-medium text-[#B8B4AC] mb-1.5">
                   Номер главы
                 </label>
                 <input
@@ -776,23 +782,23 @@ export default function RulateExportView({
                   min={1}
                   value={targetMergeNum}
                   onChange={(e) => setTargetMergeNum(Number(e.target.value))}
-                  className="w-full rounded-lg border border-white/[0.1] bg-[#0A0C12] px-3 py-2 text-xs font-mono tabular-nums text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none"
+                  className="w-full rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-3 py-2 text-sm tabular-nums text-[#F2EFE9] focus:border-[#D69E36] focus:outline-none"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={!partAId || !partBId || partAId === partBId}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#D99B26] px-4 py-2 text-xs font-semibold text-[#090A0F] hover:bg-[#E5AC3D] disabled:opacity-40 transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#D69E36] px-4 py-2 text-sm font-semibold text-[#11100D] hover:bg-[#E3AE48] disabled:opacity-40 transition-colors"
               >
-                <GitMerge className="h-3.5 w-3.5" aria-hidden="true" />
+                <GitMerge className="h-4 w-4" aria-hidden="true" />
                 <span>Объединить</span>
               </button>
             </div>
           </form>
 
           {mergeSuccessMsg && (
-            <div className="rounded-lg border border-emerald-500/35 bg-emerald-500/10 px-4 py-2.5 text-xs text-emerald-200">
+            <div className="border-l-2 border-[#52C79A] pl-3.5 py-1 text-[13px] text-[#6EE7B7]">
               {mergeSuccessMsg}
             </div>
           )}

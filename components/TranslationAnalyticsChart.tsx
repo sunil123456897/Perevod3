@@ -83,27 +83,27 @@ function AnalyticsTooltip({
   }
   const point = payload[0].payload;
   return (
-    <div className="rounded-xl border border-white/[0.11] bg-[#151925] px-3.5 py-2.5 text-xs text-[#F3F4F6] shadow-xl max-w-xs space-y-1.5">
-      <div className="font-semibold text-[#F3F4F6]">{point.dateLabel}</div>
-      <div className="space-y-1 font-mono tabular-nums text-[11px]">
+    <div className="rounded-xl border border-[#F2EFE9]/[0.13] bg-[#1B1B21] px-3.5 py-2.5 text-[13px] text-[#F2EFE9] shadow-xl max-w-xs space-y-1.5">
+      <div className="font-semibold text-[#F2EFE9]">{point.dateLabel}</div>
+      <div className="space-y-1 tabular-nums text-[13px]">
         <div className="flex items-center justify-between gap-4">
-          <span className="text-[#B0B8C9]">Объём перевода:</span>
-          <span className="text-[#D99B26] font-semibold">
+          <span className="text-[#B8B4AC]">Объём перевода:</span>
+          <span className="text-[#E3AE48] font-semibold">
             {point.wordsProcessed} слов (RUS)
           </span>
         </div>
         <div className="flex items-center justify-between gap-4">
-          <span className="text-[#B0B8C9]">Покрытие глоссария:</span>
-          <span className="text-emerald-300 font-semibold">
+          <span className="text-[#B8B4AC]">Покрытие глоссария:</span>
+          <span className="text-[#6EE7B7] font-semibold">
             {point.glossaryCoveragePct}% ({point.canonHits}/{point.totalDetectedTerms})
           </span>
         </div>
       </div>
       {point.quarantined && (
-        <div className="mt-1 rounded border border-rose-500/35 bg-rose-950/40 px-2 py-1 text-[11px] text-rose-200 flex items-start gap-1.5">
-          <AlertTriangle className="h-3.5 w-3.5 text-rose-400 shrink-0 mt-0.5" aria-hidden="true" />
+        <div className="mt-1 rounded-lg border border-rose-500/35 bg-rose-950/35 px-2.5 py-1.5 text-[13px] text-[#FDA4AF] flex items-start gap-1.5">
+          <AlertTriangle className="h-4 w-4 text-[#FDA4AF] shrink-0 mt-0.5" aria-hidden="true" />
           <span className="line-clamp-2">
-            <strong className="font-semibold text-rose-300">Карантин:</strong>{' '}
+            <strong className="font-semibold">Карантин:</strong>{' '}
             {point.quarantineReason || 'Глава изолирована после сбоя перевода'}
           </span>
         </div>
@@ -203,36 +203,38 @@ export default function TranslationAnalyticsChart({
   if (chartData.length === 0) return null;
 
   return (
-    <section className="rounded-xl border border-white/[0.08] bg-[#10131C] p-5 space-y-4">
+    <section className="rounded-xl border border-[#F2EFE9]/[0.08] bg-[#141418] p-5 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-2.5">
-          <BarChart3 className="h-4 w-4 text-[#D99B26] shrink-0" aria-hidden="true" />
+          <BarChart3 className="h-4 w-4 text-[#D69E36] shrink-0" aria-hidden="true" />
           <div>
-            <h2 className="font-display text-sm font-semibold text-[#F3F4F6]">
+            <h2 className="font-display text-base font-semibold text-[#F2EFE9]">
               Динамика перевода и покрытие глоссария
             </h2>
-            <p className="text-xs text-[#8893A8]">
-              Объём обработанных глав (слов RUS) и доля терминов канона (%)
+            <p className="text-[13px] text-[#8E8A82]">
+              Объём обработанных глав и доля терминов канона
             </p>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-5 text-xs font-mono tabular-nums">
+        <div className="flex flex-wrap items-center gap-5 text-[13px] tabular-nums">
           <div className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-[3px] bg-[#D99B26] inline-block" aria-hidden="true" />
-            <span className="text-[#8893A8]">Слов в переводе:</span>
-            <strong className="text-[#F3F4F6]">{summaryMetrics.totalWordsRus.toLocaleString('ru-RU')} сл.</strong>
+            <span className="h-2.5 w-2.5 rounded-[3px] bg-[#D69E36] inline-block" aria-hidden="true" />
+            <span className="text-[#8E8A82]">Слов в переводе:</span>
+            <strong className="font-semibold text-[#F2EFE9]">
+              {summaryMetrics.totalWordsRus.toLocaleString('ru-RU')} сл.
+            </strong>
           </div>
           <div className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-[3px] bg-emerald-400 inline-block" aria-hidden="true" />
-            <span className="text-[#8893A8]">Среднее покрытие:</span>
-            <strong className="text-emerald-300">{summaryMetrics.avgCoverage}%</strong>
+            <span className="h-2.5 w-2.5 rounded-[3px] bg-[#6EE7B7] inline-block" aria-hidden="true" />
+            <span className="text-[#8E8A82]">Среднее покрытие:</span>
+            <strong className="font-semibold text-[#6EE7B7]">{summaryMetrics.avgCoverage}%</strong>
           </div>
           {summaryMetrics.quarantinedCount > 0 && (
-            <div className="flex items-center gap-1.5 text-rose-300">
-              <AlertTriangle className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
+            <div className="flex items-center gap-1.5 text-[#FDA4AF]">
+              <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
               <span>Карантин:</span>
-              <strong className="text-rose-300">{summaryMetrics.quarantinedCount} гл.</strong>
+              <strong className="font-semibold">{summaryMetrics.quarantinedCount} гл.</strong>
             </div>
           )}
         </div>
@@ -246,22 +248,22 @@ export default function TranslationAnalyticsChart({
           >
             <defs>
               <linearGradient id="wordsAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#D99B26" stopOpacity={0.28} />
-                <stop offset="95%" stopColor="#D99B26" stopOpacity={0.01} />
+                <stop offset="5%" stopColor="#D69E36" stopOpacity={0.26} />
+                <stop offset="95%" stopColor="#D69E36" stopOpacity={0.01} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(242,239,233,0.06)" vertical={false} />
             <XAxis
               dataKey="dateLabel"
-              stroke="#8893A8"
-              fontSize={11}
+              stroke="#8E8A82"
+              fontSize={12}
               tickLine={false}
-              axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
+              axisLine={{ stroke: 'rgba(242,239,233,0.08)' }}
             />
             <YAxis
               yAxisId="words"
-              stroke="#8893A8"
-              fontSize={11}
+              stroke="#8E8A82"
+              fontSize={12}
               tickLine={false}
               axisLine={false}
               unit=" сл."
@@ -270,8 +272,8 @@ export default function TranslationAnalyticsChart({
               yAxisId="coverage"
               orientation="right"
               domain={[0, 100]}
-              stroke="#6ee7b7"
-              fontSize={11}
+              stroke="#6EE7B7"
+              fontSize={12}
               tickLine={false}
               axisLine={false}
               unit="%"
@@ -281,20 +283,20 @@ export default function TranslationAnalyticsChart({
               yAxisId="words"
               type="monotone"
               dataKey="wordsProcessed"
-              stroke="#D99B26"
+              stroke="#D69E36"
               strokeWidth={2}
               fillOpacity={1}
               fill="url(#wordsAreaGrad)"
-              activeDot={{ r: 4, fill: '#D99B26' }}
+              activeDot={{ r: 4, fill: '#D69E36' }}
             />
             <Line
               yAxisId="coverage"
               type="monotone"
               dataKey="glossaryCoveragePct"
-              stroke="#10b981"
+              stroke="#52C79A"
               strokeWidth={2}
-              dot={{ r: 3.5, fill: '#10b981', strokeWidth: 0 }}
-              activeDot={{ r: 5, fill: '#34d399' }}
+              dot={{ r: 3.5, fill: '#52C79A', strokeWidth: 0 }}
+              activeDot={{ r: 5, fill: '#6EE7B7' }}
             />
           </ComposedChart>
         </ResponsiveContainer>

@@ -22,6 +22,7 @@ import {
   Cpu,
   MoreHorizontal,
   FileText,
+  ChevronDown,
 } from 'lucide-react';
 import {
   runQaLinter,
@@ -110,7 +111,7 @@ import { CommandPaletteModal } from './studio/CommandPaletteModal';
 const TranslationAnalyticsChart = dynamic(() => import('./TranslationAnalyticsChart'), {
   ssr: false,
   loading: () => (
-    <div className="h-64 rounded-2xl border border-white/10 bg-white/[0.02] animate-pulse" />
+    <div className="h-64 rounded-xl border border-[#F2EFE9]/[0.08] bg-[#141418]" />
   ),
 });
 
@@ -137,7 +138,10 @@ export default function PipelineStudioApp() {
   const [showRulesModal, setShowRulesModal] = useState<boolean>(false);
   const [showCommandPalette, setShowCommandPalette] = useState<boolean>(false);
   const [showMoreMenu, setShowMoreMenu] = useState<boolean>(false);
+  const [showRunModesMenu, setShowRunModesMenu] = useState<boolean>(false);
+  const [forceOpenWizard, setForceOpenWizard] = useState<boolean>(false);
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
+  const runModesRef = useRef<HTMLDivElement | null>(null);
   const [autopilotBanner, setAutopilotBanner] = useState<string | null>(null);
   const [logs, setLogs] = useState<PipelineLogEntry[]>([
     {
@@ -715,24 +719,28 @@ export default function PipelineStudioApp() {
       ) {
         e.preventDefault();
         setShowCommandPalette((v) => !v);
-      } else if (e.key === 'Escape' && showMoreMenu) {
-        setShowMoreMenu(false);
+      } else if (e.key === 'Escape') {
+        if (showMoreMenu) setShowMoreMenu(false);
+        if (showRunModesMenu) setShowRunModesMenu(false);
       }
     };
     window.addEventListener('keydown', handleGlobalShortcuts);
     return () => window.removeEventListener('keydown', handleGlobalShortcuts);
-  }, [showMoreMenu]);
+  }, [showMoreMenu, showRunModesMenu]);
 
   useEffect(() => {
-    if (!showMoreMenu) return;
+    if (!showMoreMenu && !showRunModesMenu) return;
     const handlePointerDown = (e: MouseEvent) => {
       if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
         setShowMoreMenu(false);
       }
+      if (runModesRef.current && !runModesRef.current.contains(e.target as Node)) {
+        setShowRunModesMenu(false);
+      }
     };
     document.addEventListener('mousedown', handlePointerDown);
     return () => document.removeEventListener('mousedown', handlePointerDown);
-  }, [showMoreMenu]);
+  }, [showMoreMenu, showRunModesMenu]);
 
   const updateActiveNovel = (updater: (novel: NovelProject) => NovelProject) => {
     setNovels((prev) =>
@@ -1699,8 +1707,8 @@ export default function PipelineStudioApp() {
 
   if (authState === 'checking') {
     return (
-      <div className="min-h-[100dvh] flex items-center justify-center bg-[#090A0F] text-[#94A3B8]">
-        <div className="rounded-xl border border-white/[0.08] bg-[#0D1017] px-5 py-3 text-xs font-mono">
+      <div className="min-h-[100dvh] flex items-center justify-center bg-[#0D0D0F] text-[#B8B4AC]">
+        <div className="rounded-xl border border-[#F2EFE9]/[0.08] bg-[#141418] px-5 py-3 text-sm">
           Проверка доступа к студии...
         </div>
       </div>
@@ -1720,49 +1728,46 @@ export default function PipelineStudioApp() {
     );
   }
 
+  const engineStatusLabel =
+    llmConfig.provider === 'colab_ollama'
+      ? `Colab L4 · ${llmConfig.modelId}`
+      : `AI Studio · ${llmConfig.modelId || 'gemini-4-hydrogen'}`;
+
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-[#090A0F] text-[#F3F4F6]">
+    <div className="min-h-[100dvh] flex flex-col bg-[#0D0D0F] text-[#F2EFE9]">
       <a
         href="#workspace-main"
-        className="visually-hidden fixed left-3 top-3 z-50 rounded-lg bg-[#D99B26] px-3.5 py-2 text-xs font-semibold text-[#090A0F] shadow-lg"
+        className="visually-hidden fixed left-3 top-3 z-50 rounded-lg bg-[#D69E36] px-4 py-2 text-sm font-semibold text-[#11100D] shadow-lg"
       >
         Перейти к рабочему пространству
       </a>
 
-      {/* STICKY 3-ZONE WORKBENCH HEADER */}
-      <header className="sticky top-0 z-30 flex items-center justify-between gap-4 sm:gap-8 px-4 sm:px-6 h-14 border-b border-white/[0.08] bg-[#090A0F]/90 backdrop-blur-md">
+      {/* STICKY EDITORIAL WORKBENCH HEADER — ZERO DUPLICATE CTA, ZERO MONOGRAM BOX */}
+      <header className="sticky top-0 z-30 flex items-center justify-between gap-2 sm:gap-8 px-3 sm:px-8 h-16 border-b border-[#F2EFE9]/[0.08] bg-[#0D0D0F]/92 backdrop-blur-md">
         <a
           href="#workspace-main"
           onClick={(e) => {
             e.preventDefault();
             setActiveTab('pipeline');
           }}
-          className="inline-flex items-center gap-2.5 whitespace-nowrap shrink-0 rounded-md"
+          className="inline-flex items-center whitespace-nowrap shrink-0 rounded-md text-lg font-bold tracking-[-0.03em] text-[#F2EFE9] hover:text-[#E3AE48] transition-colors"
         >
-          <span
-            aria-hidden="true"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#D99B26]/40 bg-[#D99B26]/12 font-display text-[11px] font-bold tracking-tight text-[#D99B26]"
-          >
-            КС
-          </span>
-          <span className="font-display text-sm sm:text-base font-bold tracking-[-0.025em] text-[#F3F4F6]">
-            Канон Сянься
-          </span>
+          Канон Сянься
         </a>
 
         <nav
           aria-label="Основная навигация"
-          className="hidden md:flex items-center gap-6 text-sm font-medium text-[#B0B8C9] h-full"
+          className="hidden md:flex items-center gap-7 text-sm font-medium h-full"
         >
           {[
-            { id: 'pipeline' as StudioTab, label: 'Главы и конвейер', badge: 0 },
+            { id: 'pipeline' as StudioTab, label: 'Главы', badge: 0 },
             { id: 'editor' as StudioTab, label: 'Редактор', badge: 0 },
             {
               id: 'glossary' as StudioTab,
               label: 'Глоссарий',
               badge: kpiStats.scoutBufferCount,
             },
-            { id: 'export' as StudioTab, label: 'Экспорт Рулейт', badge: 0 },
+            { id: 'export' as StudioTab, label: 'Экспорт', badge: 0 },
           ].map((navItem) => {
             const isCurrent = activeTab === navItem.id;
             return (
@@ -1771,20 +1776,20 @@ export default function PipelineStudioApp() {
                 type="button"
                 aria-current={isCurrent ? 'page' : undefined}
                 onClick={() => setActiveTab(navItem.id)}
-                className={`relative inline-flex items-center gap-1.5 h-full px-1 transition-colors whitespace-nowrap shrink-0 ${
-                  isCurrent ? 'text-[#F3F4F6]' : 'text-[#8893A8] hover:text-[#F3F4F6]'
+                className={`relative inline-flex items-center gap-1.5 h-full px-0.5 transition-colors whitespace-nowrap shrink-0 ${
+                  isCurrent ? 'text-[#F2EFE9]' : 'text-[#8E8A82] hover:text-[#F2EFE9]'
                 }`}
               >
                 <span>{navItem.label}</span>
                 {navItem.badge > 0 && (
-                  <span className="rounded-full border border-[#D99B26]/35 bg-[#D99B26]/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[#E5AC3D] tabular-nums leading-none">
+                  <span className="text-[13px] font-semibold text-[#D69E36] tabular-nums">
                     +{navItem.badge}
                   </span>
                 )}
                 {isCurrent && (
                   <span
                     aria-hidden="true"
-                    className="absolute inset-x-0 bottom-0 h-0.5 bg-[#D99B26]"
+                    className="absolute inset-x-0 bottom-0 h-0.5 bg-[#D69E36]"
                   />
                 )}
               </button>
@@ -1797,37 +1802,154 @@ export default function PipelineStudioApp() {
             type="button"
             onClick={() => setShowCommandPalette(true)}
             aria-label="Быстрый поиск главы или команды (Ctrl+K)"
-            className="inline-flex items-center gap-2 rounded-lg border border-white/[0.1] bg-[#10131C] px-2.5 py-1.5 text-xs text-[#B0B8C9] transition-colors hover:border-white/[0.2] hover:text-[#F3F4F6]"
+            className="inline-flex items-center gap-2 rounded-lg border border-[#F2EFE9]/[0.1] bg-[#141418] px-3 py-1.5 text-[13px] text-[#B8B4AC] transition-colors hover:border-[#F2EFE9]/[0.2] hover:text-[#F2EFE9]"
           >
-            <Search className="h-3.5 w-3.5 text-[#8893A8]" aria-hidden="true" />
+            <Search className="h-3.5 w-3.5 text-[#8E8A82]" aria-hidden="true" />
             <span className="hidden sm:inline">Поиск</span>
-            <kbd className="hidden lg:inline rounded border border-white/[0.1] bg-[#0A0C12] px-1.5 py-0.5 font-mono text-[10px] text-[#8893A8]">
+            <kbd className="hidden xl:inline rounded border border-[#F2EFE9]/[0.1] bg-[#101014] px-1.5 py-0.5 font-mono text-[13px] leading-none text-[#8E8A82]">
               Ctrl+K
             </kbd>
           </button>
 
           <button
             type="button"
-            disabled={isRunningPipeline}
-            onClick={() => {
-              setActiveTab('pipeline');
-              handleStartRangePipeline();
-            }}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#D99B26] px-3 sm:px-3.5 py-2 text-xs font-semibold text-[#090A0F] transition-colors hover:bg-[#E5AC3D] disabled:opacity-50 whitespace-nowrap shrink-0"
+            onClick={() => setShowColabModal(true)}
+            title={`Настроить модели (${engineStatusLabel})`}
+            aria-label={`Настроить ИИ-движок: ${engineStatusLabel}`}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 sm:px-3 py-1.5 text-[13px] font-medium transition-colors whitespace-nowrap sm:max-w-[240px] ${
+              llmConfig.provider === 'colab_ollama' && llmConfig.colabEndpointUrl?.trim()
+                ? 'border-[#52C79A]/40 bg-[#52C79A]/10 text-[#6EE7B7] hover:bg-[#52C79A]/18'
+                : 'border-[#F2EFE9]/[0.1] bg-[#141418] text-[#F2EFE9] hover:border-[#D69E36]/50'
+            }`}
           >
-            <Play className="h-3 w-3 fill-current" aria-hidden="true" />
-            <span className="sm:hidden">{isRunningPipeline ? 'Перевод...' : 'Запуск'}</span>
-            <span className="hidden sm:inline">
-              {isRunningPipeline ? 'Перевод...' : 'Запустить конвейер'}
+            <Cpu className="h-3.5 w-3.5 shrink-0 text-[#D69E36]" aria-hidden="true" />
+            <span className="sm:hidden">
+              {llmConfig.provider === 'colab_ollama' ? 'L4' : 'ИИ'}
             </span>
+            <span className="hidden sm:inline truncate">{engineStatusLabel}</span>
           </button>
+
+          <input
+            ref={backupInputRef}
+            type="file"
+            accept=".json,application/json"
+            onChange={handleImportProjectBackup}
+            className="hidden"
+          />
+
+          <div className="relative" ref={moreMenuRef}>
+            <button
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={showMoreMenu}
+              aria-label="Дополнительные действия проекта"
+              onClick={() => setShowMoreMenu((v) => !v)}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[13px] font-medium transition-colors whitespace-nowrap shrink-0 ${
+                showMoreMenu
+                  ? 'border-[#D69E36]/50 bg-[#1B1B21] text-[#F2EFE9]'
+                  : 'border-[#F2EFE9]/[0.1] bg-[#141418] text-[#B8B4AC] hover:border-[#F2EFE9]/[0.2] hover:text-[#F2EFE9]'
+              }`}
+            >
+              <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden sm:inline">Ещё</span>
+            </button>
+
+            {showMoreMenu && (
+              <div
+                role="menu"
+                aria-label="Дополнительные действия проекта"
+                className="absolute right-0 top-full mt-2 z-40 w-64 rounded-xl border border-[#F2EFE9]/[0.12] bg-[#1B1B21] p-1.5 shadow-[0_20px_48px_rgba(0,0,0,0.78)] text-sm"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setShowMoreMenu(false);
+                    setShowAddNovelModal(true);
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[#F2EFE9] hover:bg-[#F2EFE9]/[0.06] transition-colors"
+                >
+                  <FolderPlus className="h-4 w-4 text-[#D69E36]" aria-hidden="true" />
+                  <span>Новая книга</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setShowMoreMenu(false);
+                    setShowLogDrawer((v) => !v);
+                  }}
+                  className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[#F2EFE9] hover:bg-[#F2EFE9]/[0.06] transition-colors"
+                >
+                  <span className="inline-flex items-center gap-2.5">
+                    <Terminal className="h-4 w-4 text-[#B8B4AC]" aria-hidden="true" />
+                    <span>Журнал событий</span>
+                  </span>
+                  <span className="text-[13px] text-[#8E8A82] tabular-nums">
+                    {logs.length}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setShowMoreMenu(false);
+                    setActiveTab('pipeline');
+                    setForceOpenWizard(true);
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[#F2EFE9] hover:bg-[#F2EFE9]/[0.06] transition-colors"
+                >
+                  <Sparkles className="h-4 w-4 text-[#D69E36]" aria-hidden="true" />
+                  <span>Мастер запуска</span>
+                </button>
+                <div className="my-1.5 border-t border-[#F2EFE9]/[0.08]" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setShowMoreMenu(false);
+                    handleExportProjectBackup();
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[#B8B4AC] hover:bg-[#F2EFE9]/[0.06] hover:text-[#F2EFE9] transition-colors"
+                >
+                  <Download className="h-4 w-4" aria-hidden="true" />
+                  <span>Экспорт бэкапа (.json)</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setShowMoreMenu(false);
+                    backupInputRef.current?.click();
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[#B8B4AC] hover:bg-[#F2EFE9]/[0.06] hover:text-[#F2EFE9] transition-colors"
+                >
+                  <Upload className="h-4 w-4" aria-hidden="true" />
+                  <span>Импорт бэкапа (.json)</span>
+                </button>
+                <div className="my-1.5 border-t border-[#F2EFE9]/[0.08]" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setShowMoreMenu(false);
+                    handleResetDemoData();
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[#FDA4AF] hover:bg-[#F07587]/10 transition-colors"
+                >
+                  <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                  <span>Сбросить демо-данные</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
       {/* Mobile Navigation */}
       <nav
         aria-label="Мобильная навигация"
-        className="flex md:hidden items-center justify-between gap-1 overflow-x-auto studio-tablist border-b border-white/[0.08] bg-[#10131C] px-3 py-1.5"
+        className="flex md:hidden items-center justify-between gap-1 overflow-x-auto studio-tablist border-b border-[#F2EFE9]/[0.08] bg-[#141418] px-3 py-2"
       >
         {[
           { id: 'pipeline' as StudioTab, label: 'Главы' },
@@ -1846,10 +1968,10 @@ export default function PipelineStudioApp() {
             type="button"
             aria-current={activeTab === item.id ? 'page' : undefined}
             onClick={() => setActiveTab(item.id)}
-            className={`px-2.5 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap shrink-0 transition-colors ${
+            className={`px-2.5 py-1.5 text-[13px] font-medium rounded-lg whitespace-nowrap shrink-0 transition-colors ${
               activeTab === item.id
-                ? 'bg-[#D99B26] text-[#090A0F] font-semibold'
-                : 'text-[#B0B8C9] hover:text-[#F3F4F6]'
+                ? 'bg-[#D69E36] text-[#11100D] font-semibold'
+                : 'text-[#B8B4AC] hover:text-[#F2EFE9]'
             }`}
           >
             {item.label}
@@ -1861,75 +1983,108 @@ export default function PipelineStudioApp() {
       <main
         id="workspace-main"
         tabIndex={-1}
-        className="mx-auto w-full max-w-[1320px] flex-1 px-4 sm:px-8 py-6 space-y-5 focus:outline-none"
+        className="mx-auto w-full max-w-[1320px] flex-1 px-4 sm:px-8 py-6 sm:py-8 space-y-6 focus:outline-none"
       >
-        {/* Streamlined Project Strip */}
-        <div className="flex flex-col gap-3 pb-4 border-b border-white/[0.07] lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-1.5 min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                id="novel-project-select"
-                aria-label="Выбор произведения"
-                value={activeNovel.id}
-                onChange={(e) => {
-                  const nextNovel = novels.find((n) => n.id === e.target.value);
-                  if (nextNovel) {
-                    setActiveNovelId(nextNovel.id);
-                    setSelectedChapterId(nextNovel.chapters[0]?.id || '');
-                  }
-                }}
-                className="max-w-full truncate rounded-lg border border-white/[0.1] bg-[#10131C] px-3 py-1.5 font-display text-sm font-semibold text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none cursor-pointer"
-              >
-                {novels.map((n) => (
-                  <option key={n.id} value={n.id} className="bg-[#10131C] text-[#F3F4F6]">
-                    {n.rusTitle}
-                  </option>
-                ))}
-              </select>
+        {/* Borderless Book Context Header — Hidden inside Editor so reading sheets own the viewport */}
+        {activeTab !== 'editor' && (
+          <section
+            aria-label="Контекст произведения"
+            className="pb-5 border-b border-[#F2EFE9]/[0.08] space-y-2.5"
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="w-full sm:w-auto sm:flex-1 min-w-0">
+                <select
+                  id="novel-project-select"
+                  aria-label="Выбор произведения"
+                  value={activeNovel.id}
+                  onChange={(e) => {
+                    const nextNovel = novels.find((n) => n.id === e.target.value);
+                    if (nextNovel) {
+                      setActiveNovelId(nextNovel.id);
+                      setSelectedChapterId(nextNovel.chapters[0]?.id || '');
+                    }
+                  }}
+                  className="-ml-1.5 w-full sm:w-auto max-w-full truncate rounded-lg bg-transparent px-1.5 py-1 text-xl font-semibold tracking-[-0.025em] text-[#F2EFE9] hover:bg-[#F2EFE9]/[0.04] focus:outline-none focus:ring-2 focus:ring-[#D69E36] cursor-pointer"
+                >
+                  {novels.map((n) => (
+                    <option key={n.id} value={n.id} className="bg-[#141418] text-[#F2EFE9] text-sm">
+                      {n.rusTitle}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setImportMode('bulk');
+                    setShowAddChapterModal(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#F2EFE9]/[0.1] bg-[#141418] px-3 py-1.5 text-[13px] font-medium text-[#F2EFE9] hover:border-[#F2EFE9]/[0.22] transition-colors whitespace-nowrap"
+                >
+                  <Upload className="h-3.5 w-3.5 text-[#D69E36]" aria-hidden="true" />
+                  <span>Загрузка глав</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowRulesModal(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#F2EFE9]/[0.1] bg-[#141418] px-3 py-1.5 text-[13px] font-medium text-[#B8B4AC] hover:border-[#F2EFE9]/[0.22] hover:text-[#F2EFE9] transition-colors whitespace-nowrap tabular-nums"
+                >
+                  <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>
+                    Правила QA ({activeNovel.enabledRuleIds.length}/{ALL_LINT_RULES.length})
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[13px] text-[#8E8A82] tabular-nums">
               <select
                 id="genre-preset-select"
                 aria-label="Жанровый профиль перевода"
                 value={activeNovel.genrePreset}
                 onChange={(e) => handleGenrePresetChange(e.target.value as GenrePreset)}
-                className="rounded-lg border border-white/[0.07] bg-[#10131C]/70 px-2.5 py-1.5 text-xs font-medium text-[#B0B8C9] hover:border-white/[0.15] hover:text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none cursor-pointer"
+                className="-ml-1 rounded bg-transparent px-1 py-0.5 text-[13px] text-[#B8B4AC] hover:text-[#F2EFE9] focus:outline-none focus:ring-2 focus:ring-[#D69E36] cursor-pointer"
               >
                 {(Object.keys(GENRE_PRESET_LABELS) as GenrePreset[]).map((g) => (
-                  <option key={g} value={g} className="bg-[#10131C] text-[#F3F4F6]">
+                  <option key={g} value={g} className="bg-[#141418] text-[#F2EFE9]">
                     {GENRE_PRESET_LABELS[g].title}
                   </option>
                 ))}
               </select>
+
+              <span aria-hidden="true">·</span>
 
               <select
                 id="prose-tone-select"
                 aria-label="Тональность литературного критика"
                 value={activeNovel.proseTone}
                 onChange={(e) => handleProseToneChange(e.target.value as ProseTone)}
-                className="rounded-lg border border-white/[0.07] bg-[#10131C]/70 px-2.5 py-1.5 text-xs font-medium text-[#B0B8C9] hover:border-white/[0.15] hover:text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none cursor-pointer"
+                className="rounded bg-transparent px-1 py-0.5 text-[13px] text-[#B8B4AC] hover:text-[#F2EFE9] focus:outline-none focus:ring-2 focus:ring-[#D69E36] cursor-pointer"
               >
                 {(Object.keys(PROSE_TONE_LABELS) as ProseTone[]).map((tone) => (
-                  <option key={tone} value={tone} className="bg-[#10131C] text-[#F3F4F6]">
+                  <option key={tone} value={tone} className="bg-[#141418] text-[#F2EFE9]">
                     Тон: {PROSE_TONE_LABELS[tone].title}
                   </option>
                 ))}
               </select>
-            </div>
 
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#8893A8] font-mono tabular-nums">
+              <span aria-hidden="true">·</span>
               <span>
                 Переведено{' '}
-                <strong className="font-medium text-[#F3F4F6]">
+                <strong className="font-medium text-[#F2EFE9]">
                   {kpiStats.translatedCount}/{kpiStats.total}
                 </strong>
               </span>
               <span aria-hidden="true">·</span>
               <span>
-                QA <strong className="font-medium text-emerald-300">{kpiStats.verifiedCount} гл.</strong>
+                QA <strong className="font-medium text-[#6EE7B7]">{kpiStats.verifiedCount} гл.</strong>
               </span>
               <span aria-hidden="true">·</span>
               <span>
-                Канон <strong className="font-medium text-[#F3F4F6]">{kpiStats.canonCount}</strong>
+                Канон <strong className="font-medium text-[#F2EFE9]">{kpiStats.canonCount}</strong>
               </span>
               {kpiStats.scoutBufferCount > 0 && (
                 <>
@@ -1937,172 +2092,28 @@ export default function PipelineStudioApp() {
                   <button
                     type="button"
                     onClick={() => setActiveTab('glossary')}
-                    className="font-medium text-[#E5AC3D] hover:underline underline-offset-4"
+                    className="font-medium text-[#E3AE48] hover:underline underline-offset-4"
                   >
                     +{kpiStats.scoutBufferCount} в скауте →
                   </button>
                 </>
               )}
             </div>
-          </div>
-
-          {/* 4-Item Compact Utility Bar + Overflow Menu */}
-          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => setShowColabModal(true)}
-              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-                llmConfig.provider === 'colab_ollama' && llmConfig.colabEndpointUrl?.trim()
-                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
-                  : 'border-white/[0.1] bg-[#10131C] text-[#F3F4F6] hover:border-[#D99B26]/50'
-              }`}
-              title="Настроить модели Google AI Studio или Google Colab L4"
-            >
-              <Cpu className="h-3.5 w-3.5 text-[#D99B26]" aria-hidden="true" />
-              <span>
-                {llmConfig.provider === 'colab_ollama'
-                  ? `Colab L4 · ${llmConfig.modelId}`
-                  : `AI Studio · ${llmConfig.modelId || 'gemini-4-hydrogen'}`}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setImportMode('bulk');
-                setShowAddChapterModal(true);
-              }}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#10131C] px-2.5 py-1.5 text-xs font-medium text-[#B0B8C9] hover:border-white/[0.16] hover:text-[#F3F4F6] transition-colors whitespace-nowrap shrink-0"
-            >
-              <Upload className="h-3.5 w-3.5 text-[#D99B26]" aria-hidden="true" />
-              <span>Загрузка глав</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowRulesModal(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#10131C] px-2.5 py-1.5 text-xs font-medium text-[#B0B8C9] hover:border-white/[0.16] hover:text-[#F3F4F6] transition-colors whitespace-nowrap shrink-0"
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>QA ({activeNovel.enabledRuleIds.length}/{ALL_LINT_RULES.length})</span>
-            </button>
-
-            <input
-              ref={backupInputRef}
-              type="file"
-              accept=".json,application/json"
-              onChange={handleImportProjectBackup}
-              className="hidden"
-            />
-
-            <div className="relative" ref={moreMenuRef}>
-              <button
-                type="button"
-                aria-haspopup="menu"
-                aria-expanded={showMoreMenu}
-                aria-label="Дополнительные действия проекта"
-                onClick={() => setShowMoreMenu((v) => !v)}
-                className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-                  showMoreMenu
-                    ? 'border-[#D99B26]/50 bg-[#151925] text-[#F3F4F6]'
-                    : 'border-white/[0.08] bg-[#10131C] text-[#B0B8C9] hover:border-white/[0.16] hover:text-[#F3F4F6]'
-                }`}
-              >
-                <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>Ещё</span>
-              </button>
-
-              {showMoreMenu && (
-                <div
-                  role="menu"
-                  aria-label="Дополнительные действия проекта"
-                  className="absolute right-0 top-full mt-1.5 z-40 w-60 rounded-xl border border-white/[0.11] bg-[#151925] p-1.5 shadow-[0_18px_40px_rgba(0,0,0,0.75)] text-xs"
-                >
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setShowMoreMenu(false);
-                      setShowAddNovelModal(true);
-                    }}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[#F3F4F6] hover:bg-white/[0.06]"
-                  >
-                    <FolderPlus className="h-3.5 w-3.5 text-[#D99B26]" aria-hidden="true" />
-                    <span>Новая книга</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setShowMoreMenu(false);
-                      setShowLogDrawer((v) => !v);
-                    }}
-                    className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[#F3F4F6] hover:bg-white/[0.06]"
-                  >
-                    <span className="inline-flex items-center gap-2.5">
-                      <Terminal className="h-3.5 w-3.5 text-[#B0B8C9]" aria-hidden="true" />
-                      <span>Журнал событий</span>
-                    </span>
-                    <span className="font-mono text-[11px] text-[#8893A8] tabular-nums">
-                      {logs.length}
-                    </span>
-                  </button>
-                  <div className="my-1 border-t border-white/[0.07]" />
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setShowMoreMenu(false);
-                      handleExportProjectBackup();
-                    }}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[#B0B8C9] hover:bg-white/[0.06] hover:text-[#F3F4F6]"
-                  >
-                    <Download className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span>Экспорт бэкапа (.json)</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setShowMoreMenu(false);
-                      backupInputRef.current?.click();
-                    }}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[#B0B8C9] hover:bg-white/[0.06] hover:text-[#F3F4F6]"
-                  >
-                    <Upload className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span>Импорт бэкапа (.json)</span>
-                  </button>
-                  <div className="my-1 border-t border-white/[0.07]" />
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setShowMoreMenu(false);
-                      handleResetDemoData();
-                    }}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-rose-300 hover:bg-rose-500/10"
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span>Сбросить демо-данные</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+          </section>
+        )}
 
         {/* Collapsible Live Log Drawer */}
         {showLogDrawer && (
-          <div className="rounded-xl border border-white/[0.09] bg-[#10131C] p-4 space-y-2.5">
+          <div className="rounded-xl border border-[#F2EFE9]/[0.09] bg-[#141418] p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[#F3F4F6]">
+              <span className="text-sm font-semibold text-[#F2EFE9]">
                 Журнал событий конвейера
               </span>
               <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => setLogs([])}
-                  className="text-xs text-[#8893A8] hover:text-[#F3F4F6]"
+                  className="text-[13px] text-[#8E8A82] hover:text-[#F2EFE9] transition-colors"
                 >
                   Очистить
                 </button>
@@ -2110,21 +2121,21 @@ export default function PipelineStudioApp() {
                   type="button"
                   onClick={() => setShowLogDrawer(false)}
                   aria-label="Закрыть журнал"
-                  className="inline-flex min-h-7 min-w-7 items-center justify-center rounded text-[#8893A8] hover:bg-white/[0.05] hover:text-[#F3F4F6]"
+                  className="inline-flex min-h-7 min-w-7 items-center justify-center rounded-lg text-[#8E8A82] hover:bg-[#F2EFE9]/[0.06] hover:text-[#F2EFE9] transition-colors"
                 >
                   <X className="h-4 w-4" aria-hidden="true" />
                 </button>
               </div>
             </div>
-            <div className="max-h-40 overflow-y-auto studio-scroll rounded-lg border border-white/[0.06] bg-[#0A0C12] p-3 font-mono text-xs space-y-1.5">
+            <div className="max-h-44 overflow-y-auto studio-scroll rounded-lg border border-[#F2EFE9]/[0.07] bg-[#101014] p-3.5 font-mono text-[13px] leading-relaxed space-y-1.5">
               {logs.length === 0 ? (
-                <div className="text-[#8893A8]">Журнал пуст</div>
+                <div className="text-[#8E8A82]">Журнал пуст</div>
               ) : (
                 logs.map((entry) => (
                   <div key={entry.id}>
-                    <span className="text-[#8893A8] tabular-nums">[{entry.timestamp}]</span>{' '}
-                    <span className="text-[#D99B26] font-medium">{entry.phase}:</span>{' '}
-                    <span className="text-[#B0B8C9]">{entry.message}</span>
+                    <span className="text-[#8E8A82] tabular-nums">[{entry.timestamp}]</span>{' '}
+                    <span className="text-[#D69E36] font-medium">{entry.phase}:</span>{' '}
+                    <span className="text-[#B8B4AC]">{entry.message}</span>
                   </div>
                 ))
               )}
@@ -2133,7 +2144,7 @@ export default function PipelineStudioApp() {
         )}
 
         {activeTab === 'pipeline' && (
-          <div className="space-y-5">
+          <div className="space-y-6">
             <QuickStartWizard
               novels={novels}
               activeNovel={activeNovel}
@@ -2146,16 +2157,18 @@ export default function PipelineStudioApp() {
                 setImportMode('bulk');
                 setShowAddChapterModal(true);
               }}
+              forceOpen={forceOpenWizard}
+              onCloseForceOpen={() => setForceOpenWizard(false)}
             />
 
-            {/* Batch Pipeline Control Bar — Clear 1-Primary Hierarchy */}
+            {/* Single-Focal Batch Pipeline Bar — 1 Primary Brass CTA */}
             <section
               aria-label="Управление пакетным конвейером"
-              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-[#10131C] px-4 py-3"
+              className="flex flex-wrap items-center justify-between gap-3.5 rounded-xl border border-[#F2EFE9]/[0.08] bg-[#141418] px-4 py-3.5"
             >
               <div className="flex flex-wrap items-center gap-3 min-w-0">
-                <div className="flex items-center gap-1.5 font-mono text-xs tabular-nums shrink-0">
-                  <label htmlFor="start-ch-input" className="font-sans text-[#B0B8C9]">
+                <div className="flex items-center gap-2 text-[13px] tabular-nums shrink-0">
+                  <label htmlFor="start-ch-input" className="text-[#B8B4AC]">
                     Главы
                   </label>
                   <input
@@ -2165,9 +2178,9 @@ export default function PipelineStudioApp() {
                     min={1}
                     value={startChapter}
                     onChange={(e) => setStartChapter(Number(e.target.value))}
-                    className="w-14 rounded-lg border border-white/[0.1] bg-[#0A0C12] px-2 py-1.5 text-center tabular-nums text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none"
+                    className="w-16 rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-2.5 py-1.5 text-center text-sm tabular-nums text-[#F2EFE9] focus:border-[#D69E36] focus:outline-none"
                   />
-                  <span className="text-[#8893A8]" aria-hidden="true">—</span>
+                  <span className="text-[#8E8A82]" aria-hidden="true">–</span>
                   <input
                     id="end-ch-input"
                     aria-label="Конечная глава"
@@ -2175,7 +2188,7 @@ export default function PipelineStudioApp() {
                     min={startChapter}
                     value={endChapter}
                     onChange={(e) => setEndChapter(Number(e.target.value))}
-                    className="w-14 rounded-lg border border-white/[0.1] bg-[#0A0C12] px-2 py-1.5 text-center tabular-nums text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none"
+                    className="w-16 rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-2.5 py-1.5 text-center text-sm tabular-nums text-[#F2EFE9] focus:border-[#D69E36] focus:outline-none"
                   />
                 </div>
 
@@ -2184,31 +2197,31 @@ export default function PipelineStudioApp() {
                   aria-label="Режим конвейера"
                   value={pipelineMode}
                   onChange={(e) => setPipelineMode(e.target.value as PipelineMode)}
-                  className="rounded-lg border border-white/[0.1] bg-[#0A0C12] px-3 py-1.5 text-xs text-[#B0B8C9] hover:text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none"
+                  className="rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-3 py-1.5 text-[13px] text-[#F2EFE9] focus:border-[#D69E36] focus:outline-none"
                 >
                   <option value="full_5_phase">Полный цикл (5 фаз)</option>
                   <option value="scout_only">Только скаутинг терминов</option>
                   <option value="verify_and_repair">Только проверка и ремонт QA</option>
                 </select>
 
-                <div className="hidden md:flex items-center gap-3.5 text-xs text-[#B0B8C9] border-l border-white/[0.08] pl-3 whitespace-nowrap">
-                  <label className="inline-flex items-center gap-1.5 hover:text-[#F3F4F6] cursor-pointer select-none">
+                <div className="hidden lg:flex items-center gap-4 text-[13px] text-[#B8B4AC] border-l border-[#F2EFE9]/[0.08] pl-3.5 whitespace-nowrap">
+                  <label className="inline-flex items-center gap-2 hover:text-[#F2EFE9] cursor-pointer select-none">
                     <input
                       type="checkbox"
                       checked={autoCanonEnabled}
                       onChange={(e) => setAutoCanonEnabled(e.target.checked)}
-                      className="h-3.5 w-3.5 rounded border-white/[0.2] bg-[#0A0C12]"
+                      className="h-4 w-4 rounded border-[#F2EFE9]/[0.2] bg-[#101014]"
                     />
                     <span>Авто-канон</span>
                   </label>
-                  <label className="inline-flex items-center gap-1.5 hover:text-[#F3F4F6] cursor-pointer select-none">
+                  <label className="inline-flex items-center gap-2 hover:text-[#F2EFE9] cursor-pointer select-none">
                     <input
                       type="checkbox"
                       checked={twoPassCriticEnabled}
                       onChange={(e) => setTwoPassCriticEnabled(e.target.checked)}
-                      className="h-3.5 w-3.5 rounded border-white/[0.2] bg-[#0A0C12]"
+                      className="h-4 w-4 rounded border-[#F2EFE9]/[0.2] bg-[#101014]"
                     />
-                    <span>2 прохода + Стилист</span>
+                    <span>2 прохода и стилист</span>
                   </label>
                 </div>
               </div>
@@ -2219,41 +2232,87 @@ export default function PipelineStudioApp() {
                   disabled={isRunningPipeline}
                   onClick={() => handleTranslateNextBatch(3)}
                   title="Найти следующие 3 непереведённые главы и запустить конвейер"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.1] bg-[#151925] px-3 py-1.5 text-xs font-medium text-[#F3F4F6] hover:border-white/[0.2] disabled:opacity-50 transition-colors whitespace-nowrap"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#F2EFE9]/[0.1] bg-[#1B1B21] px-3 py-2 text-[13px] font-medium text-[#F2EFE9] hover:border-[#F2EFE9]/[0.22] disabled:opacity-50 transition-colors whitespace-nowrap"
                 >
-                  <Zap className="h-3.5 w-3.5 text-[#D99B26]" aria-hidden="true" />
+                  <Zap className="h-3.5 w-3.5 text-[#D69E36]" aria-hidden="true" />
                   <span>След. 3 гл.</span>
                 </button>
 
-                <button
-                  type="button"
-                  disabled={isRunningPipeline}
-                  onClick={handleOpenGlossaryStopGate}
-                  title="Пре-скаут глав и проверка новых имён и рода (М/Ж) перед переводом пакета"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.1] bg-[#151925] px-3 py-1.5 text-xs font-medium text-[#F3F4F6] hover:border-white/[0.2] disabled:opacity-50 transition-colors whitespace-nowrap"
-                >
-                  <ShieldCheck className="h-3.5 w-3.5 text-[#D99B26]" aria-hidden="true" />
-                  <span>Стоп-кран</span>
-                </button>
+                <div className="relative" ref={runModesRef}>
+                  <button
+                    type="button"
+                    disabled={isRunningPipeline}
+                    aria-haspopup="menu"
+                    aria-expanded={showRunModesMenu}
+                    onClick={() => setShowRunModesMenu((v) => !v)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#F2EFE9]/[0.1] bg-[#1B1B21] px-3 py-2 text-[13px] font-medium text-[#B8B4AC] hover:border-[#F2EFE9]/[0.22] hover:text-[#F2EFE9] disabled:opacity-50 transition-colors whitespace-nowrap"
+                  >
+                    <span>Режимы</span>
+                    <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
 
-                <button
-                  type="button"
-                  disabled={isRunningPipeline}
-                  onClick={handleRunFullAutopilotRelease}
-                  title="Склейка полуглав, пре-скаут, многопроходный перевод, QA и выгрузка для Рулейта"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.1] bg-[#151925] px-3 py-1.5 text-xs font-medium text-[#F3F4F6] hover:border-white/[0.2] disabled:opacity-50 transition-colors whitespace-nowrap"
-                >
-                  <Zap className="h-3.5 w-3.5 text-[#B0B8C9]" aria-hidden="true" />
-                  <span>Автопилот</span>
-                </button>
+                  {showRunModesMenu && (
+                    <div
+                      role="menu"
+                      aria-label="Специальные режимы запуска"
+                      className="absolute right-0 top-full mt-2 z-40 w-72 rounded-xl border border-[#F2EFE9]/[0.12] bg-[#1B1B21] p-1.5 shadow-[0_20px_48px_rgba(0,0,0,0.78)]"
+                    >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setShowRunModesMenu(false);
+                          handleOpenGlossaryStopGate();
+                        }}
+                        className="flex w-full items-start gap-2.5 rounded-lg px-3 py-2.5 text-left hover:bg-[#F2EFE9]/[0.06] transition-colors"
+                      >
+                        <ShieldCheck
+                          className="h-4 w-4 text-[#D69E36] shrink-0 mt-0.5"
+                          aria-hidden="true"
+                        />
+                        <span className="space-y-0.5">
+                          <span className="block text-sm font-medium text-[#F2EFE9]">
+                            Стоп-кран глоссария
+                          </span>
+                          <span className="block text-[13px] text-[#8E8A82]">
+                            Проверить новые имена и род (М/Ж) до перевода
+                          </span>
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setShowRunModesMenu(false);
+                          handleRunFullAutopilotRelease();
+                        }}
+                        className="flex w-full items-start gap-2.5 rounded-lg px-3 py-2.5 text-left hover:bg-[#F2EFE9]/[0.06] transition-colors"
+                      >
+                        <Zap
+                          className="h-4 w-4 text-[#D69E36] shrink-0 mt-0.5"
+                          aria-hidden="true"
+                        />
+                        <span className="space-y-0.5">
+                          <span className="block text-sm font-medium text-[#F2EFE9]">
+                            Полный автопилот в релиз
+                          </span>
+                          <span className="block text-[13px] text-[#8E8A82]">
+                            Склейка, пре-скаут, перевод, QA и выгрузка Rulate
+                          </span>
+                        </span>
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 <button
                   type="button"
                   disabled={isRunningPipeline}
                   onClick={handleStartRangePipeline}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#D99B26] px-3.5 py-1.5 text-xs font-semibold text-[#090A0F] hover:bg-[#E5AC3D] disabled:opacity-50 transition-colors whitespace-nowrap"
+                  className="inline-flex items-center gap-2 rounded-lg bg-[#D69E36] px-4 py-2 text-sm font-semibold text-[#11100D] hover:bg-[#E3AE48] disabled:opacity-50 transition-colors whitespace-nowrap tabular-nums"
                 >
-                  <Play className="h-3 w-3 fill-current" aria-hidden="true" />
+                  <Play className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
                   <span>
                     {isRunningPipeline
                       ? `Выполнение (${activePhaseStep}/5)...`
@@ -2272,9 +2331,9 @@ export default function PipelineStudioApp() {
                         }).catch(() => {});
                       }
                     }}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/40 bg-rose-500/15 px-3 py-1.5 text-xs font-semibold text-rose-200 hover:bg-rose-500/25"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#F07587]/40 bg-[#F07587]/12 px-3 py-2 text-[13px] font-semibold text-[#FDA4AF] hover:bg-[#F07587]/22 transition-colors"
                   >
-                    <Square className="h-3 w-3 fill-current" aria-hidden="true" />
+                    <Square className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
                     <span>Стоп</span>
                   </button>
                 )}
@@ -2283,51 +2342,51 @@ export default function PipelineStudioApp() {
 
             {/* Active Background Job SSE Status Strip */}
             {activeJob && (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#D99B26]/35 bg-[#10131C] px-4 py-2.5 text-xs text-[#F3F4F6] tabular-nums">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#D69E36]/35 bg-[#141418] px-4 py-3 text-[13px] text-[#F2EFE9] tabular-nums">
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <span className="inline-block h-2 w-2 rounded-full bg-[#D99B26] animate-pulse" aria-hidden="true" />
-                  <span className="font-mono text-[#D99B26]">Задача {activeJob.id}</span>
-                  <span className="text-[#B0B8C9]">
+                  <span className="font-medium text-[#E3AE48]">Задача {activeJob.id}</span>
+                  <span aria-hidden="true" className="text-[#8E8A82]">·</span>
+                  <span className="text-[#B8B4AC]">
                     Главы: {activeJob.completedChapters}/{activeJob.totalChapters} ({activeJob.progressPct}%)
                   </span>
                   {activeJob.currentChapter !== null && (
-                    <span className="font-mono text-[#8893A8]">
+                    <span className="text-[#8E8A82]">
                       · Гл. {activeJob.currentChapter}
                     </span>
                   )}
                   {activeJob.quarantinedChapters > 0 && (
-                    <span className="rounded border border-rose-500/40 bg-rose-500/10 px-1.5 py-0.5 text-[11px] font-mono text-rose-300">
-                      Карантин: {activeJob.quarantinedChapters}
+                    <span className="font-medium text-[#FDA4AF]">
+                      · Карантин: {activeJob.quarantinedChapters}
                     </span>
                   )}
                 </div>
-                <span className="font-mono text-[11px] uppercase tracking-wider text-[#B0B8C9]">
-                  SSE {activeJob.status}
+                <span className="text-[#B8B4AC]">
+                  Поток SSE: {activeJob.status}
                 </span>
               </div>
             )}
 
             {/* Autopilot Completion Banner */}
             {autopilotBanner && (
-              <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-500/35 bg-[#10131C] px-4 py-3 text-xs text-[#F3F4F6]">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0" aria-hidden="true" />
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-[#52C79A]/35 bg-[#141418] px-4 py-3 text-[13px] text-[#F2EFE9]">
+                <div className="flex items-center gap-2.5">
+                  <ShieldCheck className="h-4 w-4 text-[#6EE7B7] shrink-0" aria-hidden="true" />
                   <span>{autopilotBanner}</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setAutopilotBanner(null)}
-                  className="text-[#B0B8C9] hover:text-[#F3F4F6] shrink-0"
+                  className="text-[#B8B4AC] hover:text-[#F2EFE9] shrink-0 transition-colors"
                 >
                   Скрыть
                 </button>
               </div>
             )}
 
-            {/* PRIMARY WORKSPACE: Chapter Table */}
-            <section aria-label="Список глав произведения" className="space-y-3.5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-1">
+            {/* PRIMARY WORKSPACE: Editorial Chapter Table */}
+            <section aria-label="Список глав произведения" className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between border-b border-[#F2EFE9]/[0.08] pb-2.5">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 sm:gap-x-5">
                   {[
                     {
                       id: 'all' as ChapterFilter,
@@ -2336,17 +2395,17 @@ export default function PipelineStudioApp() {
                     },
                     {
                       id: 'verified' as ChapterFilter,
-                      label: `Проверены QA (${kpiStats.verifiedCount})`,
+                      label: `Проверены (${kpiStats.verifiedCount})`,
                       alertBadge: 0,
                     },
                     {
                       id: 'needs_qa' as ChapterFilter,
-                      label: `Требуют правки (${kpiStats.needsQaCount})`,
+                      label: `Правка (${kpiStats.needsQaCount})`,
                       alertBadge: 0,
                     },
                     {
                       id: 'untranslated' as ChapterFilter,
-                      label: `Не переведены (${kpiStats.untranslatedCount})`,
+                      label: `Без перевода (${kpiStats.untranslatedCount})`,
                       alertBadge: 0,
                     },
                     {
@@ -2354,30 +2413,33 @@ export default function PipelineStudioApp() {
                       label: 'Карантин',
                       alertBadge: kpiStats.quarantinedCount,
                     },
-                  ].map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setChapterFilter(tab.id)}
-                      className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 tabular-nums ${
-                        chapterFilter === tab.id
-                          ? 'bg-[#151925] text-[#F3F4F6] border border-white/[0.12]'
-                          : 'border border-transparent text-[#8893A8] hover:text-[#F3F4F6] hover:bg-white/[0.03]'
-                      }`}
-                    >
-                      <span>{tab.label}</span>
-                      {tab.alertBadge > 0 && (
-                        <span className="rounded-full border border-rose-500/40 bg-rose-500/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-rose-300 leading-none">
-                          {tab.alertBadge}
-                        </span>
-                      )}
-                    </button>
-                  ))}
+                  ].map((tab) => {
+                    const isActive = chapterFilter === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setChapterFilter(tab.id)}
+                        className={`relative inline-flex items-center gap-1.5 pb-1.5 sm:pb-2.5 sm:-mb-[11px] text-[13px] font-medium transition-colors whitespace-nowrap shrink-0 tabular-nums border-b-2 ${
+                          isActive
+                            ? 'border-[#D69E36] text-[#F2EFE9]'
+                            : 'border-transparent text-[#8E8A82] hover:text-[#F2EFE9]'
+                        }`}
+                      >
+                        <span>{tab.label}</span>
+                        {tab.alertBadge > 0 && (
+                          <span className="font-semibold text-[#FDA4AF]">
+                            {tab.alertBadge}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
 
-                <div className="relative w-full sm:w-64">
+                <div className="relative w-full sm:w-64 mb-0.5">
                   <Search
-                    className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8893A8]"
+                    className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8E8A82]"
                     aria-hidden="true"
                   />
                   <input
@@ -2385,29 +2447,29 @@ export default function PipelineStudioApp() {
                     aria-label="Фильтр глав по номеру или названию"
                     value={chapterSearch}
                     onChange={(e) => setChapterSearch(e.target.value)}
-                    placeholder="Фильтр глав по № или названию..."
-                    className="w-full rounded-lg border border-white/[0.1] bg-[#10131C] pl-8 pr-3 py-1.5 text-xs text-[#F3F4F6] placeholder:text-[#8893A8] focus:border-[#D99B26] focus:outline-none"
+                    placeholder="Фильтр по № или названию..."
+                    className="w-full rounded-lg border border-[#F2EFE9]/[0.1] bg-[#141418] pl-9 pr-3 py-1.5 text-sm text-[#F2EFE9] placeholder:text-[#8E8A82] focus:border-[#D69E36] focus:outline-none"
                   />
                 </div>
               </div>
 
-              <div className="overflow-x-auto rounded-xl border border-white/[0.08] bg-[#10131C]">
-                <table className="w-full text-left text-xs tabular-nums">
+              <div className="overflow-x-auto rounded-xl border border-[#F2EFE9]/[0.08] bg-[#141418]">
+                <table className="w-full text-left text-[13px] tabular-nums">
                   <caption className="visually-hidden">
                     Список глав произведения {activeNovel.rusTitle}
                   </caption>
-                  <thead className="border-b border-white/[0.07] bg-[#0D1017] text-[11px] text-[#8893A8]">
+                  <thead className="border-b border-[#F2EFE9]/[0.08] bg-[#101014] text-[13px] text-[#8E8A82]">
                     <tr>
-                      <th scope="col" className="w-10 px-3 py-3 text-center">
+                      <th scope="col" className="w-11 px-3 py-3 text-center">
                         <input
                           type="checkbox"
                           aria-label="Выбрать все отображаемые главы"
                           checked={allFilteredSelected}
                           onChange={handleToggleSelectAllFiltered}
-                          className="h-3.5 w-3.5 rounded border-white/[0.2] bg-[#0A0C12] cursor-pointer"
+                          className="h-4 w-4 rounded border-[#F2EFE9]/[0.2] bg-[#101014] cursor-pointer"
                         />
                       </th>
-                      <th scope="col" className="px-4 py-3 font-medium font-mono w-14">
+                      <th scope="col" className="px-4 py-3 font-medium w-14">
                         №
                       </th>
                       <th scope="col" className="px-4 py-3 font-medium">
@@ -2424,19 +2486,19 @@ export default function PipelineStudioApp() {
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/[0.05]">
+                  <tbody className="divide-y divide-[#F2EFE9]/[0.06]">
                     {filteredChapters.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="px-6 py-12 text-center">
-                          <div className="mx-auto max-w-sm space-y-2">
+                          <div className="mx-auto max-w-sm space-y-2.5">
                             <FileText
-                              className="mx-auto h-6 w-6 text-[#8893A8]"
+                              className="mx-auto h-6 w-6 text-[#8E8A82]"
                               aria-hidden="true"
                             />
-                            <p className="text-sm font-medium text-[#F3F4F6]">
+                            <p className="text-sm font-medium text-[#F2EFE9]">
                               Главы по выбранному фильтру не найдены
                             </p>
-                            <p className="text-xs text-[#8893A8]">
+                            <p className="text-[13px] text-[#8E8A82]">
                               {chapterSearch
                                 ? `По запросу «${chapterSearch}» ничего не нашлось.`
                                 : 'В текущей категории пока нет глав.'}
@@ -2448,7 +2510,7 @@ export default function PipelineStudioApp() {
                                   setChapterFilter('all');
                                   setChapterSearch('');
                                 }}
-                                className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-white/[0.12] bg-[#151925] px-3 py-1.5 text-xs font-medium text-[#F3F4F6] hover:border-[#D99B26]/50"
+                                className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#F2EFE9]/[0.12] bg-[#1B1B21] px-3.5 py-1.5 text-[13px] font-medium text-[#F2EFE9] hover:border-[#D69E36]/50 transition-colors"
                               >
                                 Сбросить фильтры
                               </button>
@@ -2469,24 +2531,22 @@ export default function PipelineStudioApp() {
                         );
 
                         const fillBarClass = isQuarantined
-                          ? 'bg-rose-500/85'
+                          ? 'bg-[#F07587]'
                           : progress.state === 'verified'
-                            ? 'bg-emerald-500/90'
-                            : progress.state === 'running'
-                              ? 'bg-[#D99B26] animate-pulse'
-                              : progress.state === 'qa_attention'
-                                ? 'bg-[#D99B26]'
-                                : progress.state === 'scouted'
-                                  ? 'bg-[#8893A8]'
-                                  : 'bg-transparent';
+                            ? 'bg-[#52C79A]'
+                            : progress.state === 'running' || progress.state === 'qa_attention'
+                              ? 'bg-[#D69E36]'
+                              : progress.state === 'scouted'
+                                ? 'bg-[#8E8A82]'
+                                : 'bg-transparent';
 
                         const pctTextClass = isQuarantined
-                          ? 'text-rose-300'
+                          ? 'text-[#FDA4AF]'
                           : progress.state === 'verified'
-                            ? 'text-emerald-300'
+                            ? 'text-[#6EE7B7]'
                             : progress.state === 'running' || progress.state === 'qa_attention'
-                              ? 'text-[#E5AC3D]'
-                              : 'text-[#8893A8]';
+                              ? 'text-[#E3AE48]'
+                              : 'text-[#8E8A82]';
 
                         const issueCount = report ? report.errorCount + report.warningCount : 0;
                         const statusSubLabel = isThisChapterRunning
@@ -2511,89 +2571,76 @@ export default function PipelineStudioApp() {
                         const pacingMode =
                           ch.pacingMode || (pacingKey ? computedPacingMap[pacingKey] : null);
 
-                        const pacingBadge = !pacingMode
-                          ? null
+                        const pacingLabel = !pacingMode
+                          ? ''
                           : pacingMode === 'combat_action'
-                            ? { label: 'Бой', cls: 'text-rose-300 bg-rose-500/10 border-rose-500/25' }
+                            ? 'Бой'
                             : pacingMode === 'cultivation_epiphany'
-                              ? { label: 'Озарение', cls: 'text-[#E5AC3D] bg-[#D99B26]/10 border-[#D99B26]/25' }
+                              ? 'Озарение'
                               : pacingMode === 'comedy_banter'
-                                ? { label: 'Пикировка', cls: 'text-sky-300 bg-sky-500/10 border-sky-500/25' }
+                                ? 'Пикировка'
                                 : pacingMode === 'solemn_pathos'
-                                  ? { label: 'Пафос', cls: 'text-violet-300 bg-violet-500/10 border-violet-500/25' }
-                                  : { label: 'Диалог', cls: 'text-[#B0B8C9] bg-white/[0.04] border-white/[0.1]' };
+                                  ? 'Пафос'
+                                  : 'Диалог';
+
+                        const subtitleText = ch.summary || (ch.titleRus ? ch.titleEng : '');
 
                         return (
                           <tr
                             key={ch.id}
                             className={`group transition-colors ${
                               isRowSelected
-                                ? 'bg-[#D99B26]/[0.08] hover:bg-[#D99B26]/[0.12]'
+                                ? 'bg-[#D69E36]/[0.08] hover:bg-[#D69E36]/[0.12]'
                                 : isQuarantined
-                                  ? 'bg-rose-500/[0.04] hover:bg-rose-500/[0.08]'
-                                  : 'hover:bg-white/[0.025]'
+                                  ? 'bg-[#F07587]/[0.05] hover:bg-[#F07587]/[0.08]'
+                                  : 'hover:bg-[#F2EFE9]/[0.025]'
                             }`}
                           >
-                            <td className="w-10 px-3 py-3.5 text-center">
+                            <td className="w-11 px-3 py-4 text-center">
                               <input
                                 type="checkbox"
                                 aria-label={`Выбрать главу ${ch.subPart || ch.number}`}
                                 checked={isRowSelected}
                                 onChange={() => handleToggleSelectChapter(ch.id)}
-                                className="h-3.5 w-3.5 rounded border-white/[0.2] bg-[#0A0C12] cursor-pointer"
+                                className="h-4 w-4 rounded border-[#F2EFE9]/[0.2] bg-[#101014] cursor-pointer"
                               />
                             </td>
-                            <td className="px-4 py-3.5 font-mono tabular-nums text-[#8893A8] whitespace-nowrap">
+                            <td className="px-4 py-4 tabular-nums text-[#8E8A82] whitespace-nowrap">
                               {ch.subPart || ch.number}
                             </td>
-                            <td className="px-4 py-3.5">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedChapterId(ch.id);
-                                    setActiveTab('editor');
-                                  }}
-                                  className="text-left font-medium text-sm text-[#F3F4F6] hover:text-[#E5AC3D] transition-colors"
-                                >
-                                  {ch.titleRus || ch.titleEng}
-                                </button>
-                                {isQuarantined && (
-                                  <span className="inline-flex items-center gap-1 rounded-full border border-rose-500/40 bg-rose-500/15 px-2 py-0.5 text-[10px] font-mono font-semibold text-rose-300">
-                                    <AlertTriangle className="h-2.5 w-2.5" aria-hidden="true" />
-                                    Карантин
-                                  </span>
-                                )}
-                                {pacingBadge && (
-                                  <span
-                                    className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full border ${pacingBadge.cls}`}
-                                  >
-                                    {pacingBadge.label}
-                                  </span>
-                                )}
-                              </div>
+                            <td className="px-4 py-4">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedChapterId(ch.id);
+                                  setActiveTab('editor');
+                                }}
+                                className="text-left font-medium text-sm text-[#F2EFE9] hover:text-[#E3AE48] transition-colors"
+                              >
+                                {ch.titleRus || ch.titleEng}
+                              </button>
                               {isQuarantined && ch.quarantineReason && (
-                                <div className="text-[11px] text-rose-300 mt-1">
+                                <div className="text-[13px] text-[#FDA4AF] mt-1">
                                   Причина: {ch.quarantineReason}
                                 </div>
                               )}
-                              {ch.summary ? (
-                                <div className="text-[#8893A8] mt-0.5 line-clamp-1">
-                                  {ch.summary}
+                              {(subtitleText || pacingLabel) && (
+                                <div className="text-[13px] text-[#8E8A82] mt-0.5 line-clamp-1">
+                                  {pacingLabel && (
+                                    <span className="text-[#B8B4AC]">{pacingLabel}</span>
+                                  )}
+                                  {pacingLabel && subtitleText ? ' · ' : ''}
+                                  {subtitleText}
                                 </div>
-                              ) : (
-                                ch.titleRus && (
-                                  <div className="text-[#8893A8] mt-0.5">{ch.titleEng}</div>
-                                )
                               )}
                             </td>
-                            <td className="px-4 py-3.5 text-right font-mono tabular-nums text-[#8893A8] whitespace-nowrap">
+                            <td className="px-4 py-4 text-right tabular-nums text-[#8E8A82] whitespace-nowrap">
                               {ch.translated ? `${ch.wordCountRus}` : `${ch.wordCountEng} ENG`}
                             </td>
-                            <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                            <td className="px-4 py-4 text-right whitespace-nowrap">
                               <div
                                 title={progress.tooltip}
-                                className="inline-flex flex-col items-end gap-1 min-w-[140px]"
+                                className="inline-flex flex-col items-end gap-1 min-w-[144px]"
                               >
                                 <div className="flex items-center justify-end gap-2">
                                   <div
@@ -2602,13 +2649,13 @@ export default function PipelineStudioApp() {
                                     aria-valuenow={progress.percent}
                                     aria-valuemin={0}
                                     aria-valuemax={100}
-                                    className="relative h-1.5 w-24 overflow-hidden rounded-[3px] bg-white/[0.08]"
+                                    className="relative h-1.5 w-24 overflow-hidden rounded-[2px] bg-[#F2EFE9]/[0.08]"
                                   >
                                     <div
-                                      className={`h-full rounded-[3px] transition-all duration-300 ${fillBarClass}`}
+                                      className={`h-full rounded-[2px] transition-[width] duration-300 ${fillBarClass}`}
                                       style={{ width: `${progress.percent}%` }}
                                     />
-                                    <div className="pointer-events-none absolute inset-0 grid grid-cols-5 divide-x divide-[#090A0F]/70">
+                                    <div className="pointer-events-none absolute inset-0 grid grid-cols-5 divide-x divide-[#0D0D0F]/80">
                                       <span />
                                       <span />
                                       <span />
@@ -2617,17 +2664,22 @@ export default function PipelineStudioApp() {
                                     </div>
                                   </div>
                                   <span
-                                    className={`w-9 text-right font-mono text-[11px] tabular-nums ${pctTextClass}`}
+                                    className={`w-10 text-right text-[13px] tabular-nums ${pctTextClass}`}
                                   >
                                     {progress.percent}%
                                   </span>
                                 </div>
-                                <span className={`font-mono text-[11px] ${pctTextClass}`}>
-                                  {statusSubLabel}
+                                <span
+                                  className={`inline-flex items-center gap-1 text-[13px] ${pctTextClass}`}
+                                >
+                                  {isQuarantined && (
+                                    <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                                  )}
+                                  <span>{statusSubLabel}</span>
                                 </span>
                               </div>
                             </td>
-                            <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                            <td className="px-4 py-4 text-right whitespace-nowrap">
                               <div className="inline-flex items-center gap-1.5">
                                 {isQuarantined ? (
                                   <button
@@ -2636,9 +2688,9 @@ export default function PipelineStudioApp() {
                                     onClick={() =>
                                       executePipelineOnChapters([ch], 'full_5_phase')
                                     }
-                                    className="inline-flex items-center gap-1 rounded-lg border border-rose-500/40 bg-rose-500/15 px-2.5 py-1 text-xs font-medium text-rose-200 hover:bg-rose-500/25 disabled:opacity-50 transition-colors"
+                                    className="inline-flex items-center gap-1 rounded-lg border border-[#F07587]/40 bg-[#F07587]/12 px-2.5 py-1.5 text-[13px] font-medium text-[#FDA4AF] hover:bg-[#F07587]/22 disabled:opacity-50 transition-colors"
                                   >
-                                    <RotateCcw className="h-3 w-3 text-rose-300" aria-hidden="true" />
+                                    <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
                                     <span>Повторить</span>
                                   </button>
                                 ) : !ch.translated ? (
@@ -2648,9 +2700,9 @@ export default function PipelineStudioApp() {
                                     onClick={() =>
                                       executePipelineOnChapters([ch], 'full_5_phase')
                                     }
-                                    className="inline-flex items-center gap-1 rounded-lg border border-white/[0.1] bg-[#151925] px-2.5 py-1 text-xs font-medium text-[#F3F4F6] hover:border-[#D99B26]/50 disabled:opacity-50 transition-colors"
+                                    className="inline-flex items-center gap-1 rounded-lg border border-[#F2EFE9]/[0.1] bg-[#1B1B21] px-2.5 py-1.5 text-[13px] font-medium text-[#F2EFE9] hover:border-[#D69E36]/50 disabled:opacity-50 transition-colors"
                                   >
-                                    <Sparkles className="h-3 w-3 text-[#D99B26]" aria-hidden="true" />
+                                    <Sparkles className="h-3.5 w-3.5 text-[#D69E36]" aria-hidden="true" />
                                     <span>Перевести</span>
                                   </button>
                                 ) : !report?.passed ? (
@@ -2660,9 +2712,9 @@ export default function PipelineStudioApp() {
                                     onClick={() =>
                                       executePipelineOnChapters([ch], 'verify_and_repair')
                                     }
-                                    className="inline-flex items-center gap-1 rounded-lg border border-white/[0.1] bg-[#151925] px-2.5 py-1 text-xs font-medium text-[#F3F4F6] hover:border-[#D99B26]/50 disabled:opacity-50 transition-colors"
+                                    className="inline-flex items-center gap-1 rounded-lg border border-[#F2EFE9]/[0.1] bg-[#1B1B21] px-2.5 py-1.5 text-[13px] font-medium text-[#F2EFE9] hover:border-[#D69E36]/50 disabled:opacity-50 transition-colors"
                                   >
-                                    <Wand2 className="h-3 w-3 text-[#D99B26]" aria-hidden="true" />
+                                    <Wand2 className="h-3.5 w-3.5 text-[#D69E36]" aria-hidden="true" />
                                     <span>Ремонт QA</span>
                                   </button>
                                 ) : null}
@@ -2674,10 +2726,10 @@ export default function PipelineStudioApp() {
                                     setSelectedChapterId(ch.id);
                                     setActiveTab('editor');
                                   }}
-                                  className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-[#B0B8C9] hover:bg-white/[0.06] hover:text-[#F3F4F6] transition-colors"
+                                  className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-[#B8B4AC] hover:bg-[#F2EFE9]/[0.06] hover:text-[#F2EFE9] transition-colors"
                                 >
                                   <span>Открыть</span>
-                                  <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                                  <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
                                 </button>
                               </div>
                             </td>
@@ -2689,27 +2741,25 @@ export default function PipelineStudioApp() {
                 </table>
               </div>
 
-              {/* Hero State Passport & Analytics */}
-              <div className="pt-3 space-y-5">
+              {/* Hero State Passport (Flat Horizontal Strip) & Analytics */}
+              <div className="pt-4 space-y-6">
                 {activeNovel.heroLedger && (
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-[#10131C]/70 px-4 py-3 text-xs text-[#8893A8]">
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                      <span className="font-medium text-[#B0B8C9]">
+                  <div className="flex flex-wrap items-baseline justify-between gap-3 border-y border-[#F2EFE9]/[0.08] py-3.5 text-[13px] text-[#8E8A82] tabular-nums">
+                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                      <span className="font-medium text-[#B8B4AC]">
                         Паспорт героя (Гл. {activeNovel.heroLedger.lastUpdatedChapter})
                       </span>
-                      <strong className="font-medium text-[#F3F4F6]">
+                      <strong className="font-semibold text-[#F2EFE9]">
                         {activeNovel.heroLedger.protagonistName}
                       </strong>
                       <span aria-hidden="true">·</span>
-                      <span className="font-mono tabular-nums text-[#B0B8C9]">
+                      <span className="text-[#B8B4AC]">
                         {activeNovel.heroLedger.cultivationRealm}
                       </span>
                       <span aria-hidden="true">·</span>
-                      <span className="font-mono tabular-nums text-[#8893A8]">
-                        {activeNovel.heroLedger.resources.join(' · ')}
-                      </span>
+                      <span>{activeNovel.heroLedger.resources.join(' · ')}</span>
                     </div>
-                    <span className="font-mono text-[11px] tabular-nums text-[#B0B8C9]">
+                    <span className="text-[#B8B4AC]">
                       {activeNovel.heroLedger.activeLocation}
                     </span>
                   </div>
@@ -2727,17 +2777,17 @@ export default function PipelineStudioApp() {
                 <div
                   role="region"
                   aria-label="Плавающая панель групповых действий"
-                  className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 flex flex-wrap sm:flex-nowrap w-max max-w-[95vw] items-center gap-2.5 rounded-xl border border-white/[0.14] bg-[#151925]/95 px-4 py-3 shadow-[0_20px_48px_rgba(0,0,0,0.78)] backdrop-blur-md"
+                  className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 flex flex-wrap sm:flex-nowrap w-max max-w-[95vw] items-center gap-2.5 rounded-xl border border-[#F2EFE9]/[0.14] bg-[#1B1B21]/95 px-4 py-3 shadow-[0_20px_48px_rgba(0,0,0,0.82)] backdrop-blur-md"
                 >
-                  <div className="flex items-center gap-2.5 pr-3 border-r border-white/[0.08]">
-                    <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-[#D99B26] px-1.5 font-mono text-xs font-bold text-[#090A0F] tabular-nums">
+                  <div className="flex items-center gap-3 pr-3 border-r border-[#F2EFE9]/[0.08] tabular-nums">
+                    <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-[#D69E36] px-1.5 text-[13px] font-bold text-[#11100D]">
                       {selectedChapterObjects.length}
                     </span>
-                    <div className="text-xs">
-                      <div className="font-semibold text-[#F3F4F6]">
+                    <div className="text-[13px]">
+                      <div className="font-semibold text-[#F2EFE9]">
                         Выбрано: {selectedChapterObjects.length}
                       </div>
-                      <div className="font-mono text-[11px] text-[#B0B8C9] tabular-nums">
+                      <div className="text-[#B8B4AC]">
                         №{' '}
                         {selectedChapterObjects
                           .slice(0, 6)
@@ -2754,9 +2804,9 @@ export default function PipelineStudioApp() {
                     type="button"
                     disabled={isRunningPipeline}
                     onClick={() => handleRunBulkSelectedPipeline('verify_and_repair')}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.12] bg-[#10131C] px-3 py-1.5 text-xs font-medium text-[#F3F4F6] hover:border-emerald-400/50 disabled:opacity-50 transition-colors whitespace-nowrap"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#F2EFE9]/[0.12] bg-[#141418] px-3 py-1.5 text-[13px] font-medium text-[#F2EFE9] hover:border-[#52C79A]/50 disabled:opacity-50 transition-colors whitespace-nowrap"
                   >
-                    <Wand2 className="h-3.5 w-3.5 text-emerald-300" aria-hidden="true" />
+                    <Wand2 className="h-3.5 w-3.5 text-[#6EE7B7]" aria-hidden="true" />
                     <span>Ремонт QA</span>
                   </button>
 
@@ -2764,9 +2814,9 @@ export default function PipelineStudioApp() {
                     type="button"
                     disabled={isRunningPipeline}
                     onClick={() => handleRunBulkSelectedPipeline('scout_only')}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.12] bg-[#10131C] px-3 py-1.5 text-xs font-medium text-[#F3F4F6] hover:border-white/[0.25] disabled:opacity-50 transition-colors whitespace-nowrap"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#F2EFE9]/[0.12] bg-[#141418] px-3 py-1.5 text-[13px] font-medium text-[#F2EFE9] hover:border-[#F2EFE9]/[0.25] disabled:opacity-50 transition-colors whitespace-nowrap"
                   >
-                    <Search className="h-3.5 w-3.5 text-[#B0B8C9]" aria-hidden="true" />
+                    <Search className="h-3.5 w-3.5 text-[#B8B4AC]" aria-hidden="true" />
                     <span>Скаутинг</span>
                   </button>
 
@@ -2774,7 +2824,7 @@ export default function PipelineStudioApp() {
                     type="button"
                     disabled={isRunningPipeline}
                     onClick={() => handleRunBulkSelectedPipeline('full_5_phase')}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#D99B26] px-3.5 py-1.5 text-xs font-semibold text-[#090A0F] hover:bg-[#E5AC3D] disabled:opacity-50 transition-colors whitespace-nowrap"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#D69E36] px-3.5 py-1.5 text-[13px] font-semibold text-[#11100D] hover:bg-[#E3AE48] disabled:opacity-50 transition-colors whitespace-nowrap tabular-nums"
                   >
                     <Play className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
                     <span>Полный цикл ({selectedChapterObjects.length})</span>
@@ -2784,9 +2834,9 @@ export default function PipelineStudioApp() {
                     type="button"
                     onClick={() => setSelectedChapterIds([])}
                     aria-label="Снять выделение глав"
-                    className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-[#0A0C12] px-2 text-xs text-[#B0B8C9] hover:text-[#F3F4F6] transition-colors"
+                    className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-2 text-[#B8B4AC] hover:text-[#F2EFE9] transition-colors"
                   >
-                    <X className="h-3.5 w-3.5" aria-hidden="true" />
+                    <X className="h-4 w-4" aria-hidden="true" />
                   </button>
                 </div>
               )}

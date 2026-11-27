@@ -54,18 +54,18 @@ export function LinterProfileModal({
       isOpen={isOpen}
       onClose={onClose}
       title={`Правила QA-линтера (${activeNovel.enabledRuleIds.length} из ${ALL_LINT_RULES.length})`}
-      subtitle="Адаптируйте проверки под жанр или включите/отключите отдельные правила вручную."
+      subtitle="Адаптируйте проверки под жанр или включите и отключите отдельные правила вручную."
       titleId="qa-rules-modal-title"
       maxWidthClass="max-w-2xl"
       footer={
         <>
-          <span className="font-mono text-[11px] text-[#8893A8] tabular-nums">
+          <span className="text-[13px] text-[#8E8A82]">
             Профиль: {GENRE_PRESET_LABELS[activeNovel.genrePreset].title}
           </span>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg bg-[#D99B26] px-4 py-2 text-xs font-semibold text-[#090A0F] hover:bg-[#E5AC3D] transition-colors"
+            className="rounded-lg bg-[#D69E36] px-4 py-2 text-[13px] font-semibold text-[#11100D] hover:bg-[#E3AE48] transition-colors"
           >
             Готово
           </button>
@@ -73,16 +73,16 @@ export function LinterProfileModal({
       }
     >
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-1.5 border-b border-white/[0.08] pb-3.5">
+        <div className="flex flex-wrap items-center gap-2 border-b border-[#F2EFE9]/[0.08] pb-4">
           {(Object.keys(GENRE_PRESET_LABELS) as GenrePreset[]).map((g) => (
             <button
               key={g}
               type="button"
               onClick={() => onGenrePresetChange(g)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors ${
                 activeNovel.genrePreset === g
-                  ? 'bg-[#D99B26] text-[#090A0F] font-semibold'
-                  : 'border border-white/[0.1] bg-[#0A0C12] text-[#B0B8C9] hover:text-[#F3F4F6]'
+                  ? 'bg-[#D69E36] text-[#11100D] font-semibold'
+                  : 'border border-[#F2EFE9]/[0.1] bg-[#101014] text-[#B8B4AC] hover:text-[#F2EFE9]'
               }`}
             >
               {GENRE_PRESET_LABELS[g].title}
@@ -90,27 +90,25 @@ export function LinterProfileModal({
           ))}
         </div>
 
-        <div className="space-y-2">
+        <div className="divide-y divide-[#F2EFE9]/[0.07]">
           {ALL_LINT_RULES.map((rule) => {
             const checked = activeNovel.enabledRuleIds.includes(rule.id);
             return (
               <label
                 key={rule.id}
-                className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition-colors ${
-                  checked
-                    ? 'border-white/[0.12] bg-[#0A0C12]'
-                    : 'border-white/[0.06] bg-[#0A0C12]/40 opacity-65'
+                className={`flex items-start gap-3 py-3 first:pt-1 last:pb-0 cursor-pointer transition-opacity ${
+                  checked ? 'opacity-100' : 'opacity-55 hover:opacity-85'
                 }`}
               >
                 <input
                   type="checkbox"
                   checked={checked}
                   onChange={() => onToggleRuleId(rule.id)}
-                  className="mt-0.5 h-3.5 w-3.5 rounded border-white/[0.2] bg-[#10131C]"
+                  className="mt-0.5 h-4 w-4 rounded border-[#F2EFE9]/[0.2] bg-[#101014]"
                 />
-                <div className="text-xs">
-                  <div className="font-semibold text-[#F3F4F6]">{rule.title}</div>
-                  <div className="text-[#8893A8] mt-0.5 leading-relaxed">
+                <div className="text-[13px]">
+                  <div className="font-medium text-[#F2EFE9]">{rule.title}</div>
+                  <div className="text-[#8E8A82] mt-0.5 leading-relaxed">
                     {rule.description}
                   </div>
                 </div>
@@ -170,14 +168,14 @@ export function BulkImportModal({
       titleId="add-chapter-modal-title"
       maxWidthClass="max-w-xl"
       headerExtra={
-        <div className="flex items-center gap-0.5 rounded-lg border border-white/[0.1] bg-[#0A0C12] p-0.5">
+        <div className="flex items-center gap-0.5 rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] p-0.5">
           <button
             type="button"
             onClick={() => setImportMode('bulk')}
-            className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+            className={`rounded-md px-3 py-1 text-[13px] font-medium transition-colors ${
               importMode === 'bulk'
-                ? 'bg-[#151925] text-[#F3F4F6]'
-                : 'text-[#8893A8] hover:text-[#F3F4F6]'
+                ? 'bg-[#1B1B21] text-[#F2EFE9]'
+                : 'text-[#8E8A82] hover:text-[#F2EFE9]'
             }`}
           >
             Пакетная
@@ -185,10 +183,10 @@ export function BulkImportModal({
           <button
             type="button"
             onClick={() => setImportMode('single')}
-            className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+            className={`rounded-md px-3 py-1 text-[13px] font-medium transition-colors ${
               importMode === 'single'
-                ? 'bg-[#151925] text-[#F3F4F6]'
-                : 'text-[#8893A8] hover:text-[#F3F4F6]'
+                ? 'bg-[#1B1B21] text-[#F2EFE9]'
+                : 'text-[#8E8A82] hover:text-[#F2EFE9]'
             }`}
           >
             Одна глава
@@ -196,21 +194,21 @@ export function BulkImportModal({
         </div>
       }
     >
-      <form onSubmit={onSubmit} className="space-y-3.5 text-xs">
+      <form onSubmit={onSubmit} className="space-y-4 text-sm">
         {importMode === 'bulk' ? (
           <>
-            <div className="rounded-xl border border-dashed border-white/[0.15] bg-[#0A0C12] p-4 text-center">
+            <div className="rounded-xl border border-dashed border-[#F2EFE9]/[0.16] bg-[#101014] p-5 text-center">
               <label
                 htmlFor="bulk-files-input"
-                className="cursor-pointer inline-flex flex-col items-center gap-1.5 text-xs text-[#B0B8C9] hover:text-[#E5AC3D] transition-colors"
+                className="cursor-pointer inline-flex flex-col items-center gap-2 text-[13px] text-[#B8B4AC] hover:text-[#E3AE48] transition-colors"
               >
-                <Upload className="h-4 w-4 text-[#D99B26]" aria-hidden="true" />
+                <Upload className="h-5 w-5 text-[#D69E36]" aria-hidden="true" />
                 <span>
-                  Выберите книгу <code className="font-mono text-[#E5AC3D]">.epub</code> или файлы глав{' '}
+                  Выберите книгу <code className="font-mono text-[#E3AE48]">.epub</code> или файлы глав{' '}
                   <code className="font-mono">.txt / .md</code>
                 </span>
                 {uploadedFileCount > 0 && (
-                  <span className="text-emerald-300 font-medium">
+                  <span className="text-[#6EE7B7] font-medium tabular-nums">
                     Загружено файлов: {uploadedFileCount}
                     {sanitizedRemovedCount > 0
                       ? ` · Очищено мусора: ${sanitizedRemovedCount} стр.`
@@ -228,25 +226,25 @@ export function BulkImportModal({
               />
             </div>
 
-            <label className="flex items-center gap-2 text-xs text-[#B0B8C9] cursor-pointer">
+            <label className="flex items-center gap-2.5 text-[13px] text-[#B8B4AC] cursor-pointer">
               <input
                 type="checkbox"
                 checked={sanitizeOnImport}
                 onChange={(e) => setSanitizeOnImport(e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-white/[0.2] bg-[#0A0C12]"
+                className="h-4 w-4 rounded border-[#F2EFE9]/[0.2] bg-[#101014]"
               />
               <span>
-                Автоочистка <code className="font-mono text-[#E5AC3D]">TL Note</code>, Patreon/Discord и водяных знаков Rulate
+                Автоочистка <code className="font-mono text-[#E3AE48]">TL Note</code>, Patreon/Discord и водяных знаков Rulate
               </span>
             </label>
 
             <div>
               <label
                 htmlFor="bulk-raw-textarea"
-                className="block text-xs text-[#B0B8C9] mb-1.5"
+                className="block text-[13px] font-medium text-[#B8B4AC] mb-1.5"
               >
                 Или вставьте текст глав (разделяются строками{' '}
-                <code className="font-mono text-[#E5AC3D]">Chapter N: ...</code>)
+                <code className="font-mono text-[#E3AE48]">Chapter N: ...</code>)
               </label>
               <textarea
                 id="bulk-raw-textarea"
@@ -254,14 +252,14 @@ export function BulkImportModal({
                 required
                 value={bulkRawText}
                 onChange={(e) => setBulkRawText(e.target.value)}
-                className="w-full resize-y rounded-lg border border-white/[0.1] bg-[#0A0C12] p-3 font-mono text-xs text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none"
+                className="w-full resize-y rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] p-3 font-mono text-[13px] leading-relaxed text-[#F2EFE9] focus:border-[#D69E36] focus:outline-none"
               />
             </div>
           </>
         ) : (
           <>
             <div>
-              <label htmlFor="new-ch-num" className="block text-xs text-[#B0B8C9] mb-1.5">
+              <label htmlFor="new-ch-num" className="block text-[13px] font-medium text-[#B8B4AC] mb-1.5">
                 Номер главы
               </label>
               <input
@@ -271,11 +269,11 @@ export function BulkImportModal({
                 required
                 value={newChNum}
                 onChange={(e) => setNewChNum(Number(e.target.value))}
-                className="w-full rounded-lg border border-white/[0.1] bg-[#0A0C12] px-3 py-2 text-xs font-mono tabular-nums text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none"
+                className="w-full rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-3 py-2 text-sm tabular-nums text-[#F2EFE9] focus:border-[#D69E36] focus:outline-none"
               />
             </div>
             <div>
-              <label htmlFor="new-ch-title" className="block text-xs text-[#B0B8C9] mb-1.5">
+              <label htmlFor="new-ch-title" className="block text-[13px] font-medium text-[#B8B4AC] mb-1.5">
                 Заголовок (ENG)
               </label>
               <input
@@ -284,11 +282,11 @@ export function BulkImportModal({
                 required
                 value={newChTitleEng}
                 onChange={(e) => setNewChTitleEng(e.target.value)}
-                className="w-full rounded-lg border border-white/[0.1] bg-[#0A0C12] px-3 py-2 text-xs text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none"
+                className="w-full rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-3 py-2 text-sm text-[#F2EFE9] focus:border-[#D69E36] focus:outline-none"
               />
             </div>
             <div>
-              <label htmlFor="new-ch-body" className="block text-xs text-[#B0B8C9] mb-1.5">
+              <label htmlFor="new-ch-body" className="block text-[13px] font-medium text-[#B8B4AC] mb-1.5">
                 Текст главы (ENG)
               </label>
               <textarea
@@ -297,23 +295,23 @@ export function BulkImportModal({
                 required
                 value={newChEngText}
                 onChange={(e) => setNewChEngText(e.target.value)}
-                className="w-full resize-y rounded-lg border border-white/[0.1] bg-[#0A0C12] p-3 text-xs text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none"
+                className="w-full resize-y rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] p-3 text-sm leading-relaxed text-[#F2EFE9] focus:border-[#D69E36] focus:outline-none"
               />
             </div>
           </>
         )}
 
-        <div className="flex justify-end gap-2 pt-3 border-t border-white/[0.08]">
+        <div className="flex justify-end gap-2 pt-4 border-t border-[#F2EFE9]/[0.08]">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-white/[0.1] bg-[#0A0C12] px-4 py-2 text-xs text-[#B0B8C9] hover:text-[#F3F4F6]"
+            className="rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-4 py-2 text-[13px] text-[#B8B4AC] hover:text-[#F2EFE9] transition-colors"
           >
             Отмена
           </button>
           <button
             type="submit"
-            className="rounded-lg bg-[#D99B26] px-4 py-2 text-xs font-semibold text-[#090A0F] hover:bg-[#E5AC3D]"
+            className="rounded-lg bg-[#D69E36] px-4 py-2 text-[13px] font-semibold text-[#11100D] hover:bg-[#E3AE48] transition-colors"
           >
             {importMode === 'bulk' ? 'Распознать и загрузить' : 'Добавить главу'}
           </button>
@@ -352,9 +350,9 @@ export function NewNovelModal({
       titleId="add-novel-modal-title"
       maxWidthClass="max-w-md"
     >
-      <form onSubmit={onSubmit} className="space-y-3.5 text-xs">
+      <form onSubmit={onSubmit} className="space-y-4 text-sm">
         <div>
-          <label htmlFor="new-novel-eng" className="block text-[#B0B8C9] mb-1.5">
+          <label htmlFor="new-novel-eng" className="block text-[13px] font-medium text-[#B8B4AC] mb-1.5">
             Оригинальное название (ENG)
           </label>
           <input
@@ -365,11 +363,11 @@ export function NewNovelModal({
             value={newNovelName}
             onChange={(e) => setNewNovelName(e.target.value)}
             placeholder="Напр., Sovereign of the Nine Heavens"
-            className="w-full rounded-lg border border-white/[0.1] bg-[#0A0C12] px-3 py-2 text-[#F3F4F6] placeholder:text-[#8893A8] focus:border-[#D99B26] focus:outline-none"
+            className="w-full rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-3 py-2 text-sm text-[#F2EFE9] placeholder:text-[#8E8A82] focus:border-[#D69E36] focus:outline-none"
           />
         </div>
         <div>
-          <label htmlFor="new-novel-rus" className="block text-[#B0B8C9] mb-1.5">
+          <label htmlFor="new-novel-rus" className="block text-[13px] font-medium text-[#B8B4AC] mb-1.5">
             Русское название
           </label>
           <input
@@ -378,18 +376,18 @@ export function NewNovelModal({
             value={newNovelRusTitle}
             onChange={(e) => setNewNovelRusTitle(e.target.value)}
             placeholder="Напр., Владыка Девяти Небес"
-            className="w-full rounded-lg border border-white/[0.1] bg-[#0A0C12] px-3 py-2 text-[#F3F4F6] placeholder:text-[#8893A8] focus:border-[#D99B26] focus:outline-none"
+            className="w-full rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-3 py-2 text-sm text-[#F2EFE9] placeholder:text-[#8E8A82] focus:border-[#D69E36] focus:outline-none"
           />
         </div>
         <div>
-          <label htmlFor="new-novel-genre" className="block text-[#B0B8C9] mb-1.5">
+          <label htmlFor="new-novel-genre" className="block text-[13px] font-medium text-[#B8B4AC] mb-1.5">
             Жанровый профиль и пресет правил QA
           </label>
           <select
             id="new-novel-genre"
             value={newNovelGenre}
             onChange={(e) => setNewNovelGenre(e.target.value as GenrePreset)}
-            className="w-full rounded-lg border border-white/[0.1] bg-[#0A0C12] px-3 py-2 text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none"
+            className="w-full rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-3 py-2 text-sm text-[#F2EFE9] focus:border-[#D69E36] focus:outline-none"
           >
             {(Object.keys(GENRE_PRESET_LABELS) as GenrePreset[]).map((g) => (
               <option key={g} value={g}>
@@ -398,17 +396,17 @@ export function NewNovelModal({
             ))}
           </select>
         </div>
-        <div className="flex justify-end gap-2 pt-3 border-t border-white/[0.08]">
+        <div className="flex justify-end gap-2 pt-4 border-t border-[#F2EFE9]/[0.08]">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-white/[0.1] bg-[#0A0C12] px-4 py-2 text-xs text-[#B0B8C9] hover:text-[#F3F4F6]"
+            className="rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-4 py-2 text-[13px] text-[#B8B4AC] hover:text-[#F2EFE9] transition-colors"
           >
             Отмена
           </button>
           <button
             type="submit"
-            className="rounded-lg bg-[#D99B26] px-4 py-2 text-xs font-semibold text-[#090A0F] hover:bg-[#E5AC3D]"
+            className="rounded-lg bg-[#D69E36] px-4 py-2 text-[13px] font-semibold text-[#11100D] hover:bg-[#E3AE48] transition-colors"
           >
             Создать книгу
           </button>
@@ -447,18 +445,18 @@ export function LlmEngineModal({
       onClose={onClose}
       title={
         <>
-          <Cpu className="h-4 w-4 text-[#D99B26]" aria-hidden="true" />
+          <Cpu className="h-4 w-4 text-[#D69E36]" aria-hidden="true" />
           <span>Провайдеры ИИ: AI Studio API и Google Colab L4</span>
         </>
       }
-      subtitle="Выберите маршрутизацию моделей по стадиям конвейера (перевод, критик, стилист, скаут) или подключите сервер Colab L4."
+      subtitle="Выберите маршрутизацию моделей по стадиям конвейера или подключите сервер Colab L4."
       titleId="colab-l4-modal-title"
       maxWidthClass="max-w-3xl"
       footer={
         <>
-          <span className="font-mono text-[11px] text-[#B0B8C9] truncate">
+          <span className="text-[13px] text-[#B8B4AC] truncate">
             Активно:{' '}
-            <strong className="text-[#F3F4F6]">
+            <strong className="font-medium text-[#F2EFE9]">
               {llmConfig.provider === 'colab_ollama'
                 ? `Colab L4 (${llmConfig.modelId})`
                 : `AI Studio (${llmConfig.modelId || 'gemini-4-hydrogen'} → ${llmConfig.criticModelId || 'gemini-3.8-flash'} / ${llmConfig.stylistModelId || llmConfig.criticModelId || 'gemini-3.8-flash'})`}
@@ -467,31 +465,31 @@ export function LlmEngineModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg bg-[#D99B26] px-4 py-2 text-xs font-semibold text-[#090A0F] hover:bg-[#E5AC3D] shrink-0"
+            className="rounded-lg bg-[#D69E36] px-4 py-2 text-[13px] font-semibold text-[#11100D] hover:bg-[#E3AE48] shrink-0 transition-colors"
           >
             Сохранить и закрыть
           </button>
         </>
       }
     >
-      <div className="space-y-5 text-xs text-[#B0B8C9]">
+      <div className="space-y-6 text-[13px] text-[#B8B4AC]">
         {/* Provider Switch */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <button
             type="button"
             disabled
             aria-disabled="true"
-            className="rounded-xl border border-white/[0.08] bg-[#0A0C12] p-3 text-left opacity-50 cursor-not-allowed"
+            className="rounded-xl border border-[#F2EFE9]/[0.08] bg-[#101014] p-3.5 text-left opacity-55 cursor-not-allowed"
           >
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-semibold text-[#B0B8C9]">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <span className="text-sm font-semibold text-[#B8B4AC]">
                 Antigravity CLI (agy)
               </span>
-              <span className="rounded bg-[#D99B26]/20 px-1.5 py-0.5 text-[10px] font-semibold text-[#E5AC3D]">
+              <span className="text-[13px] font-medium text-[#E3AE48]">
                 Отключено (ToS)
               </span>
             </div>
-            <div className="text-[11px] text-[#8893A8] mt-1 leading-relaxed">
+            <div className="text-[13px] text-[#8E8A82] mt-1.5 leading-relaxed">
               Временно отключено до обновления ToS 2 декабря. Используйте AI Studio API или Colab L4.
             </div>
           </button>
@@ -513,16 +511,16 @@ export function LlmEngineModal({
                 };
               })
             }
-            className={`rounded-xl border p-3 text-left transition-colors ${
+            className={`rounded-xl border p-3.5 text-left transition-colors ${
               llmConfig.provider === 'colab_ollama'
-                ? 'border-[#D99B26] bg-[#D99B26]/10'
-                : 'border-white/[0.08] bg-[#0A0C12] hover:border-white/[0.18]'
+                ? 'border-[#D69E36] bg-[#D69E36]/10'
+                : 'border-[#F2EFE9]/[0.08] bg-[#101014] hover:border-[#F2EFE9]/[0.2]'
             }`}
           >
-            <div className="font-semibold text-[#F3F4F6]">
-              Google Colab L4 (Ollama / vLLM)
+            <div className="text-sm font-semibold text-[#F2EFE9]">
+              Google Colab L4 (Ollama)
             </div>
-            <div className="text-[11px] text-[#8893A8] mt-1 leading-relaxed">
+            <div className="text-[13px] text-[#8E8A82] mt-1.5 leading-relaxed">
               24 ГБ VRAM без лимитов RPM: Gemma 4, Qwen 3, TranslateGemma.
             </div>
           </button>
@@ -555,17 +553,17 @@ export function LlmEngineModal({
                 };
               })
             }
-            className={`rounded-xl border p-3 text-left transition-colors ${
+            className={`rounded-xl border p-3.5 text-left transition-colors ${
               llmConfig.provider === 'gemini_api'
-                ? 'border-[#D99B26] bg-[#D99B26]/10'
-                : 'border-white/[0.08] bg-[#0A0C12] hover:border-white/[0.18]'
+                ? 'border-[#D69E36] bg-[#D69E36]/10'
+                : 'border-[#F2EFE9]/[0.08] bg-[#101014] hover:border-[#F2EFE9]/[0.2]'
             }`}
           >
-            <div className="font-semibold text-[#F3F4F6]">
+            <div className="text-sm font-semibold text-[#F2EFE9]">
               Google AI Studio API
             </div>
-            <div className="text-[11px] text-[#8893A8] mt-1 leading-relaxed">
-              Gemini 4 Hydrogen + радар Decision 1 с ротацией ключей и переливом.
+            <div className="text-[13px] text-[#8E8A82] mt-1.5 leading-relaxed">
+              Gemini 4 Hydrogen и радар Decision 1 с ротацией ключей и переливом.
             </div>
           </button>
         </div>
@@ -576,18 +574,18 @@ export function LlmEngineModal({
           hybridOnly={llmConfig.provider !== 'gemini_api'}
         />
 
-        {/* Colab Endpoint & Ping */}
-        <div className="rounded-xl border border-white/[0.08] bg-[#0A0C12] p-4 space-y-3">
+        {/* Colab Endpoint & Ping — Flat Divided Section */}
+        <section className="pt-5 border-t border-[#F2EFE9]/[0.08] space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <label htmlFor="colab-endpoint-input" className="font-semibold text-[#F3F4F6]">
+            <label htmlFor="colab-endpoint-input" className="text-sm font-semibold text-[#F2EFE9]">
               Адрес туннеля Google Colab L4 (Cloudflare / Ngrok или локальный Ollama)
             </label>
             <a
               href="/colab_l4_translation_server.ipynb"
               download="colab_l4_translation_server.ipynb"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#D99B26]/40 bg-[#D99B26]/10 px-2.5 py-1 text-[11px] font-semibold text-[#E5AC3D] hover:bg-[#D99B26]/20"
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#E3AE48] hover:underline underline-offset-4"
             >
-              <Download className="h-3 w-3" aria-hidden="true" />
+              <Download className="h-3.5 w-3.5" aria-hidden="true" />
               <span>Скачать .ipynb</span>
             </a>
           </div>
@@ -604,13 +602,13 @@ export function LlmEngineModal({
                 }))
               }
               placeholder="https://xxxx-xxxx.trycloudflare.com или http://localhost:11434"
-              className="flex-1 rounded-lg border border-white/[0.1] bg-[#10131C] px-3 py-2 font-mono text-xs text-[#F3F4F6] placeholder:text-[#8893A8] focus:border-[#D99B26] focus:outline-none"
+              className="flex-1 rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-3 py-2 font-mono text-[13px] text-[#F2EFE9] placeholder:text-[#8E8A82] focus:border-[#D69E36] focus:outline-none"
             />
             <button
               type="button"
               disabled={colabPingState?.loading}
               onClick={onPingColab}
-              className="rounded-lg bg-[#D99B26] px-4 py-2 text-xs font-semibold text-[#090A0F] hover:bg-[#E5AC3D] disabled:opacity-50 whitespace-nowrap"
+              className="rounded-lg bg-[#D69E36] px-4 py-2 text-[13px] font-semibold text-[#11100D] hover:bg-[#E3AE48] disabled:opacity-50 whitespace-nowrap transition-colors"
             >
               {colabPingState?.loading ? 'Проверка...' : 'Проверить L4'}
             </button>
@@ -618,16 +616,16 @@ export function LlmEngineModal({
 
           {colabPingState && !colabPingState.loading && (
             <div
-              className={`rounded-lg border px-3 py-2 text-[11px] ${
+              className={`border-l-2 pl-3 py-1 text-[13px] ${
                 colabPingState.ok
-                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
-                  : 'border-rose-500/40 bg-rose-500/10 text-rose-200'
+                  ? 'border-[#52C79A] text-[#6EE7B7]'
+                  : 'border-[#F07587] text-[#FDA4AF]'
               }`}
             >
               {colabPingState.ok ? (
                 <span>
                   Связь установлена ({colabPingState.runtime}, пинг{' '}
-                  <strong className="font-mono">{colabPingState.latencyMs} мс</strong>). Модели:{' '}
+                  <strong className="tabular-nums">{colabPingState.latencyMs} мс</strong>). Модели:{' '}
                   <code className="font-mono">
                     {(colabPingState.models || []).join(', ') || llmConfig.modelId}
                   </code>
@@ -637,16 +635,16 @@ export function LlmEngineModal({
               )}
             </div>
           )}
-        </div>
+        </section>
 
-        {/* L4 Catalog */}
-        <div className="space-y-2.5">
+        {/* L4 Catalog — Flat Divided Section */}
+        <section className="pt-5 border-t border-[#F2EFE9]/[0.08] space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="font-semibold text-[#F3F4F6]">
+            <span className="text-sm font-semibold text-[#F2EFE9]">
               Открытые модели под 24 ГБ VRAM (NVIDIA L4)
             </span>
             <div className="flex items-center gap-2">
-              <label htmlFor="custom-ollama-tag" className="text-[11px] text-[#8893A8]">
+              <label htmlFor="custom-ollama-tag" className="text-[13px] text-[#8E8A82]">
                 Тег:
               </label>
               <input
@@ -656,12 +654,12 @@ export function LlmEngineModal({
                 onChange={(e) =>
                   setLlmConfig((prev) => ({ ...prev, modelId: e.target.value }))
                 }
-                className="w-44 rounded-lg border border-white/[0.1] bg-[#0A0C12] px-2.5 py-1 font-mono text-xs text-[#E5AC3D] focus:border-[#D99B26] focus:outline-none"
+                className="w-48 rounded-lg border border-[#F2EFE9]/[0.1] bg-[#101014] px-2.5 py-1.5 font-mono text-[13px] text-[#E3AE48] focus:border-[#D69E36] focus:outline-none"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-2">
+          <div className="divide-y divide-[#F2EFE9]/[0.07]">
             {COLAB_L4_MODEL_CATALOG.map((spec) => {
               const isSelected = llmConfig.modelId === spec.ollamaTag;
               return (
@@ -682,43 +680,43 @@ export function LlmEngineModal({
                       };
                     })
                   }
-                  className={`w-full text-left rounded-xl border p-3 transition-colors ${
+                  className={`w-full text-left py-3.5 px-3 transition-colors ${
                     isSelected
-                      ? 'border-[#D99B26] bg-[#D99B26]/10'
-                      : 'border-white/[0.08] bg-[#0A0C12] hover:border-white/[0.18]'
+                      ? 'border-l-2 border-[#D69E36] bg-[#D69E36]/[0.07]'
+                      : 'hover:bg-[#F2EFE9]/[0.03]'
                   }`}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-[#F3F4F6]">{spec.title}</span>
-                      <span className="rounded bg-[#D99B26]/20 px-2 py-0.5 text-[10px] font-semibold text-[#E5AC3D]">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <div className="flex flex-wrap items-baseline gap-2.5">
+                      <span className="text-sm font-semibold text-[#F2EFE9]">{spec.title}</span>
+                      <span className="text-[13px] font-medium text-[#E3AE48]">
                         {spec.roleBadge}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2.5 font-mono text-[11px] text-[#8893A8] tabular-nums">
+                    <div className="flex items-center gap-2 text-[13px] text-[#8E8A82] tabular-nums">
                       <span>VRAM: {spec.vramGb}</span>
-                      <span>·</span>
-                      <span className="text-emerald-300">{spec.speedOnL4}</span>
-                      <span>·</span>
+                      <span aria-hidden="true">·</span>
+                      <span className="text-[#6EE7B7]">{spec.speedOnL4}</span>
+                      <span aria-hidden="true">·</span>
                       <span>Ctx: {spec.contextWindow}</span>
                     </div>
                   </div>
-                  <p className="text-[11px] text-[#B0B8C9] mt-1.5 leading-relaxed">
-                    <strong className="text-[#F3F4F6]">Плюсы:</strong> {spec.strengthsRus}
+                  <p className="text-[13px] text-[#B8B4AC] mt-1.5 leading-relaxed">
+                    <strong className="font-medium text-[#F2EFE9]">Плюсы:</strong> {spec.strengthsRus}
                   </p>
-                  <p className="text-[11px] text-[#8893A8] mt-0.5 leading-relaxed">
-                    <strong className="text-[#B0B8C9]">Нюанс:</strong> {spec.caveatsRus}
+                  <p className="text-[13px] text-[#8E8A82] mt-0.5 leading-relaxed">
+                    <strong className="font-medium text-[#B8B4AC]">Нюанс:</strong> {spec.caveatsRus}
                   </p>
                 </button>
               );
             })}
           </div>
-        </div>
+        </section>
 
         {/* Colab Launch Cell */}
-        <div className="rounded-xl border border-white/[0.08] bg-[#0A0C12] p-4 space-y-2.5">
+        <section className="pt-5 border-t border-[#F2EFE9]/[0.08] space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <span className="font-semibold text-[#F3F4F6]">
+            <span className="text-sm font-semibold text-[#F2EFE9]">
               Код ячейки для Google Colab (GPU L4)
             </span>
             <button
@@ -728,42 +726,42 @@ export function LlmEngineModal({
                 setCopiedColabScript(true);
                 setTimeout(() => setCopiedColabScript(false), 2500);
               }}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.12] bg-[#151925] px-2.5 py-1 text-[11px] font-medium text-[#F3F4F6] hover:border-white/[0.25]"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#F2EFE9]/[0.12] bg-[#1B1B21] px-3 py-1.5 text-[13px] font-medium text-[#F2EFE9] hover:border-[#F2EFE9]/[0.24] transition-colors"
             >
               {copiedColabScript ? (
                 <>
-                  <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                  <Check className="h-3.5 w-3.5 text-[#6EE7B7]" aria-hidden="true" />
                   <span>Скопировано</span>
                 </>
               ) : (
                 <>
-                  <Copy className="h-3.5 w-3.5 text-[#D99B26]" aria-hidden="true" />
+                  <Copy className="h-3.5 w-3.5 text-[#D69E36]" aria-hidden="true" />
                   <span>Копировать код</span>
                 </>
               )}
             </button>
           </div>
-          <pre className="max-h-36 overflow-y-auto studio-scroll rounded-lg border border-white/[0.06] bg-[#050609] p-3 font-mono text-[11px] text-[#B0B8C9] leading-relaxed">
+          <pre className="max-h-40 overflow-y-auto studio-scroll rounded-lg border border-[#F2EFE9]/[0.07] bg-[#101014] p-3.5 font-mono text-[13px] text-[#B8B4AC] leading-relaxed">
             {generateColabL4LaunchScript(llmConfig.modelId)}
           </pre>
-        </div>
+        </section>
 
         {/* Google Drive Bundle */}
-        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/[0.05] p-4 space-y-2.5">
+        <section className="pt-5 border-t border-[#F2EFE9]/[0.08] space-y-3">
           <div>
-            <span className="font-semibold text-emerald-200">
+            <span className="text-sm font-semibold text-[#6EE7B7]">
               Ночной перевод через Google Drive (авто-чекпоинт)
             </span>
-            <p className="text-[11px] text-[#B0B8C9] mt-0.5 leading-relaxed">
-              Положите <code className="font-mono text-[#E5AC3D]">kanon_project_bundle.json</code> в{' '}
+            <p className="text-[13px] text-[#B8B4AC] mt-1 leading-relaxed">
+              Положите <code className="font-mono text-[#E3AE48]">kanon_project_bundle.json</code> в{' '}
               <code className="font-mono">/MyDrive/KanonXianxia/</code> и запустите Ячейку №2 в Colab.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 pt-1">
+          <div className="flex flex-wrap items-center gap-2.5 pt-1">
             <button
               type="button"
               onClick={onExportColabDriveBundle}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/25"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#52C79A]/40 bg-[#52C79A]/12 px-3.5 py-2 text-[13px] font-semibold text-[#6EE7B7] hover:bg-[#52C79A]/22 transition-colors"
             >
               <Download className="h-3.5 w-3.5" aria-hidden="true" />
               <span>Скачать бандл Drive</span>
@@ -778,13 +776,13 @@ export function LlmEngineModal({
             <button
               type="button"
               onClick={() => driveBundleInputRef.current?.click()}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.12] bg-[#10131C] px-3 py-1.5 text-xs font-medium text-[#F3F4F6] hover:border-white/[0.25]"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#F2EFE9]/[0.12] bg-[#1B1B21] px-3.5 py-2 text-[13px] font-medium text-[#F2EFE9] hover:border-[#F2EFE9]/[0.24] transition-colors"
             >
               <Upload className="h-3.5 w-3.5" aria-hidden="true" />
               <span>Загрузить готовый бандл</span>
             </button>
           </div>
-        </div>
+        </section>
       </div>
     </StudioDialog>
   );
@@ -815,7 +813,7 @@ export function GlossaryStopGateModal({
       onClose={onClose}
       title={
         <>
-          <ShieldCheck className="h-4 w-4 text-[#D99B26]" aria-hidden="true" />
+          <ShieldCheck className="h-4 w-4 text-[#D69E36]" aria-hidden="true" />
           <span>Стоп-кран глоссария (Главы {startChapter}–{endChapter})</span>
         </>
       }
@@ -824,21 +822,21 @@ export function GlossaryStopGateModal({
       maxWidthClass="max-w-3xl"
       footer={
         <>
-          <span className="font-mono text-[11px] text-[#8893A8] tabular-nums">
-            К утверждению: <strong className="text-[#F3F4F6]">{stopGateTerms.length}</strong>
+          <span className="text-[13px] text-[#8E8A82] tabular-nums">
+            К утверждению: <strong className="font-medium text-[#F2EFE9]">{stopGateTerms.length}</strong>
           </span>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-white/[0.12] bg-[#10131C] px-3.5 py-2 text-xs text-[#B0B8C9] hover:text-[#F3F4F6]"
+              className="rounded-lg border border-[#F2EFE9]/[0.12] bg-[#141418] px-3.5 py-2 text-[13px] text-[#B8B4AC] hover:text-[#F2EFE9] transition-colors"
             >
               Отмена
             </button>
             <button
               type="button"
               onClick={onApproveAndTranslate}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#D99B26] px-4 py-2 text-xs font-semibold text-[#090A0F] hover:bg-[#E5AC3D]"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#D69E36] px-4 py-2 text-[13px] font-semibold text-[#11100D] hover:bg-[#E3AE48] transition-colors tabular-nums"
             >
               <Play className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
               <span>Утвердить и перевести {startChapter}–{endChapter}</span>
@@ -847,88 +845,88 @@ export function GlossaryStopGateModal({
         </>
       }
     >
-      <div className="space-y-2 text-xs">
+      <div className="text-[13px]">
         {stopGateTerms.length === 0 ? (
-          <div className="rounded-xl border border-white/[0.08] bg-[#0A0C12] p-6 text-center text-[#8893A8]">
+          <p className="py-6 text-center text-[#8E8A82] tabular-nums">
             В главах {startChapter}–{endChapter} все ключевые термины уже есть в каноне ({canonCount} записей). Можно запускать перевод.
-          </div>
+          </p>
         ) : (
-          stopGateTerms.map((term, idx) => {
-            const currentGender = (term.gender || 'UNKNOWN') as GrammaticalGender;
-            const isUnclassifiedCharacter =
-              term.category === 'characters' && currentGender === 'UNKNOWN';
-            return (
-              <div
-                key={term.id || idx}
-                className={`grid grid-cols-1 sm:grid-cols-12 items-center gap-2 rounded-xl border p-2.5 ${
-                  isUnclassifiedCharacter
-                    ? 'border-[#D99B26]/40 bg-[#D99B26]/[0.06]'
-                    : 'border-white/[0.08] bg-[#0A0C12]'
-                }`}
-              >
-                <div className="sm:col-span-4 font-mono text-xs text-[#E5AC3D] truncate flex items-center gap-1.5">
-                  <span className="truncate">{term.eng}</span>
-                  {isUnclassifiedCharacter && (
-                    <span className="shrink-0 rounded border border-[#D99B26]/40 bg-[#D99B26]/15 px-1.5 py-0.5 text-[10px] font-semibold text-[#E5AC3D]">
-                      без пола
-                    </span>
-                  )}
+          <div className="divide-y divide-[#F2EFE9]/[0.07]">
+            {stopGateTerms.map((term, idx) => {
+              const currentGender = (term.gender || 'UNKNOWN') as GrammaticalGender;
+              const isUnclassifiedCharacter =
+                term.category === 'characters' && currentGender === 'UNKNOWN';
+              return (
+                <div
+                  key={term.id || idx}
+                  className={`grid grid-cols-1 sm:grid-cols-12 items-center gap-2.5 py-3 first:pt-1 last:pb-0 ${
+                    isUnclassifiedCharacter ? 'bg-[#D69E36]/[0.05] px-2 -mx-2 rounded-lg' : ''
+                  }`}
+                >
+                  <div className="sm:col-span-4 text-sm font-medium text-[#E3AE48] truncate">
+                    <span className="truncate">{term.eng}</span>
+                    {isUnclassifiedCharacter && (
+                      <span className="block text-[13px] font-normal text-[#B8B4AC]">
+                        Пол не указан
+                      </span>
+                    )}
+                  </div>
+                  <div className="sm:col-span-4">
+                    <input
+                      type="text"
+                      aria-label={`Русский перевод для ${term.eng}`}
+                      value={term.rus_suggested}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setStopGateTerms((prev) =>
+                          prev.map((item, i) =>
+                            i === idx ? { ...item, rus_suggested: val } : item
+                          )
+                        );
+                      }}
+                      className="w-full rounded-lg border border-[#F2EFE9]/[0.12] bg-[#101014] px-3 py-1.5 text-sm text-[#F2EFE9] focus:border-[#D69E36] focus:outline-none"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <select
+                      aria-label={`Род для ${term.eng}`}
+                      value={currentGender}
+                      onChange={(e) => {
+                        const g = e.target.value as GrammaticalGender;
+                        setStopGateTerms((prev) =>
+                          prev.map((item, i) =>
+                            i === idx ? { ...item, gender: g } : item
+                          )
+                        );
+                      }}
+                      className={`w-full rounded-lg border px-2 py-1.5 text-[13px] ${
+                        isUnclassifiedCharacter
+                          ? 'border-[#D69E36]/50 bg-[#1B1B21] text-[#E3AE48]'
+                          : 'border-[#F2EFE9]/[0.12] bg-[#101014] text-[#F2EFE9]'
+                      }`}
+                    >
+                      <option value="UNKNOWN">Не указан</option>
+                      <option value="M">Род: М</option>
+                      <option value="F">Род: Ж</option>
+                      <option value="N">Род: Ср</option>
+                      <option value="PL">Род: Мн</option>
+                    </select>
+                  </div>
+                  <div className="sm:col-span-2 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setStopGateTerms((prev) => prev.filter((_, i) => i !== idx))
+                      }
+                      className="rounded-lg border border-[#F07587]/35 bg-[#F07587]/10 px-3 py-1.5 text-[13px] text-[#FDA4AF] hover:bg-[#F07587]/20 transition-colors"
+                    >
+                      Убрать
+                    </button>
+                  </div>
                 </div>
-                <div className="sm:col-span-4">
-                  <input
-                    type="text"
-                    aria-label={`Русский перевод для ${term.eng}`}
-                    value={term.rus_suggested}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setStopGateTerms((prev) =>
-                        prev.map((item, i) =>
-                          i === idx ? { ...item, rus_suggested: val } : item
-                        )
-                      );
-                    }}
-                    className="w-full rounded-lg border border-white/[0.12] bg-[#10131C] px-2.5 py-1.5 text-xs text-[#F3F4F6] focus:border-[#D99B26] focus:outline-none"
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <select
-                    aria-label={`Род для ${term.eng}`}
-                    value={currentGender}
-                    onChange={(e) => {
-                      const g = e.target.value as GrammaticalGender;
-                      setStopGateTerms((prev) =>
-                        prev.map((item, i) =>
-                          i === idx ? { ...item, gender: g } : item
-                        )
-                      );
-                    }}
-                    className={`w-full rounded-lg border px-2 py-1.5 font-mono text-xs ${
-                      isUnclassifiedCharacter
-                        ? 'border-[#D99B26]/50 bg-[#151925] text-[#E5AC3D]'
-                        : 'border-white/[0.12] bg-[#10131C] text-[#F3F4F6]'
-                    }`}
-                  >
-                    <option value="UNKNOWN">Не указан</option>
-                    <option value="M">Род: М</option>
-                    <option value="F">Род: Ж</option>
-                    <option value="N">Род: Ср</option>
-                    <option value="PL">Род: Мн</option>
-                  </select>
-                </div>
-                <div className="sm:col-span-2 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setStopGateTerms((prev) => prev.filter((_, i) => i !== idx))
-                    }
-                    className="rounded-lg border border-rose-500/35 bg-rose-500/10 px-2.5 py-1 text-[11px] text-rose-300 hover:bg-rose-500/20"
-                  >
-                    Убрать
-                  </button>
-                </div>
-              </div>
-            );
-          })
+              );
+            })}
+          </div>
         )}
       </div>
     </StudioDialog>
